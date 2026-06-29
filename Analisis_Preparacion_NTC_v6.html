@@ -1110,8 +1110,11 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
           <div class="lo-fld"><label>Productividad objetivo</label><input class="lo-tin" id="lo_calcTarget" value="0,33" style="min-width:110px"></div>
           <div class="lo-fld"><label>Formato (base y objetivo)</label>
             <div class="lo-seg lo-sm" id="lo_calcUnitSeg"><button data-v="merc" class="lo-on">min/ud Mercadona</button><button data-v="min">min/ud MO</button></div></div>
+          <div class="lo-fld"><label>Fijar como oficiales</label>
+            <button class="lo-tg" type="button" id="lo_calcSave" style="border-color:var(--brand);background:var(--brand);color:#fff;font-weight:800">⤓ Guardar objetivos · descargar CSV</button></div>
         </div>
         <div class="lo-calcsum" id="lo_calcSum"></div>
+        <p class="lo-sec-s" style="margin-top:8px;font-size:11.5px">Al guardar se descarga <b>Objetivos_Tiendas_Liebre.csv</b>. Súbelo al repo de GitHub (igual que los CSV). El dashboard lo cargará como tienda de referencia «<b>Objetivos Tiendas Liebre</b>» disponible en Comparar y en el Ranking, para medir cualquier tienda contra estos objetivos.</p>
         <div class="lo-tbl-wrap" style="margin-top:14px"><table class="lo-mx" id="lo_calcTbl"></table></div>
       </div>
     </section>
@@ -1302,8 +1305,29 @@ function mesKeyFromCell(v){if(v==null)return '';const t=String(v).trim();let m=t
 function mesLabel(k){const m=k.match(/^(\d{4})-(\d{2})$/);if(m){const me=MESES_ES[+m[2]-1];return (me?me.charAt(0).toUpperCase()+me.slice(1):m[2])+' '+m[1];}return k;}
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
 function setStatus(t,s){$('dotTxt').textContent=t;$('dot').className='sdot'+(s?(' '+s):'');}
-function shortStore(t){return t==='Tiendas Veteranas'?'Veteranas':t==='Todas las tiendas'?'Todas las tiendas':'Tienda '+t;}
+function shortStore(t){return t==='Tiendas Veteranas'?'Veteranas':t==='Todas las tiendas'?'Todas las tiendas':t==='Objetivos Tiendas Liebre'?'Objetivos Tiendas Liebre':'Tienda '+t;}
 function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+/* ===== OBJETIVOS TIENDAS LIEBRE (CSV de la calculadora) como tienda de referencia ===== */
+const OBJ_NAME='Objetivos Tiendas Liebre';
+const OBJ_URL='https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/Objetivos_Tiendas_Liebre.csv';
+let OBJ_ROWS=null;
+function loadObjetivos(){ try{ Papa.parse(OBJ_URL+'?cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
+  complete:res=>{ try{ const by={}; (res.data||[]).forEach(r=>{ const a=normArea(r.area_batch); if(!AREAS.includes(a))return;
+      const o={tienda:OBJ_NAME,area:a,vet:'Objetivo'}; NUMC.forEach(c=>o[c]=numv(r[c])); EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);}); by[a]=o; });
+      OBJ_ROWS=Object.keys(by).length?by:null; applyObjetivos(); }catch(e){console.warn('obj parse',e);} },
+  error:()=>{} }); }catch(e){} }
+function applyObjetivos(){
+  if(!OBJ_ROWS||!ST.meses||!ST.meses.length||!ST.shifts.length)return;
+  ST.index[OBJ_NAME]={};
+  ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const b=OBJ_ROWS[a]; if(!b)return;
+    const r=Object.assign({},b,{shift:sh,mesKey:mk});
+    (((ST.index[OBJ_NAME][mk]=ST.index[OBJ_NAME][mk]||{})[sh]=ST.index[OBJ_NAME][mk][sh]||{}))[a]=r; })));
+  if(ST.synthPresent.indexOf(OBJ_NAME)<0)ST.synthPresent=[OBJ_NAME].concat(ST.synthPresent);
+  if(ST.tiendas.indexOf(OBJ_NAME)<0)ST.tiendas=[OBJ_NAME].concat(ST.tiendas);
+  const rk=$('rkRef'); if(rk){ const cur=rk.value,first=ST.realStores[0];
+    rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
+    if(cur)rk.value=cur; }
+}
 function barColor(diff,eps){if(diff==null)return cssv('--ref');eps=eps||0;if(Math.abs(diff)<=eps)return cssv('--ref');return diff>0?cssv('--bad'):cssv('--good');}
 
 /* ===== CARGA CSV ===== */
@@ -1340,6 +1364,7 @@ function buildFromRows(raw,fname){
   // (Fase 6) arranque directo: muestra ya el análisis con la referencia por defecto
   // (Veteranas · GLOBAL · último mes disponible). El usuario puede cambiar escenarios arriba.
   try{analyze(false);}catch(e){console.warn('auto-analyze',e);}  // sin scroll: se queda arriba en "Elige dos escenarios"
+  try{applyObjetivos();}catch(e){}  // si los objetivos ya se cargaron, inyéctalos como referencia
 }
 
 /* ===== COMBOBOX BUSCADOR DE TIENDA ===== */
@@ -1430,8 +1455,8 @@ function setMode(m){ST.mode=m;$('mComp').classList.toggle('on',m==='comp');$('mR
   $('empty').style.display=(m==='comp'&&!ST.analyzed)?'':'none';
   $('rank').style.display=m==='rank'?'block':'none';
   $('fab').style.display=(m==='comp'&&ST.analyzed)?'':'none';
-  var vl=$('viewLiebre');if(vl)vl.style.display=(m==='obj')?'block':'none';if(m==='obj'&&window.loInit)window.loInit();
   if(m==='comp'&&ST.analyzed){requestAnimationFrame(resizeCharts);setTimeout(resizeCharts,220);}
+  var vl=$('viewLiebre');if(vl)vl.style.display=(m==='obj')?'block':'none';if(m==='obj'&&window.loInit)window.loInit();
   if(m==='rank'){initRank();renderRank();}
 }
 function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -2316,6 +2341,7 @@ if(CSV_URL){
     error:err=>showErr(['No se pudo descargar el CSV de GitHub: '+err.message+'. Puedes cargarlo manualmente con el drop.'])
   });
 }
+loadObjetivos();  // carga (si existe) el CSV de objetivos liebre como tienda de referencia
 </script>
 <script>
 (function(){
@@ -2419,6 +2445,43 @@ function calcBaseMO(){ // base = productividad global de la tarjeta para el cort
   return isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'):globReal();
 }
 function round3(x){return Math.round(x*1000)/1000;}
+function loSaveObj(){
+  const merc=(ST.calcUnit==='merc'), baseMO=calcBaseMO(), baseSel=round3(merc?baseMO*1.08:baseMO);
+  const objSel=numEU(document.getElementById('lo_calcTarget').value);
+  const k=(baseSel>0&&!isNaN(objSel))?objSel/baseSel:NaN;
+  if(isNaN(k)){alert('Pon una base y un objetivo válidos antes de guardar.');return;}
+  // escalado por columna (mismo criterio que la tabla): tiempos y prod ×k, % igual, uph ÷k, contadores igual
+  function sc(key,v){ if(typeof v!=='number'||isNaN(v))return v;
+    if(/_pct_medio$/.test(key))return v;
+    if(/^uph_/.test(key))return k?v/k:v;
+    if(key==='n_lotes'||key==='uds_media_lote')return v;
+    if(/_medio$/.test(key)||/min_ud_media$/.test(key))return v*k;
+    return v; }
+  // columnas que entiende el dashboard (mismas que el desglose)
+  const FK=['p1','p2','p3','p23','p4','p5','p6','p7','prep'];
+  const metricCols=['n_lotes','uds_media_lote'].concat(
+    FK.map(f=>f+'_min_medio'),['total_min_util_medio','total_min_observado_medio','descanso_excluido_min_medio'],
+    FK.map(f=>f+'_pct_medio'),['prod_total_min_ud_media','uph_total_media']);
+  FK.forEach(f=>metricCols.push(f+'_ef_min_medio',f+'_ef_pct_medio',f+'_par_min_medio',f+'_par_pct_medio'));
+  metricCols.push('total_min_efec_medio','total_min_paradas_medio','prod_efectiva_min_ud_media','uph_efec_media');
+  const header=['tienda','mes','shift','area_batch','estado_veterana'].concat(metricCols);
+  const numout=v=>(v==null||typeof v!=='number'||isNaN(v))?'':String(Math.round(v*1e6)/1e6);
+  const lines=[header.join(',')];
+  AREAS.forEach(a=>{ const r=ST.objTrim[a]; if(!r)return;
+    const row=header.map(c=>{
+      if(c==='tienda')return 'Objetivos Tiendas Liebre';
+      if(c==='mes')return ST.mes||'';
+      if(c==='shift')return 'global';
+      if(c==='area_batch')return a;
+      if(c==='estado_veterana')return 'Objetivo';
+      return numout(sc(c,r[c]));
+    });
+    lines.push(row.join(','));
+  });
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob), a2=document.createElement('a');
+  a2.href=url; a2.download='Objetivos_Tiendas_Liebre.csv'; document.body.appendChild(a2); a2.click(); a2.remove(); URL.revokeObjectURL(url);
+}
 function renderCalc(){
   const C=cols(ST.calcCorte), cs=activeCols(), merc=(ST.calcUnit==='merc');
   const baseMO=calcBaseMO();
@@ -2660,6 +2723,7 @@ function wire(){
   seg('lo_calcCorteSeg',v=>{ST.calcCorte=v;renderCalc();});
   seg('lo_calcUnitSeg',v=>{ST.calcUnit=v;renderCalc();});
   document.getElementById('lo_calcTarget').addEventListener('input',renderCalc);
+  document.getElementById('lo_calcSave').addEventListener('click',loSaveObj);
   seg('lo_modeSeg',v=>{ST.mode=v;renderMatrix();});
   seg('lo_perSeg',v=>{ST.per=v;document.getElementById('lo_mesFld').style.display=(v==='mes')?'':'none';renderHero();renderMatrix();});
   document.getElementById('lo_mesSel').addEventListener('change',e=>{ST.mes=e.target.value;if(ST.per==='mes'){renderHero();renderMatrix();}});
