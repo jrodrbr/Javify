@@ -1,0 +1,10 @@
+# GitHub Pages (Jekyll) — solo publicamos el dashboard HTML.
+# Los CSV se leen desde raw.githubusercontent.com (servicio "raw" de git), NO desde Pages,
+# así que excluirlos del build hace el deploy mucho más ligero y fiable.
+exclude:
+  - "*.csv"
+  - "*.sql"
+  - "*.bak.html"
+  - "README.md"
+  - "CONTEXTO_PROYECTO_NTC.md"
+  - "Objetivos_Liebre_NTC.html"
