@@ -1319,13 +1319,16 @@ function loadObjetivos(){ try{ Papa.parse(OBJ_URL+'?cb='+Date.now(),{download:tr
 function applyObjetivos(){
   if(!OBJ_ROWS||!ST.meses||!ST.meses.length||!ST.shifts.length)return;
   ST.index[OBJ_NAME]={};
+  // Los objetivos solo tienen dato GLOBAL. Replicamos en todos los turnos para que el ranking
+  // (que tiene su propio selector de turno) siempre encuentre la referencia; en el COMPARADOR el
+  // selector de turno se limita a GLOBAL para esta tienda (ver availShifts/syncShift).
   ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const b=OBJ_ROWS[a]; if(!b)return;
     const r=Object.assign({},b,{shift:sh,mesKey:mk});
     (((ST.index[OBJ_NAME][mk]=ST.index[OBJ_NAME][mk]||{})[sh]=ST.index[OBJ_NAME][mk][sh]||{}))[a]=r; })));
   if(ST.synthPresent.indexOf(OBJ_NAME)<0)ST.synthPresent=[OBJ_NAME].concat(ST.synthPresent);
   if(ST.tiendas.indexOf(OBJ_NAME)<0)ST.tiendas=[OBJ_NAME].concat(ST.tiendas);
   const rk=$('rkRef'); if(rk){ const cur=rk.value,first=ST.realStores[0];
-    rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
+    rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t===OBJ_NAME)).join('')||opt(first,'Tienda '+first,true);
     if(cur)rk.value=cur; }
 }
 function barColor(diff,eps){if(diff==null)return cssv('--ref');eps=eps||0;if(Math.abs(diff)<=eps)return cssv('--ref');return diff>0?cssv('--bad'):cssv('--good');}
@@ -1383,7 +1386,7 @@ function makeCombo(id){
   }
   function open(){pop.classList.add('open');render(inp.value===shortStore(inp.dataset.val)?'':inp.value);}
   function close(){pop.classList.remove('open');hi=-1;if(inp.dataset.val)inp.value=shortStore(inp.dataset.val);}
-  function pick(i){const o=shown[i];if(!o)return;inp.dataset.val=o.val;inp.value=o.label;close();preview();}
+  function pick(i){const o=shown[i];if(!o)return;inp.dataset.val=o.val;inp.value=o.label;close();syncShift(id.slice(-1));preview();}
   inp.addEventListener('focus',()=>{inp.value='';open();});
   inp.addEventListener('input',()=>{hi=-1;open();render(inp.value);});
   inp.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){hi=Math.min(shown.length-1,hi+1);render(inp.value);}else if(e.key==='ArrowUp'){hi=Math.max(0,hi-1);render(inp.value);}else if(e.key==='Enter'){e.preventDefault();pick(hi<0?0:hi);}else if(e.key==='Escape'){close();inp.blur();}});
@@ -1393,9 +1396,16 @@ function makeCombo(id){
 /* ===== SELECTORES ===== */
 function opt(v,l,sel){return '<option value="'+String(v).replace(/"/g,'&quot;')+'"'+(sel?' selected':'')+'>'+l+'</option>';}
 function fillSel(el,items,lf,sel){el.innerHTML=items.map(v=>opt(v,lf(v),v===sel)).join('');}
+// turnos que se ofrecen para una tienda en el COMPARADOR. Objetivos es global-only aunque su dato
+// esté replicado en todos los turnos (para el ranking): aquí solo ofrecemos GLOBAL.
+function availShifts(t){
+  if(t===OBJ_NAME){const g=ST.shifts.filter(s=>s==='global');return g.length?g:ST.shifts.slice(0,1);}
+  const idx=ST.index[t];if(!idx)return ST.shifts.slice();const set=new Set();for(const mk in idx){for(const sh in idx[mk])set.add(sh);}const r=ST.shifts.filter(s=>set.has(s));return r.length?r:ST.shifts.slice();}
+// re-rellena el selector de turno del lado w ('A'/'B') según la tienda elegida; conserva el valor si sigue disponible
+function syncShift(w){const t=$('t'+w).dataset.val,sel=$('s'+w);if(!sel)return;const sh=availShifts(t),cur=sel.value;fillSel(sel,sh,shiftLabel,sh.includes(cur)?cur:sh[0]);}
 function populate(){
   const last=ST.meses[ST.meses.length-1],first=ST.realStores[0];
-  const defB=ST.tiendas.find(t=>t==='Tiendas Veteranas')||ST.tiendas.find(t=>t==='Todas las tiendas')||first,s0=ST.shifts[0];
+  const defB=ST.tiendas.find(t=>t===OBJ_NAME)||ST.tiendas.find(t=>t==='Tiendas Veteranas')||ST.tiendas.find(t=>t==='Todas las tiendas')||first,s0=ST.shifts[0];
   makeCombo('tA');makeCombo('tB');setCombo('tA',first);setCombo('tB',defB);
   fillSel($('mA'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sA'),ST.shifts,shiftLabel,s0);
   fillSel($('mB'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sB'),ST.shifts,shiftLabel,s0);
@@ -1410,13 +1420,14 @@ function populate(){
   $('rkArea').innerHTML=opt('__global','Todas (global)',true)+AREAS.map(a=>opt(a,a)).join('');
   fillSel($('rkShift'),ST.shifts,shiftLabel,s0);
   fillSel($('rkMes'),ST.meses,k=>ST.mesLabel[k],last);
-  $('rkRef').innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
+  $('rkRef').innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t===OBJ_NAME)).join('')||opt(first,'Tienda '+first,true);
   ['mA','sA','mB','sB','nA','nB'].forEach(id=>$(id).addEventListener('change',preview));
   ['nA','nB'].forEach(id=>$(id).addEventListener('input',e=>{e.target.dataset.touched=e.target.value.trim()?'1':'';preview();}));
   $('trArea').addEventListener('change',()=>{ST.trArea=$('trArea').value;refreshTrMetricOptions();if(ST.analyzed)renderTrend();});
   $('trMetric').addEventListener('change',()=>{if(ST.analyzed)renderTrend();});
   ['rkMetric','rkArea','rkShift','rkMes','rkRef','rkVet','rkModel','rkLimit'].forEach(id=>$(id).addEventListener('change',renderRank));
   ['rkRegion','rkZona'].forEach(id=>$(id).addEventListener('input',renderRank));
+  syncShift('A');syncShift('B');
   preview();
 }
 function scn(w){return {tienda:$('t'+w).dataset.val,mesKey:$('m'+w).value,shift:$('s'+w).value};}
@@ -1436,6 +1447,7 @@ document.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>
   else if(q==='prev'){setCombo('tB',$('tA').dataset.val);$('mB').value=ST.meses[prev()];$('sB').value=$('sA').value;}
   else if(q==='shift'){setCombo('tB',$('tA').dataset.val);$('mB').value=$('mA').value;const o=ST.shifts.find(s=>s!==$('sA').value);if(o)$('sB').value=o;}
   else if(q==='swap'){const va=$('tA').dataset.val,vb=$('tB').dataset.val;setCombo('tA',vb);setCombo('tB',va);['m','s','n'].forEach(f=>{const t=$(f+'A').value;$(f+'A').value=$(f+'B').value;$(f+'B').value=t;});}
+  syncShift('A');syncShift('B');
   preview();
 }));
 $('go').addEventListener('click',analyze);
@@ -2465,7 +2477,9 @@ function loSaveObj(){
   FK.forEach(f=>metricCols.push(f+'_ef_min_medio',f+'_ef_pct_medio',f+'_par_min_medio',f+'_par_pct_medio'));
   metricCols.push('total_min_efec_medio','total_min_paradas_medio','prod_efectiva_min_ud_media','uph_efec_media');
   const header=['tienda','mes','shift','area_batch','estado_veterana'].concat(metricCols);
-  const numout=v=>(v==null||typeof v!=='number'||isNaN(v))?'':String(Math.round(v*1e6)/1e6);
+  // Formato europeo entre comillas (coma decimal), igual que el resto de CSVs del proyecto.
+  // Evita que el parser numv del comparador lea "1.155" u "8.415" como miles (1155 / 8415).
+  const numout=v=>(v==null||typeof v!=='number'||isNaN(v))?'':'"'+String(Math.round(v*1e6)/1e6).replace('.',',')+'"';
   const lines=[header.join(',')];
   AREAS.forEach(a=>{ const r=ST.objTrim[a]; if(!r)return;
     const row=header.map(c=>{
