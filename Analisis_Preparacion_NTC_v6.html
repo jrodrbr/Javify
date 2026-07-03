@@ -977,7 +977,7 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
       <div class="sec-hd"><div>
         <div class="sec-n">Tendencia · 12 meses</div>
         <div class="sec-h">¿Mejora, empeora o está estable?</div>
-        <div class="sec-s">Evolución del analizado frente a la referencia para el área y la fase que elijas. En productividad, la línea de objetivo es 0,315 min/ud; por encima es peor, por debajo mejor.</div>
+        <div class="sec-s">Evolución del analizado frente a la referencia para el área y la fase que elijas. En productividad, la línea de objetivo es 0,306 min/ud; por encima es peor, por debajo mejor.</div>
       </div></div>
       <div class="trend-ctrl"><select id="trArea"></select><select id="trMetric"></select></div>
       <div class="cbox"><div class="cbox-in"><button class="png" data-png="cTrend">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="trendTitle">—</div><div class="csub" id="trendSub">—</div></div></div><div class="chart" id="cTrend"></div></div></div>
@@ -1231,10 +1231,11 @@ const SYNTH=['Tiendas Veteranas','Todas las tiendas'];
 const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const SHIFT_LABEL={global:'GLOBAL',morning:'Mañana',afternoon:'Tarde'},SHIFT_SORT={global:-1,morning:0,afternoon:1};
 const shiftLabel=s=>SHIFT_LABEL[s]||s;
-const OBJ_PROD=0.315;
+const OBJ_PROD=0.306; // objetivo global del comparador (0,306). El umbral de SELECCIÓN de tiendas liebre sigue siendo 0,315 (Pedido de 10 + prod ≤ 0,315), ver criterios.
 const RGB={good:'38,176,121',bad:'232,105,123',neutral:'133,149,175'};
 const METRICS={
   prod:{label:'Productividad',unit:'min/ud',dec:3,col:'prod_total_min_ud_media',obj:OBJ_PROD},
+  uds:{label:'Unidades por lote',unit:'ud',dec:1,col:'uds_media_lote'},
   tiempo:{label:'Tiempo por lote',unit:'min',dec:2,col:'total_min_util_medio'},
   prep:{label:'Preparación',unit:'min',dec:2,col:'prep_min_medio'},
   picking:{label:'Picking',unit:'min',dec:2,col:'p2_min_medio',deg:true},
@@ -1305,7 +1306,7 @@ function mesKeyFromCell(v){if(v==null)return '';const t=String(v).trim();let m=t
 function mesLabel(k){const m=k.match(/^(\d{4})-(\d{2})$/);if(m){const me=MESES_ES[+m[2]-1];return (me?me.charAt(0).toUpperCase()+me.slice(1):m[2])+' '+m[1];}return k;}
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
 function setStatus(t,s){$('dotTxt').textContent=t;$('dot').className='sdot'+(s?(' '+s):'');}
-function shortStore(t){return t==='Tiendas Veteranas'?'Veteranas':t==='Todas las tiendas'?'Todas las tiendas':t==='Objetivos Tiendas Liebre'?'Objetivos Tiendas Liebre':'Tienda '+t;}
+function shortStore(t){return t==='Tiendas Veteranas'?'Veteranas':t==='Todas las tiendas'?'Todas las tiendas':t==='Objetivos Tiendas Liebre'?'Objetivo':'Tienda '+t;}
 function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
 /* ===== OBJETIVOS TIENDAS LIEBRE (CSV de la calculadora) como tienda de referencia ===== */
 const OBJ_NAME='Objetivos Tiendas Liebre';
@@ -1655,7 +1656,6 @@ function renderSummary(){
     k.push('<div class="kpi"><div class="kpi-l">Productividad óptima</div><div class="kpi-v">'+fmt(OBJ_PROD,3)+' <small>min/ud</small></div><div class="kpi-r">objetivo de referencia</div></div>');
     k.push(kpiCard("Productividad real (≤20')", gA.prod_conparadas_min_ud, OBJ_PROD,'min/ud',true,3,0.003));
     k.push(kpiCard("Productividad efectiva (≤6')", gA.prod_efectiva_min_ud, OBJ_PROD,'min/ud',true,3,0.003));
-    k.push(kpiCard('Unidades/día (media)', gA.uds_dia_media, gB?gB.uds_dia_media:null,'ud',false,0,1));
     $('kpis').innerHTML=k.join('');
     // ---- CAUDAL: donut de composición + evolución 12 meses + tabla, con desplegable diario/mensual ----
     $('kpiWarn').innerHTML=
@@ -1950,37 +1950,51 @@ function renderCont(){
 }
 
 /* ===== DÓNDE ACTUAR (diff con tendencia grande) ===== */
-function valoresDe(m,metric){return metric==='tiempo'?{a:m.tiempoA,b:m.tiempoB,d:m.dTiempo,dec:2,unit:'min',eps:0.05}:{a:m.prodA,b:m.prodB,d:m.dProd,dec:3,unit:'min/ud',eps:0.005};}
-function impactoDe(m,metric){return metric==='tiempo'?((m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null):m.impacto;}
+function valoresDe(m,metric){
+  if(metric==='tiempo')return {a:m.tiempoA,b:m.tiempoB,d:m.dTiempo,dec:2,unit:'min',eps:0.05};
+  if(metric==='uds')return {a:m.udsA,b:m.udsB,d:m.dUds,dec:1,unit:'ud',eps:0.5};
+  return {a:m.prodA,b:m.prodB,d:m.dProd,dec:3,unit:'min/ud',eps:0.005};
+}
+function impactoDe(m,metric){
+  if(metric==='tiempo')return (m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null;
+  if(metric==='uds')return (m.dUds!=null&&m.lotesA!=null)?m.dUds*m.lotesA:null; // unidades/mes de diferencia
+  return m.impacto;
+}
 function renderDiffControls(){
-  $('diffMetric').innerHTML=[['prod','Por productividad'],['tiempo','Por tiempo de lote']].map(o=>'<button class="mode'+(ST.diffMetric===o[0]?' on':'')+'" data-dm="'+o[0]+'">'+o[1]+'</button>').join('');
+  $('diffMetric').innerHTML=[['prod','Por productividad'],['tiempo','Por tiempo de lote'],['uds','Por unidades']].map(o=>'<button class="mode'+(ST.diffMetric===o[0]?' on':'')+'" data-dm="'+o[0]+'">'+o[1]+'</button>').join('');
   $('diffMetric').querySelectorAll('[data-dm]').forEach(b=>b.addEventListener('click',()=>{ST.diffMetric=b.dataset.dm;renderDiffControls();renderDiff();}));
 }
 function renderDiff(){
-  const metric=ST.diffMetric;
+  const metric=ST.diffMetric, isUds=metric==='uds';
   const rows=MODEL.filter(m=>m.disponible).map(m=>({m,imp:impactoDe(m,metric)}));
   const nd=MODEL.filter(m=>!m.disponible);
+  const fmtUds=n=>(n==null||isNaN(n))?'—':(n>0?'+':n<0?'−':'')+fmt(Math.abs(n),0)+' ud';
   let html=rows.map(({m,imp})=>{
     const v=valoresDe(m,metric);
-    const worse=v.d==null?null:(v.d>v.eps?true:(v.d<-v.eps?false:null));
+    // en 'uds' no hay juicio mejor/peor: es volumen, se muestra neutro
+    const worse=isUds?null:(v.d==null?null:(v.d>v.eps?true:(v.d<-v.eps?false:null)));
     const cls=worse===null?'flat':worse?'up':'down';
     const sA=serie(curA.tienda,curA.shift,m.area,metric),sB=serie(curB.tienda,curB.shift,m.area,metric);
     const tr=sparkTrend(sA,true);
-    const impCls=imp==null?'flat':(Math.abs(imp)<0.5?'flat':imp>0?'up':'down');
-    const causa=worse===null?'en línea':'explica: '+causaText(m);
+    const impCls=isUds?'flat':(imp==null?'flat':(Math.abs(imp)<0.5?'flat':imp>0?'up':'down'));
+    const causa=isUds?'volumen (uds/lote)':(worse===null?'en línea':'explica: '+causaText(m));
     const lineColor=cls==='up'?cssv('--bad'):cls==='down'?cssv('--good'):null;
+    const deltaHtml=isUds?('<span class="delta flat">'+(v.d==null?'N/D':(sg(v.d)+fmt(v.d,v.dec)+' ud'))+'</span>'):deltaChip(v.d,true,v.dec,'',v.eps);
+    const impHtml=isUds?fmtUds(imp):fmtImpact(imp);
     return '<div class="drow '+cls+'" data-area="'+m.area+'">'+
       '<div class="dr-area">'+m.area+'<small>'+causa+'</small></div>'+
       '<div class="spark-wrap"><div style="flex:1;height:36px;min-width:0">'+svgSpark(sA,sB,130,36,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
       '<div class="dr-vals"><div class="dr-pair"><span class="k">Analizado</span><span class="v an">'+fmt(v.a,v.dec)+'</span></div><div class="dr-pair"><span class="k">Referencia</span><span class="v rf">'+fmt(v.b,v.dec)+'</span></div></div>'+
-      '<div style="text-align:right">'+deltaChip(v.d,true,v.dec,'',v.eps)+'</div>'+
-      '<div class="dr-imp"><div class="k">Impacto/mes</div><div class="v '+impCls+'">'+fmtImpact(imp)+'</div></div>'+
+      '<div style="text-align:right">'+deltaHtml+'</div>'+
+      '<div class="dr-imp"><div class="k">'+(isUds?'Uds/mes':'Impacto/mes')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
       '</div>';
   }).join('');
   if(nd.length)html+='<div class="drow nd"><div class="dr-area">'+nd.map(m=>m.area).join(', ')+'<small>no está en uno de los escenarios</small></div><div></div><div class="dr-vals"></div><div></div><div class="dr-imp"></div></div>';
   $('diffList').innerHTML=html;
   $('diffList').querySelectorAll('[data-area]').forEach(r=>r.addEventListener('click',()=>{ST.fichaArea=r.dataset.area;renderFichaTabs();renderFicha();$('secFicha').scrollIntoView({behavior:'smooth',block:'start'});}));
-  $('diffNote').innerHTML='El <b>impacto</b> = diferencia por '+(metric==='tiempo'?'lote × nº de lotes':'unidad × uds/lote × nº de lotes')+' del analizado, en tiempo al mes. La tendencia muestra los 12 meses (área rellena = analizado, gris discontinua = referencia) e indica si sube o baja. Color del borde: rojo peor, verde mejor.';
+  $('diffNote').innerHTML=isUds
+    ? 'Comparativa de <b>volumen</b>: media de <b>uds/lote</b> por área (analizado vs referencia) y <b>unidades/mes</b> de diferencia (≈ dif uds/lote × nº de lotes del analizado). La tendencia son los 12 meses (área rellena = analizado, gris = referencia). Es informativo, sin juicio de mejor/peor.'
+    : 'El <b>impacto</b> = diferencia por '+(metric==='tiempo'?'lote × nº de lotes':'unidad × uds/lote × nº de lotes')+' del analizado, en tiempo al mes. La tendencia muestra los 12 meses (área rellena = analizado, gris discontinua = referencia) e indica si sube o baja. Color del borde: rojo peor, verde mejor.';
 }
 
 /* ===== TENDENCIA (ampliada) ===== */
@@ -1990,7 +2004,7 @@ function refreshTrMetricOptions(){const area=$('trArea').value,cur=$('trMetric')
 function initTrend(){if(!ST._trInit){ST.trArea=$('trArea').value;ST._trInit=true;}refreshTrMetricOptions();}
 function renderTrendGen(mk,x){
   const tA=curA.tienda,tB=curB.tienda,lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
-  const lay=baseLayout({height:H.trend+22,margin:{l:54,r:18,t:18,b:46},hovermode:'x unified',xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2')},automargin:true,zeroline:false}});
+  const lay=baseLayout({height:H.trend+22,margin:{l:54,r:18,t:26,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2')},automargin:true,zeroline:false}});
   const lbl=(arr,d)=>arr.map(v=>v==null?'':fmt(v,d));
   let traces=[],title='',sub='';
   if(mk==='gprod'){
@@ -2002,9 +2016,8 @@ function renderTrendGen(mk,x){
       {x,y:cpA,name:'Con paradas',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:'#e08a3c',width:2.6,shape:'spline'},marker:{size:6,color:'#e08a3c',line:{width:1.5,color:cssv('--panel')}},text:lbl(cpA,3),textposition:'bottom center',textfont:{size:8,color:'#e08a3c'}},
       {x,y:efA,name:'Efectiva',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}}
     ];
-    lay.shapes=[{type:'line',x0:x[0],x1:x[x.length-1],y0:OBJ_PROD,y1:OBJ_PROD,line:{color:bad,width:1.3,dash:'dash'}}];
-    lay.annotations=[{x:x[0],y:OBJ_PROD,xanchor:'left',yanchor:'bottom',text:'Objetivo '+fmt(OBJ_PROD,3),showarrow:false,font:{size:10,color:bad}}];
-    title='Productividad efectiva + con paradas (min/ud) · Global tienda';sub='sólidas = '+ST.nameA+' · punteadas = '+ST.nameB+' · roja = objetivo '+fmt(OBJ_PROD,3);
+    traces.push({x,y:x.map(()=>OBJ_PROD),name:'Objetivo '+fmt(OBJ_PROD,3),type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},hoverinfo:'skip'});
+    title='Productividad efectiva + con paradas (min/ud) · Global tienda';sub='sólidas = '+ST.nameA+' · punteadas = '+ST.nameB+' · roja discontinua = objetivo '+fmt(OBJ_PROD,3)+' (actívala/ocúltala en la leyenda)';
   }else if(mk==='gcaudal'){
     const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h');
     traces=[{x,y:op,name:'Óptimo',type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},
@@ -2013,8 +2026,8 @@ function renderTrendGen(mk,x){
   }else{
     const hm=genSerie(tA,'diferencia_caudal_h_total'),cols=hm.map(v=>v==null?ref:(v>0?bad:good));
     traces=[{x,y:hm,name:'Horas de más/mes',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:7,color:cols,line:{width:1.5,color:cssv('--panel')}},text:lbl(hm,1),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}];
-    lay.shapes=[{type:'line',x0:x[0],x1:x[x.length-1],y0:0,y1:0,line:{color:cssv('--line3'),width:1.2,dash:'dash'}}];
-    title='Horas de más / mes (real − óptimo) · Global tienda';sub='positivo = horas de más que el óptimo · '+ST.nameA;
+    traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},hoverinfo:'skip'});
+    title='Horas de más / mes (real − óptimo) · Global tienda';sub='positivo = horas de más que el óptimo · '+ST.nameA+' · objetivo 0 activable en leyenda';
   }
   Plotly.react('cTrend',traces,lay,PCFG);
   $('trendTitle').textContent=title;$('trendSub').textContent=sub;$('trendInsights').innerHTML='';$('trendWatch').innerHTML='';
@@ -2036,6 +2049,10 @@ function renderTrend(){
     {x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},
     {x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map(v=>v==null?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}
   ];
+  // objetivo del área (Objetivos Tiendas Liebre) — línea roja discontinua, activable en la leyenda, aparece aun comparando dos tiendas
+  const objRow=(typeof OBJ_ROWS!=='undefined'&&OBJ_ROWS)?OBJ_ROWS[area]:null;
+  const objVal=objRow?metricVal(mapCorte(objRow),area,mk):null;
+  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo',type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},hoverinfo:'skip'});
   const lay=baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,autorange:true}});
   Plotly.react('cTrend',traces,lay,PCFG);
   $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+' · '+area;
@@ -2375,7 +2392,7 @@ function aName(a){ if(a==='FYV')return'FYV'; if(a==='GLOBAL')return'Global'; if(
 
 const AREAS=['SECOS','REFRIGERADO','CONGELADO','FRESCOS','FYV','HORNO','PENDIENTES'];
 const ACOL={SECOS:'#d6a64f',REFRIGERADO:'#4f8fe0',CONGELADO:'#5ec8d6',FRESCOS:'#26b079',FYV:'#7bc043',HORNO:'#e08a4f',PENDIENTES:'#9b8fd6'};
-const OBJ_PROD=0.315; const OBJ_MERC=0.315*1.08;
+const OBJ_PROD=0.306; const OBJ_MERC=0.306*1.08; // objetivo mostrado 0,306; la selección de liebres sigue con ≤0,315 (SQL + tarjeta de criterios)
 const MACROS=[
   {k:'prep',name:'Preparación',sub:'P1+P2+P3',col:'#16b87f'},
   {k:'pes', name:'Pesaje',     sub:'P4',      col:'#e6b15e'},
@@ -2540,7 +2557,7 @@ function renderHero(){
     `<h3>Productividad MO${fallback?' · estim.':' · oficial'}</h3>
      <div class="lo-big">${es(real,3)} <small>min/ud · real ≤20'</small></div>
      <div class="lo-bar0"><i style="width:${fillPct}%;background:${okR?'linear-gradient(90deg,var(--brand2),var(--brand))':'linear-gradient(90deg,#e88,#e8697b)'}"></i><span class="lo-obj" style="left:${objPct}%"></span></div>
-     <div class="lo-gline"><span>0</span><span>objetivo 0,315</span></div>
+     <div class="lo-gline"><span>0</span><span>objetivo 0,306</span></div>
      <div class="lo-gk">
        <div>Real (corte 20)<b class="${okR?'lo-ok':'lo-bad'}">${es(real,3)}</b></div>
        <div>Efectiva (corte 6)<b>${es(efec,3)}</b></div>
@@ -2611,7 +2628,7 @@ function renderMonthly(){
   let h='<div class="lo-rk" style="margin-top:6px">';
   series.forEach(s=>h+=barLine(fmtMes(s.m),s.real,s.efec,mx));
   h+=barLine('Trimestre',trim.real,trim.efec,mx,true);
-  h+='</div><div style="font-size:11px;color:var(--ink3);margin-top:10px">Barra verde/roja = real (con paradas) · gris = efectiva · línea = objetivo 0,315. Modelo '+lbl+'.</div>';
+  h+='</div><div style="font-size:11px;color:var(--ink3);margin-top:10px">Barra verde/roja = real (con paradas) · gris = efectiva · línea = objetivo 0,306. Modelo'+lbl+'.</div>';
   box.innerHTML=h;
 }
 function barLine(lbl,real,efec,mx,strong){
@@ -2726,7 +2743,7 @@ function renderFoot(){
   document.getElementById('lo_foot').innerHTML=
     `Fuente: <code>Tiendas liebre objetivos.sql</code> · ventana 3 meses cerrados · ponderación día‑igual. `+
     `Faro/agrupado = 4 bloques (Preparación P1+P2+P3 · Pesaje P4 · Consolidación P5+P6 · Entre lotes P7). `+
-    `Productividad global = modelo oficial último−primer evento (real corte 20, efectiva corte 6). Por área = modelo desglose. Objetivo: 0,315 min/ud.`;
+    `Productividad global = modelo oficial último−primer evento (real corte 20, efectiva corte 6). Por área = modelo desglose. Objetivo: 0,306 min/ud.`;
 }
 
 /* ---------- eventos ---------- */
