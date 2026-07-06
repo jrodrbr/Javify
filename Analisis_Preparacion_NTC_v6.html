@@ -1207,9 +1207,9 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
 
 <script>
 "use strict";
-const CSV_URL='https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/Fase6_desglose_redondeado.csv';
+const CSV_URL='https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/super_fase_6.csv';
 // CSV de VALORES GENERALES por tienda/mes (Fase general). Cruza con el desglose por tienda+mes.
-const GENERAL_URL='https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/query_result_2026-06-22T17_18_23.749174%2B02_00.csv';
+const GENERAL_URL='https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/super_fase_6_general.csv';
 const AREAS=['SECOS','REFRIGERADO','CONGELADO','FRESCOS','FYV','HORNO','PENDIENTES'];
 const AREAS_DESGLOSE=['SECOS','REFRIGERADO','CONGELADO','HORNO','PENDIENTES'];
 const tieneDesglose=a=>AREAS_DESGLOSE.includes(a);
@@ -1516,6 +1516,9 @@ function impFase(m,key){const a=m.ra?m.ra[MINKEY[key]]:null,b=m.rb?m.rb[MINKEY[k
 /* ===== globales BIEN calculados ===== */
 function prodGlobal(rowsArr){let tt=0,ut=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tt+=r.total_min_util_medio*r.n_lotes;ut+=r.uds_media_lote*r.n_lotes;}});return ut>0?tt/ut:null;}
 function tiempoGlobal(rowsArr){let s=0,n=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.n_lotes!=null){s+=r.total_min_util_medio*r.n_lotes;n+=r.n_lotes;}});return n>0?s/n:null;}
+// productividad global (real ≤20 o efectiva ≤6) de una tienda desde el desglose. Sirve para Veteranas/Todas,
+// que no están en el CSV general: es el mismo valor global que muestra el resumen. which='real'|'efec'.
+function globProdOf(t,which,shift,mes){let tt=0,uu=0;AREAS.forEach(a=>{const r=(((ST.index[t]||{})[mes]||{})[shift]||{})[a];if(!r)return;const tm=which==='efec'?r.total_min_efec_medio:r.total_min_util_medio;if(tm!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tt+=tm*r.n_lotes;uu+=r.uds_media_lote*r.n_lotes;}});return uu>0?tt/uu:null;}
 
 /* ===== tendencias ===== */
 function slope(ys){const pts=ys.map((y,i)=>[i,y]).filter(p=>p[1]!=null);if(pts.length<2)return null;const n=pts.length;let sx=0,sy=0,sxx=0,sxy=0;pts.forEach(p=>{sx+=p[0];sy+=p[1];sxx+=p[0]*p[0];sxy+=p[0]*p[1];});const dd=n*sxx-sx*sx;if(Math.abs(dd)<1e-9)return null;return (n*sxy-sx*sy)/dd;}
@@ -2016,7 +2019,7 @@ function renderTrendGen(mk,x){
       {x,y:cpA,name:'Con paradas',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:'#e08a3c',width:2.6,shape:'spline'},marker:{size:6,color:'#e08a3c',line:{width:1.5,color:cssv('--panel')}},text:lbl(cpA,3),textposition:'bottom center',textfont:{size:8,color:'#e08a3c'}},
       {x,y:efA,name:'Efectiva',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}}
     ];
-    traces.push({x,y:x.map(()=>OBJ_PROD),name:'Objetivo '+fmt(OBJ_PROD,3),type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},hoverinfo:'skip'});
+    traces.push({x,y:x.map(()=>OBJ_PROD),name:'Objetivo '+fmt(OBJ_PROD,3),type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj '+fmt(OBJ_PROD,3):''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
     title='Productividad efectiva + con paradas (min/ud) · Global tienda';sub='sólidas = '+ST.nameA+' · punteadas = '+ST.nameB+' · roja discontinua = objetivo '+fmt(OBJ_PROD,3)+' (actívala/ocúltala en la leyenda)';
   }else if(mk==='gcaudal'){
     const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h');
@@ -2026,7 +2029,7 @@ function renderTrendGen(mk,x){
   }else{
     const hm=genSerie(tA,'diferencia_caudal_h_total'),cols=hm.map(v=>v==null?ref:(v>0?bad:good));
     traces=[{x,y:hm,name:'Horas de más/mes',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:7,color:cols,line:{width:1.5,color:cssv('--panel')}},text:lbl(hm,1),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}];
-    traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},hoverinfo:'skip'});
+    traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj 0':''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
     title='Horas de más / mes (real − óptimo) · Global tienda';sub='positivo = horas de más que el óptimo · '+ST.nameA+' · objetivo 0 activable en leyenda';
   }
   Plotly.react('cTrend',traces,lay,PCFG);
@@ -2052,7 +2055,7 @@ function renderTrend(){
   // objetivo del área (Objetivos Tiendas Liebre) — línea roja discontinua, activable en la leyenda, aparece aun comparando dos tiendas
   const objRow=(typeof OBJ_ROWS!=='undefined'&&OBJ_ROWS)?OBJ_ROWS[area]:null;
   const objVal=objRow?metricVal(mapCorte(objRow),area,mk):null;
-  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo',type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},hoverinfo:'skip'});
+  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo '+fmt(objVal,M.dec),type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj '+fmt(objVal,M.dec):''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
   const lay=baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,autorange:true}});
   Plotly.react('cTrend',traces,lay,PCFG);
   $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+' · '+area;
@@ -2231,8 +2234,12 @@ function renderRank(){
   const top=lim>0?items.slice(0,lim):items;
   const dec=isGen?G.dec:(mk==='__imp'?1:special?3:M.dec),eps=isProdMetric?0.003:0.05;
   // (general) la referencia es el OBJETIVO general: 0,315 en productividad, 0 en horas/caudal
-  const vRef=isGen?(G.isProd?OBJ_PROD:0):(special?null:valorTienda(ref,mk,area,shift,mes));
-  const refLbl=isGen?(G.isProd?'objetivo':'objetivo (0)'):shortStore(ref);
+  // referencia del ranking: Objetivo=0,306 (fijo); Veteranas/Todas = su productividad OFICIAL del CSV general
+  // (exactamente el valor del resumen: prod_conparadas real ≤20 / prod_efectiva ≤6); horas/caudal = 0
+  let vRef;
+  if(isGen){ if(!G.isProd)vRef=0; else if(ref===OBJ_NAME)vRef=OBJ_PROD; else {const grR=genRow(ref,mes);vRef=(grR&&grR[G.prop]!=null)?grR[G.prop]:null;} }
+  else { vRef = special?null:valorTienda(ref,mk,area,shift,mes); }
+  const refLbl=(ref===OBJ_NAME)?(isGen&&!G.isProd?'objetivo (0)':'objetivo'):shortStore(ref);
   const metricLabel=isGen?G.unit:(special?(mk==='__imp'?'h / mes':mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label));
   const rkHead='<div class="difhead"><span>Tienda</span><span>Tendencia 12 meses</span><span>Tienda / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
   $('rkList').innerHTML=rkHead+top.map((o,i)=>{
@@ -2241,7 +2248,7 @@ function renderRank(){
     if(special){cls=o.val>0?'up':o.val<0?'down':'flat';}
     else if(vRef!=null){const d=o.val-vRef;cls=Math.abs(d)<eps?'flat':d>0?'up':'down';difTxt=deltaChip(d,true,dec,'',eps);}
     const lineColor=cls==='up'?cssv('--bad'):cls==='down'?cssv('--good'):null;
-    const sA=isGen?genSerie(o.t,G.prop):rkSerie(o.t,area,shift,special?'prod':mk),sB=isGen?ST.meses.map(()=>vRef):rkSerie(ref,area,shift,special?'prod':mk);
+    const sA=isGen?genSerie(o.t,G.prop):rkSerie(o.t,area,shift,special?'prod':mk),sB=isGen?(ref===OBJ_NAME?ST.meses.map(()=>vRef):genSerie(ref,G.prop)):rkSerie(ref,area,shift,special?'prod':mk);
     const tr=sparkTrend(sA,true);
     const valTxt=special?(sg(o.val)+fmt(o.val,dec)):fmt(o.val,dec);
     const subTxt=isGen?G.unit:(mk==='__imp'?'h/mes':(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio'));
@@ -2254,7 +2261,7 @@ function renderRank(){
       '<div class="dr-area"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3);margin-right:5px">#'+(i+1)+'</span>'+nom+(isCur?' <span style="color:var(--brand);font-size:10px">· activa</span>':'')+
         '<small>'+attrs+'</small></div>'+
       '<div class="spark-wrap" style="gap:8px"><div style="flex:1;height:40px;min-width:0">'+svgSpark(sA,sB,220,40,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
-      '<div class="dr-vals"><div class="dr-pair"><span class="k">Tienda</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(vRef!=null?'<div class="dr-pair"><span class="k">'+(isGen?'Objetivo':'Referencia')+'</span><span class="v rf">'+fmt(vRef,dec)+'</span></div>':'')+'</div>'+
+      '<div class="dr-vals"><div class="dr-pair"><span class="k">Tienda</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(vRef!=null?'<div class="dr-pair"><span class="k">'+(ref===OBJ_NAME?'Objetivo':shortStore(ref))+'</span><span class="v rf">'+fmt(vRef,dec)+'</span></div>':'')+'</div>'+
       '<div style="text-align:right">'+(difTxt||'<span class="delta na">—</span>')+'</div>'+
       '<div class="dr-imp"><div class="k">'+subTxt+'</div><div class="v '+valCls+'">'+valTxt+'</div></div>'+
       '</div>';
@@ -2376,7 +2383,7 @@ loadObjetivos();  // carga (si existe) el CSV de objetivos liebre como tienda de
 (function(){
 "use strict";
 
-const CSV_URL="https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/Liebres%20junio.csv";
+const CSV_URL="https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/super_fase_6_tiendas_liebre.csv";
 
 function numEU(v){ if(v==null)return NaN; let s=String(v).trim().replace(/^"|"$/g,''); if(s==='')return NaN;
   const hasC=s.includes(','),hasD=s.includes('.');
@@ -2625,10 +2632,11 @@ function renderMonthly(){
   }
   const allv=series.flatMap(s=>[s.real,s.efec]).concat([trim.real,OBJ_PROD]).filter(x=>!isNaN(x));
   const mx=Math.max(...allv,0.0001)*1.12;
-  let h='<div class="lo-rk" style="margin-top:6px">';
+  let h='<div class="lo-rkrow" style="cursor:default;grid-template-columns:90px 1fr 120px;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Periodo</div><div style="text-align:center">objetivo '+es(OBJ_PROD,3)+'</div><div style="text-align:right">real ≤20\' · <span style="color:var(--ink3)">efec ≤6\'</span></div></div>';
+  h+='<div class="lo-rk" style="margin-top:2px">';
   series.forEach(s=>h+=barLine(fmtMes(s.m),s.real,s.efec,mx));
   h+=barLine('Trimestre',trim.real,trim.efec,mx,true);
-  h+='</div><div style="font-size:11px;color:var(--ink3);margin-top:10px">Barra verde/roja = real (con paradas) · gris = efectiva · línea = objetivo 0,306. Modelo'+lbl+'.</div>';
+  h+='</div><div style="font-size:11px;color:var(--ink3);margin-top:10px">Barra verde/roja = real (con paradas) · gris = efectiva · línea = objetivo '+es(OBJ_PROD,3)+'. Modelo '+lbl+'.</div>';
   box.innerHTML=h;
 }
 function barLine(lbl,real,efec,mx,strong){
@@ -2669,7 +2677,9 @@ function renderRanking(){
   arr.sort((a,b)=> ST.rkOrder==='worst' ? b.d-a.d : a.d-b.d);
   const N=ST.rkCount>=999?arr.length:ST.rkCount, top=arr.slice(0,N);
   const mxd=Math.max(0.0001,...arr.map(x=>Math.abs(x.d)));
-  let h='';
+  const bigLbl=M.unit.includes('lote')?"t/lote ≤20'":"real ≤20'";
+  const smallLbl=M.k.startsWith('ta_')?"efec ≤6'":(M.k==='g_efec'?"real ≤20'":"efec ≤6'");
+  let h='<div class="lo-rkrow" style="cursor:default;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Tienda</div><div style="text-align:center">Distancia al objetivo ('+es(obj,M.dec)+')</div><div style="text-align:right">'+bigLbl+' · <span style="color:var(--ink3)">'+smallLbl+'</span></div></div>';
   top.forEach(x=>{ const slow=x.d>0, w=Math.abs(x.d)/mxd*48;
     h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}</div>
       <div class="lo-rkbar"><span class="lo-mid" style="left:50%"></span><i style="${slow?`left:50%;width:${w}%;background:var(--up)`:`right:50%;width:${w}%;background:var(--down)`}"></i></div>
