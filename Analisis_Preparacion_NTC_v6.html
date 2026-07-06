@@ -1193,16 +1193,17 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
   <div id="caudalTab" class="no-print" style="display:none">
     <style>
     .cd-wrap{display:flex;flex-direction:column;gap:16px}
-    .cd-groups{display:flex;flex-wrap:wrap;gap:14px}
-    .cd-grp{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px 13px;display:flex;flex-direction:column;gap:9px}
-    .cd-grp-h{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--brand)}
-    .cd-grp-row{display:flex;flex-wrap:wrap;gap:8px}
+    .cd-groups{display:flex;flex-wrap:wrap;gap:10px}
+    .cd-grp{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:9px 10px 10px;display:flex;flex-direction:column;gap:7px}
+    .cd-grp-h{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--brand)}
+    .cd-grp-row{display:flex;flex-wrap:nowrap;gap:6px}
     .cd-f{position:relative}
-    .cd-f>label{display:block;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
-    .cd-btn{min-width:118px;padding:8px 11px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;display:flex;justify-content:space-between;gap:9px;align-items:center}
+    .cd-f>label{display:block;font-size:9px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px;white-space:nowrap}
+    .cd-btn{min-width:0;padding:6px 8px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:11.5px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;align-items:center}
     .cd-btn:hover{border-color:var(--brand-bd)}
     .cd-btn.cd-part{border-color:var(--brand-bd);box-shadow:inset 0 0 0 1px var(--brand-bd)}
-    .cd-btn .cd-cnt{color:var(--ink3);font-size:10.5px;font-weight:700;white-space:nowrap}
+    .cd-btn .cd-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:66px}
+    .cd-btn .cd-cnt{color:var(--ink3);font-size:10px;font-weight:700;white-space:nowrap}
     .cd-pop{position:absolute;z-index:60;top:100%;left:0;margin-top:6px;min-width:220px;max-height:320px;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--sh);padding:8px;display:none}
     .cd-pop.open{display:block}
     .cd-srch{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink);font:inherit;font-size:12px;margin-bottom:6px}
@@ -1222,7 +1223,13 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
     table.cd-tbl th.cd-dim,table.cd-tbl td.cd-dim{text-align:left;white-space:nowrap;max-width:none}
     table.cd-tbl tbody tr:hover td{background:var(--panel2)}
     table.cd-tbl td.cd-neg{color:#e5484d;font-weight:600}table.cd-tbl td.cd-pos{color:#12b5a5;font-weight:600}
-    table.cd-tbl tfoot td{font-weight:800;background:var(--panel2);border-top:2px solid var(--line2);position:sticky;bottom:0}
+    table.cd-tbl tfoot td{font-weight:800;background:var(--panel2);border-top:3px solid var(--ink2);position:sticky;bottom:0}
+    table.cd-tbl thead th[data-k]{cursor:pointer;user-select:none}
+    table.cd-tbl thead th[data-k]:hover{color:var(--ink)}
+    .cd-ar{color:var(--brand);font-size:9px}
+    .cd-rkcell{display:flex;align-items:center;gap:9px;justify-content:flex-end}
+    .cd-rkwrap{flex:1;height:9px;background:var(--panel3);border-radius:5px;overflow:hidden;min-width:50px;max-width:170px}
+    .cd-rkbar{height:100%;border-radius:5px}
     </style>
     <div class="cd-wrap">
 
@@ -1258,8 +1265,32 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
       <!-- TABLA -->
       <div class="card"><div class="cpad">
         <div class="cd-toolbar"><div class="h-c" style="font-size:15px;margin:0">Detalle</div>
-          <button class="cd-dlbtn" id="cd_dl" type="button">⤓ Descargar tabla</button></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="cd-f" style="position:relative"><button class="cd-btn" id="cd_colsBtn" type="button" style="min-width:120px"><span>Columnas</span><span class="cd-cnt" id="cd_colsCnt"></span></button>
+              <div class="cd-pop" id="cd_colsPop" style="right:0;left:auto"></div></div>
+            <button class="cd-dlbtn" id="cd_dl" type="button">⤓ Descargar tabla</button>
+          </div></div>
+        <div class="s-c" style="margin:-4px 0 8px">Pulsa una cabecera para ordenar. Usa «Columnas» para elegir qué ver (y qué se descarga).</div>
         <div class="lo-tbl-wrap" style="margin-top:4px;max-height:560px"><table class="cd-tbl" id="cd_tbl"></table></div>
+      </div></div>
+
+      <!-- RANKING -->
+      <div class="card"><div class="cpad">
+        <div class="cd-toolbar"><div class="h-c" style="font-size:15px;margin:0">Ranking</div>
+          <button class="cd-dlbtn" id="cd_rkDl" type="button">⤓ Descargar ranking</button></div>
+        <div class="s-c" style="margin:-4px 0 12px">Usa los mismos filtros de arriba. Ordena las entidades por la métrica elegida (agrega todo el ámbito filtrado, sin partir por tiempo). Ej.: filtra Proceso=Repartir y Día sem.=Lunes, rankea por Centro con métrica «Real − RealReal».</div>
+        <div class="cd-viewbar" style="margin-bottom:12px">
+          <div class="cd-f"><label>Rankear por</label>
+            <select class="lo-tin" id="cd_rkBy" style="min-width:150px">
+              <option value="centro">Centro</option><option value="zona">Zona</option><option value="region">Región</option>
+              <option value="proceso">Proceso</option><option value="dow">Día de semana</option><option value="mes">Mes</option><option value="semana">Semana</option></select></div>
+          <div class="cd-f"><label>Métrica</label><select class="lo-tin" id="cd_rkMetric" style="min-width:180px"></select></div>
+          <div class="cd-f"><label>Orden</label>
+            <div class="lo-seg lo-sm" id="cd_rkOrder"><button data-v="desc" class="lo-on">Mayor→menor</button><button data-v="asc">Menor→mayor</button></div></div>
+          <div class="cd-f"><label>Top</label>
+            <div class="lo-seg lo-sm" id="cd_rkTop"><button data-v="10">10</button><button data-v="20" class="lo-on">20</button><button data-v="50">50</button><button data-v="0">Todas</button></div></div>
+        </div>
+        <div class="lo-tbl-wrap" style="max-height:520px"><table class="cd-tbl" id="cd_rkTbl"></table></div>
       </div></div>
 
     </div>
@@ -2876,10 +2907,14 @@ const MES_ES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov',
 const GROUPS=[
   {g:'Proceso',   dims:[{k:'proceso',lab:'Proceso'}]},
   {g:'Geografía', dims:[{k:'region',lab:'Región'},{k:'zona',lab:'Zona'},{k:'centro',lab:'Centro'}]},
-  {g:'Tiempo',    dims:[{k:'anio',lab:'Año'},{k:'mes',lab:'Mes'},{k:'semana',lab:'Semana'},{k:'dia',lab:'Día'}]}
+  {g:'Tiempo',    dims:[{k:'anio',lab:'Año'},{k:'mes',lab:'Mes'},{k:'semana',lab:'Semana'},{k:'dia',lab:'Día'},{k:'dow',lab:'Día sem.'}]}
 ];
 const FDIMS=GROUPS.reduce((a,x)=>a.concat(x.dims),[]);
 let ROWS=null, OPTS={}, SEL={}, TIME='dia', GEO='total', SPLIT=false, ONLY_RR=false, LOADED=false, LOADING=false, WIRED=false;
+let VISM=new Set(), SORT={k:null,dir:-1}, RK={by:'centro',metric:'real',dir:'desc',top:20};
+const DOW=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DOWORD=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+function dowOf(d){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m?DOW[new Date(+m[1],+m[2]-1,+m[3]).getDay()]:''; }
 
 const numv=v=>{ if(v==null)return null; const s=String(v).trim(); if(s==='')return null; const n=parseFloat(s.replace(',','.')); return isNaN(n)?null:n; };
 const fmt=(n,d=1)=>(n==null||isNaN(n))?'—':n.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -2913,6 +2948,7 @@ function build(data){
     region:(r.region_cod||'').trim(), zona:(r.zona_cod||'').trim(),
     centro:(r.centro||'').trim(), centro_nombre:(r.centro_nombre||'').trim(),
     anio:(r.anio||'').trim(), mes:(r.mes||'').trim(), semana:(r.semana||'').trim(), dia:(r.dia||'').trim(),
+    dow:dowOf((r.dia||'').trim()),
     ancla:numv(r.ancla), horario:numv(r.horario), real:numv(r.real),
     rr:numv(r.real_real), tiene:String(r.tiene_realreal).trim()==='1'
   }));
@@ -2921,8 +2957,10 @@ function build(data){
     let arr=[...s];
     if(['anio','mes','semana'].includes(d.k)) arr.sort((a,b)=>(+a)-(+b));
     else if(d.k==='dia') arr.sort();
+    else if(d.k==='dow') arr.sort((a,b)=>DOWORD.indexOf(a)-DOWORD.indexOf(b));
     else arr.sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true}));
     OPTS[d.k]=arr; SEL[d.k]=new Set(arr); });
+  VISM=new Set(MCOLS.map(c=>c[1]));
   LOADED=true;
   const st=$('cd_status'); if(st){ st.style.display='none'; st.textContent=''; }
   buildFilterUI(); if(!WIRED){wireControls();WIRED=true;} render();
@@ -2939,8 +2977,7 @@ function buildFilterUI(){
     host.appendChild(box);
   });
   FDIMS.forEach(d=>syncBtn(d.k));
-  if(!buildFilterUI._doc){ buildFilterUI._doc=1;
-    document.addEventListener('click',()=>document.querySelectorAll('#cd_filts .cd-pop.open').forEach(x=>x.classList.remove('open'))); }
+  if(!buildFilterUI._doc){ buildFilterUI._doc=1; document.addEventListener('click',closePops); }
 }
 function dimDropdown(d){
   const f=document.createElement('div'); f.className='cd-f';
@@ -2959,8 +2996,7 @@ function dimDropdown(d){
     chk.addEventListener('change',()=>{ if(chk.checked)SEL[d.k].add(v); else SEL[d.k].delete(v); syncBtn(d.k); render(); });
     list.appendChild(o); });
   const btn=f.querySelector('.cd-btn');
-  btn.addEventListener('click',e=>{ e.stopPropagation(); const isOpen=pop.classList.contains('open');
-    document.querySelectorAll('#cd_filts .cd-pop.open').forEach(x=>x.classList.remove('open')); if(!isOpen)pop.classList.add('open'); });
+  btn.addEventListener('click',e=>{ e.stopPropagation(); const isOpen=pop.classList.contains('open'); closePops(); if(!isOpen)pop.classList.add('open'); });
   f.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
     SEL[d.k]=all?new Set(OPTS[d.k]):new Set(); list.querySelectorAll('input').forEach(i=>i.checked=all); syncBtn(d.k); render(); }));
   const srch=f.querySelector('.cd-srch');
@@ -2990,6 +3026,17 @@ function wireControls(){
     buildFilterUI(); render(); });
   $('cd_dl').addEventListener('click',downloadTable);
   const dc=$('cd_dlChart'); if(dc)dc.addEventListener('click',downloadChart);
+  // ordenar por cabecera (delegado; la tabla se reconstruye en cada render)
+  $('cd_tbl').addEventListener('click',e=>{ const th=e.target.closest('th[data-k]'); if(!th)return;
+    const k=th.dataset.k; SORT.dir=(SORT.k===k)?-SORT.dir:(k[0]==='d'?1:-1); SORT.k=k; renderTable(filtered()); });
+  buildColsUI();
+  // ranking
+  $('cd_rkBy').addEventListener('change',e=>{RK.by=e.target.value;renderRank();});
+  const rms=$('cd_rkMetric'); if(rms){ rms.innerHTML=MCOLS.map(c=>`<option value="${c[1]}">${c[0]}</option>`).join(''); rms.value=RK.metric;
+    rms.addEventListener('change',e=>{RK.metric=e.target.value;renderRank();}); }
+  seg('cd_rkOrder',v=>{RK.dir=v;renderRank();});
+  seg('cd_rkTop',v=>{RK.top=+v;renderRank();});
+  $('cd_rkDl').addEventListener('click',downloadRank);
 }
 
 /* ---------- cálculo ---------- */
@@ -3003,7 +3050,8 @@ function addRow(b,r){ b.ancla+=r.ancla||0; b.horario+=r.horario||0; b.real+=r.re
 function finish(b){ b.rrv=b.nrr>0?b.rr:null;
   b.ancla_horario=b.ancla-b.horario;
   b.ancla_real=b.ancla-b.real; b.horario_real=b.horario-b.real;
-  b.ancla_rr=b.rrv==null?null:b.ancla-b.rrv; b.horario_rr=b.rrv==null?null:b.horario-b.rrv; return b; }
+  b.ancla_rr=b.rrv==null?null:b.ancla-b.rrv; b.horario_rr=b.rrv==null?null:b.horario-b.rrv;
+  b.real_rr=b.rrv==null?null:b.real-b.rrv; return b; }
 
 function chartAgg(rows){ const m=new Map();
   rows.forEach(r=>{ const k=periodKey(r); if(k==null||k==='')return; let b=m.get(k); if(!b){b=newB();b.k=k;m.set(k,b);} addRow(b,r); });
@@ -3023,8 +3071,8 @@ function tableGroups(rows){ const gf=geoFields(), m=new Map();
 }
 
 /* ---------- render ---------- */
-function render(){ if(!LOADED)return; try{ const rows=filtered(); renderChart(chartAgg(rows)); renderTable(rows); }
-  catch(e){ $('cd_status').textContent='Error al pintar: '+e.message; console.error(e); } }
+function render(){ if(!LOADED)return; try{ const rows=filtered(); renderChart(chartAgg(rows)); renderTable(rows); renderRank(); }
+  catch(e){ const s=$('cd_status'); s.style.display='block'; s.textContent='Error al pintar: '+e.message; console.error(e); } }
 
 function renderChart(agg){
   const box=$('cd_chart');
@@ -3051,8 +3099,9 @@ function downloadChart(){ const box=$('cd_chart'); if(typeof Plotly==='undefined
 
 const MCOLS=[['Ancla','ancla'],['Horario','horario'],['Real','real'],['Real real','rrv'],
   ['Ancla − Horario','ancla_horario'],['Ancla − Real','ancla_real'],['Horario − Real','horario_real'],
-  ['Ancla − RealReal','ancla_rr'],['Horario − RealReal','horario_rr']];
-const DELTAS=new Set(['ancla_horario','ancla_real','horario_real','ancla_rr','horario_rr']);
+  ['Ancla − RealReal','ancla_rr'],['Horario − RealReal','horario_rr'],['Real − RealReal','real_rr']];
+const DELTAS=new Set(['ancla_horario','ancla_real','horario_real','ancla_rr','horario_rr','real_rr']);
+const MLABEL=Object.fromEntries(MCOLS.map(c=>[c[1],c[0]]));
 const deltaCls=v=>(v==null)?'':(v<0?' class="cd-neg"':v>0?' class="cd-pos"':'');
 function dimCols(){ const c=[]; if(SPLIT)c.push({lab:'Proceso',get:g=>procLabel(g.proceso)});
   const gf=geoFields();
@@ -3061,23 +3110,77 @@ function dimCols(){ const c=[]; if(SPLIT)c.push({lab:'Proceso',get:g=>procLabel(
   if(gf.includes('centro')){ c.push({lab:'Centro',get:g=>g.centro}); c.push({lab:'Tienda',get:g=>g.centro_nombre||'—'}); }
   c.push({lab:({dia:'Día',semana:'Semana',mes:'Mes',anio:'Año'})[TIME], get:g=>periodLabel(g.tk)});
   return c; }
-function renderTable(rows){
-  const {arr}=tableGroups(rows), dcols=dimCols(), t=$('cd_tbl');
-  if(!arr.length){ t.innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3)">Sin filas. Ajusta los filtros o quita «Solo con Real real».</td></tr></tbody>'; return; }
-  let h='<thead><tr>'+dcols.map(c=>`<th class="cd-dim">${c.lab}</th>`).join('')+MCOLS.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>';
-  arr.forEach(g=>{ h+='<tr>'+dcols.map(c=>`<td class="cd-dim">${c.get(g)}</td>`).join('')+MCOLS.map(c=>{
-    const v=g[c[1]]; return `<td${DELTAS.has(c[1])?deltaCls(v):''}>${fmt(v)}</td>`; }).join('')+'</tr>'; });
-  h+='</tbody>';
+function buildTableModel(rows){
+  const {arr}=tableGroups(rows);
+  const dcols=dimCols().map((c,i)=>({lab:c.lab,get:c.get,key:'d'+i,isDim:true}));
+  const mcols=MCOLS.filter(c=>VISM.has(c[1])).map(c=>({lab:c[0],key:c[1],mkey:c[1],isDelta:DELTAS.has(c[1])}));
+  const cols=dcols.concat(mcols);
+  if(SORT.k){ const col=cols.find(c=>c.key===SORT.k);
+    if(col){ arr.sort((a,b)=>{ if(col.isDim)return String(col.get(a)).localeCompare(String(col.get(b)),'es',{numeric:true})*SORT.dir;
+      const av=a[col.mkey]==null?-Infinity:a[col.mkey], bv=b[col.mkey]==null?-Infinity:b[col.mkey]; return (av-bv)*SORT.dir; }); } }
   const T=finish(arr.reduce((a,g)=>{a.ancla+=g.ancla;a.horario+=g.horario;a.real+=g.real;a.rr+=g.rr;a.nrr+=g.nrr;return a;},newB()));
-  h+='<tfoot><tr>'+dcols.map((c,i)=>`<td class="cd-dim">${i===0?'TOTAL':''}</td>`).join('')+MCOLS.map(c=>{
-    const v=T[c[1]]; return `<td${DELTAS.has(c[1])?deltaCls(v):''}>${fmt(v)}</td>`; }).join('')+'</tr></tfoot>';
+  return {arr,dcols,mcols,T};
+}
+function renderTable(rows){
+  const {arr,dcols,mcols,T}=buildTableModel(rows), t=$('cd_tbl');
+  if(!arr.length){ t.innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3)">Sin filas. Ajusta los filtros o quita «Solo con Real real».</td></tr></tbody>'; return; }
+  const arrow=k=>SORT.k===k?(SORT.dir>0?' <span class="cd-ar">▲</span>':' <span class="cd-ar">▼</span>'):'';
+  let h='<thead><tr>'+dcols.map(c=>`<th class="cd-dim" data-k="${c.key}">${c.lab}${arrow(c.key)}</th>`).join('')
+    +mcols.map(c=>`<th data-k="${c.key}">${c.lab}${arrow(c.key)}</th>`).join('')+'</tr></thead><tbody>';
+  arr.forEach(g=>{ h+='<tr>'+dcols.map(c=>`<td class="cd-dim">${c.get(g)}</td>`).join('')
+    +mcols.map(c=>{ const v=g[c.mkey]; return `<td${c.isDelta?deltaCls(v):''}>${fmt(v)}</td>`; }).join('')+'</tr>'; });
+  h+='</tbody><tfoot><tr>'+dcols.map((c,i)=>`<td class="cd-dim">${i===0?'TOTAL':''}</td>`).join('')
+    +mcols.map(c=>{ const v=T[c.mkey]; return `<td${c.isDelta?deltaCls(v):''}>${fmt(v)}</td>`; }).join('')+'</tr></tfoot>';
   t.innerHTML=h;
 }
-function downloadTable(){ if(!LOADED)return; const {arr}=tableGroups(filtered()), dcols=dimCols();
-  const lines=[dcols.map(c=>c.lab).concat(MCOLS.map(c=>c[0])).join(';')];
-  arr.forEach(g=>{ const row=dcols.map(c=>String(c.get(g)).replace(/;/g,',')).concat(MCOLS.map(c=>{const v=g[c[1]];return v==null?'':String(v).replace('.',',');})); lines.push(row.join(';')); });
+function downloadTable(){ if(!LOADED)return; const {arr,dcols,mcols,T}=buildTableModel(filtered());
+  const lines=[dcols.map(c=>c.lab).concat(mcols.map(c=>c.lab)).join(';')];
+  arr.forEach(g=>{ lines.push(dcols.map(c=>String(c.get(g)).replace(/;/g,',')).concat(mcols.map(c=>{const v=g[c.mkey];return v==null?'':String(v).replace('.',',');})).join(';')); });
+  lines.push(['TOTAL'].concat(Array(dcols.length-1).fill('')).concat(mcols.map(c=>{const v=T[c.mkey];return v==null?'':String(v).replace('.',',');})).join(';'));
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_filtrado.csv'; a.click(); URL.revokeObjectURL(u);
+  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_detalle.csv'; a.click(); URL.revokeObjectURL(u);
+}
+
+/* ---------- selector de columnas ---------- */
+function closePops(){ document.querySelectorAll('#caudalTab .cd-pop.open').forEach(x=>x.classList.remove('open')); }
+function colsCnt(){ const el=$('cd_colsCnt'); if(el)el.textContent=VISM.size+'/'+MCOLS.length; }
+function buildColsUI(){ const pop=$('cd_colsPop'), btn=$('cd_colsBtn'); if(!pop||!btn||pop._b)return; pop._b=1;
+  pop.innerHTML='<div class="cd-p-act"><button data-a="all">Todas</button><button data-a="none">Ninguna</button></div><div class="cd-list"></div>';
+  pop.addEventListener('click',e=>e.stopPropagation());
+  const list=pop.querySelector('.cd-list');
+  MCOLS.forEach(c=>{ const o=document.createElement('label');o.className='cd-opt';o.innerHTML='<input type="checkbox"><span></span>';
+    o.querySelector('span').textContent=c[0]; const chk=o.querySelector('input'); chk.checked=VISM.has(c[1]);
+    chk.addEventListener('change',()=>{ if(chk.checked)VISM.add(c[1]); else VISM.delete(c[1]); colsCnt(); renderTable(filtered()); }); list.appendChild(o); });
+  pop.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
+    VISM=all?new Set(MCOLS.map(c=>c[1])):new Set(); list.querySelectorAll('input').forEach(i=>i.checked=all); colsCnt(); renderTable(filtered()); }));
+  btn.addEventListener('click',e=>{ e.stopPropagation(); const o=pop.classList.contains('open'); closePops(); if(!o)pop.classList.add('open'); });
+  colsCnt();
+}
+
+/* ---------- ranking ---------- */
+const RKBY_LAB={centro:'Centro',zona:'Zona',region:'Región',proceso:'Proceso',dow:'Día sem.',mes:'Mes',semana:'Semana'};
+function rankLabel(by,v){ return by==='zona'?zonaLabel(v) : by==='region'?regLabel(v) : by==='proceso'?procLabel(v)
+  : by==='mes'?mesLabel(v) : by==='semana'?semLabel(v) : by==='centro'?optLabel('centro',v) : v; }
+function rankData(){ const rows=filtered(), by=RK.by, m=new Map();
+  rows.forEach(r=>{ const key=r[by]; if(key==null||key==='')return; let b=m.get(key); if(!b){b=newB();b.key=key;m.set(key,b);} addRow(b,r); });
+  let arr=[...m.values()].map(finish).filter(b=>b[RK.metric]!=null);
+  arr.sort((a,b)=>(a[RK.metric]-b[RK.metric])*(RK.dir==='asc'?1:-1));
+  return RK.top>0?arr.slice(0,RK.top):arr; }
+function renderRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by, mk=RK.metric, isD=DELTAS.has(mk), t=$('cd_rkTbl');
+  if(!arr.length){ t.innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3)">Sin datos para el ranking con estos filtros.</td></tr></tbody>'; return; }
+  const maxAbs=Math.max(1,...arr.map(b=>Math.abs(b[mk]||0)));
+  let h='<thead><tr><th class="cd-dim">#</th><th class="cd-dim">'+RKBY_LAB[by]+'</th><th>'+MLABEL[mk]+'</th><th>Ancla</th><th>Horario</th><th>Real</th><th>Real real</th></tr></thead><tbody>';
+  arr.forEach((b,i)=>{ const v=b[mk], w=Math.round(Math.abs(v||0)/maxAbs*100), bc=isD?(v<0?'#e5484d':'#12b5a5'):'var(--brand)';
+    h+=`<tr><td class="cd-dim" style="color:var(--ink3);font-weight:800">${i+1}</td><td class="cd-dim">${rankLabel(by,b.key)}</td>`
+      +`<td><div class="cd-rkcell"><div class="cd-rkwrap"><div class="cd-rkbar" style="width:${w}%;background:${bc}"></div></div><span${isD?deltaCls(v):''}>${fmt(v)}</span></div></td>`
+      +`<td>${fmt(b.ancla)}</td><td>${fmt(b.horario)}</td><td>${fmt(b.real)}</td><td>${fmt(b.rrv)}</td></tr>`; });
+  t.innerHTML=h+'</tbody>';
+}
+function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by;
+  const lines=[['#',RKBY_LAB[by]].concat(MCOLS.map(c=>c[0])).join(';')];
+  arr.forEach((b,i)=>{ lines.push([i+1,String(rankLabel(by,b.key)).replace(/;/g,',')].concat(MCOLS.map(c=>{const v=b[c[1]];return v==null?'':String(v).replace('.',',');})).join(';')); });
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_ranking.csv'; a.click(); URL.revokeObjectURL(u);
 }
 window.addEventListener('resize',()=>{ if(LOADED&&$('caudalTab')&&$('caudalTab').style.display!=='none'){ try{Plotly.Plots.resize('cd_chart');}catch(e){} } });
 })();
