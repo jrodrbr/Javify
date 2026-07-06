@@ -783,7 +783,7 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
   </div>
 
   <div class="no-print" id="modeBar" style="display:none;margin-bottom:16px">
-    <div class="modeswitch"><button class="on" id="mComp">Comparar tienda</button><button id="mRank">Ranking de tiendas</button><button id="mObj">Definición de objetivos</button></div>
+    <div class="modeswitch"><button class="on" id="mComp">Comparar tienda</button><button id="mRank">Ranking de tiendas</button><button id="mObj">Definición de objetivos</button><button id="mCaud">Caudal</button></div>
   </div>
 
   <!-- PASO 2 (comparador) -->
@@ -1188,6 +1188,61 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
     <div id="lo_tip"></div>
 
   </div>
+
+  <!-- ================= CAUDAL (MOT) ================= -->
+  <div id="caudalView" class="no-print" style="display:none">
+    <style>
+    .cd-wrap{display:flex;flex-direction:column;gap:16px}
+    .cd-filts{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+    .cd-f{position:relative}
+    .cd-f>label{display:block;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--ink3);margin-bottom:5px}
+    .cd-btn{min-width:150px;padding:10px 13px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel2);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
+    .cd-btn:hover{border-color:var(--brand-bd)}
+    .cd-btn .cd-cnt{color:var(--ink3);font-size:11px;font-weight:700}
+    .cd-pop{position:absolute;z-index:60;top:100%;left:0;margin-top:6px;min-width:230px;max-height:300px;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--sh);padding:8px;display:none}
+    .cd-pop.open{display:block}
+    .cd-srch{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink);font:inherit;font-size:12px;margin-bottom:6px}
+    .cd-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:12.5px;cursor:pointer;color:var(--ink)}
+    .cd-opt:hover{background:var(--panel2)}
+    .cd-opt input{width:15px;height:15px;accent-color:var(--brand);cursor:pointer}
+    .cd-p-act{display:flex;gap:6px;margin-bottom:6px}
+    .cd-p-act button{flex:1;padding:6px;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+    .cd-p-act button:hover{color:var(--ink)}
+    table.cd-tbl{width:100%;border-collapse:collapse;font-size:12px}
+    table.cd-tbl th,table.cd-tbl td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+    table.cd-tbl th:first-child,table.cd-tbl td:first-child{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1}
+    table.cd-tbl thead th{position:sticky;top:0;background:var(--panel3);color:var(--ink2);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;z-index:2}
+    table.cd-tbl thead th:first-child{z-index:3}
+    table.cd-tbl tfoot td{font-weight:800;background:var(--panel2);border-top:2px solid var(--line2)}
+    .cd-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink2);margin-right:14px}
+    .cd-lg i{width:11px;height:11px;border-radius:3px;display:inline-block}
+    </style>
+    <div class="cd-wrap">
+      <div class="card"><div class="cpad">
+        <div class="h-c">Caudal · horas por indicador</div>
+        <div class="s-c">Suma de horas de lo filtrado. <span class="cd-lg"><i style="background:#2f6bff"></i>Ancla</span><span class="cd-lg"><i style="background:#f5b301"></i>Horario</span><span class="cd-lg"><i style="background:#e5484d"></i>Real</span><span class="cd-lg"><i style="background:#12b5a5"></i>Real real</span>. El <b>Real real</b> solo existe en algunos centros/días; usa el botón «Solo con Real real» para comparar manzanas con manzanas.</div>
+        <div id="cd_status" class="s-c" style="margin-top:8px;color:var(--ink3)">Cargando datos…</div>
+        <div class="cd-filts" id="cd_filts" style="margin-top:14px"></div>
+        <div class="cd-filts" style="margin-top:12px">
+          <div class="cd-f"><label>Granularidad</label>
+            <div class="lo-seg lo-sm" id="cd_gran"><button data-v="dia" class="lo-on">Día</button><button data-v="semana">Semana</button><button data-v="mes">Mes</button></div></div>
+          <div class="cd-f"><label>Real real</label>
+            <button class="lo-tg" id="cd_onlyRR" type="button">Solo con Real real</button></div>
+          <div class="cd-f"><label>&nbsp;</label>
+            <button class="lo-tg" id="cd_reset" type="button">Reset filtros</button></div>
+          <div class="cd-f" style="margin-left:auto"><label>&nbsp;</label>
+            <button class="lo-tg" id="cd_dl" type="button">⤓ Descargar tabla</button></div>
+        </div>
+      </div></div>
+      <div class="cbox" style="padding:16px"><div id="cd_chart" style="width:100%;height:440px"></div></div>
+      <div class="card"><div class="cpad">
+        <div class="h-c" style="font-size:15px">Detalle de lo filtrado</div>
+        <div class="s-c">Mismos periodos que la gráfica. Los deltas se recalculan sobre las sumas (no se suman).</div>
+        <div class="lo-tbl-wrap" style="margin-top:12px"><table class="cd-tbl" id="cd_tbl"></table></div>
+      </div></div>
+    </div>
+  </div>
+
 </div><!-- /.wrap -->
 
 <!-- ASISTENTE FLOTANTE -->
@@ -1456,13 +1511,14 @@ $('edit').addEventListener('click',()=>{$('dash').style.display='none';$('fab').
 $('mComp').addEventListener('click',()=>setMode('comp'));
 $('mRank').addEventListener('click',()=>setMode('rank'));
 $('mObj').addEventListener('click',()=>setMode('obj'));
+(function(){var mc=$('mCaud');if(mc)mc.addEventListener('click',()=>setMode('caudal'));})();
 $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('click',()=>{
   ST.corte=b.dataset.corte;
   $('corteSw').querySelectorAll('[data-corte]').forEach(x=>x.classList.toggle('on',x.dataset.corte===ST.corte));
   if(ST.mode==='rank'){renderRank();}
   else if(ST.analyzed){MODEL=buildModel(curA,curB);renderAll();}
 }));
-function setMode(m){ST.mode=m;$('mComp').classList.toggle('on',m==='comp');$('mRank').classList.toggle('on',m==='rank');var mo=$('mObj');if(mo)mo.classList.toggle('on',m==='obj');
+function setMode(m){ST.mode=m;$('mComp').classList.toggle('on',m==='comp');$('mRank').classList.toggle('on',m==='rank');var mo=$('mObj');if(mo)mo.classList.toggle('on',m==='obj');var mc=$('mCaud');if(mc)mc.classList.toggle('on',m==='caudal');
   $('step2').style.display=m==='comp'?'':'none';
   $('dash').style.display=(m==='comp'&&ST.analyzed)?'block':'none';
   $('empty').style.display=(m==='comp'&&!ST.analyzed)?'':'none';
@@ -1470,6 +1526,7 @@ function setMode(m){ST.mode=m;$('mComp').classList.toggle('on',m==='comp');$('mR
   $('fab').style.display=(m==='comp'&&ST.analyzed)?'':'none';
   if(m==='comp'&&ST.analyzed){requestAnimationFrame(resizeCharts);setTimeout(resizeCharts,220);}
   var vl=$('viewLiebre');if(vl)vl.style.display=(m==='obj')?'block':'none';if(m==='obj'&&window.loInit)window.loInit();
+  var cv=$('caudalView');if(cv)cv.style.display=(m==='caudal')?'block':'none';if(m==='caudal'&&window.caudalInit)window.caudalInit();
   if(m==='rank'){initRank();renderRank();}
 }
 function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -2782,6 +2839,183 @@ function wire(){
 }
 // auto-alto cuando va embebido en un iframe (postMessage al dashboard)
 
+})();
+</script>
+
+<!-- ================= CAUDAL (MOT) — script propio ================= -->
+<script>
+(function(){
+"use strict";
+const CD_URL="https://raw.githubusercontent.com/jrodrbr/CSV-for-html/refs/heads/main/super_caudal.csv";
+const $=id=>document.getElementById(id);
+const COL={ancla:'#2f6bff',horario:'#f5b301',real:'#e5484d',rr:'#12b5a5'};
+// dims para los filtros de casillas (orden de aparición)
+const DIMS=[
+  {k:'proceso',lab:'Proceso'},
+  {k:'region', lab:'Región'},
+  {k:'zona',   lab:'Zona'},
+  {k:'centro', lab:'Centro'},
+  {k:'anio',   lab:'Año'},
+  {k:'mes',    lab:'Mes'},
+  {k:'semana', lab:'Semana'},
+  {k:'dia',    lab:'Día'}
+];
+const MES_ES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let ROWS=null, SEL={}, GRAN='dia', ONLY_RR=false, OPTS={}, LOADED=false, LOADING=false;
+
+const numv=v=>{ if(v==null)return null; const s=String(v).trim(); if(s==='')return null; const n=parseFloat(s.replace(',','.')); return isNaN(n)?null:n; };
+function diaLabel(k){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(k); return m?`${m[3]}/${m[2]}`:k; }
+function mesLabel(k){ const m=/^(\d{4})(\d{2})$/.exec(String(k)); return m?`${MES_ES[+m[2]-1]||m[2]} ${m[1]}`:k; }
+function semLabel(k){ const s=String(k); return s.length>=6?`S${s.slice(4)} ${s.slice(0,4)}`:s; }
+function optLabel(dim,v){ if(dim==='mes')return mesLabel(v); if(dim==='semana')return semLabel(v); if(dim==='dia')return diaLabel(v)+'/'+v.slice(0,4);
+  if(dim==='centro'){const r=ROWS.find(x=>x.centro===v); return r&&r.centro_nombre?v+' · '+r.centro_nombre:v;} return v; }
+const fmt=(n,d=1)=>(n==null||isNaN(n))?'—':n.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
+function cssv(n,f){const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim();return v||f;}
+
+window.caudalInit=function(){
+  if(LOADED||LOADING)return; LOADING=true;
+  $('cd_status').textContent='Cargando datos desde GitHub…';
+  Papa.parse(CD_URL+'?cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
+    complete:res=>{ try{ build(res.data); }catch(e){ $('cd_status').textContent='Error al procesar: '+e.message; console.error(e);} },
+    error:e=>{ LOADING=false; $('cd_status').textContent='No se pudo cargar super_caudal.csv: '+(e&&e.message||''); }
+  });
+};
+
+function build(data){
+  ROWS=data.filter(r=>r&&r.dia).map(r=>({
+    proceso:(r.proceso||'').trim(), region:(r.region||'').trim(), zona:(r.zona||'').trim(),
+    centro:(r.centro||'').trim(), centro_nombre:(r.centro_nombre||'').trim(),
+    anio:(r.anio||'').trim(), mes:(r.mes||'').trim(), semana:(r.semana||'').trim(), dia:(r.dia||'').trim(),
+    ancla:numv(r.ancla), horario:numv(r.horario), hsa:numv(r.horario_sin_asignar), real:numv(r.real),
+    rr:numv(r.real_real), tiene:String(r.tiene_realreal).trim()==='1'
+  }));
+  // opciones por dim (ordenadas)
+  OPTS={};
+  DIMS.forEach(d=>{ const s=new Set(); ROWS.forEach(r=>{ if(r[d.k]!=='')s.add(r[d.k]); }); let arr=[...s];
+    if(['anio','mes','semana'].includes(d.k)) arr.sort((a,b)=>(+a)-(+b));
+    else if(d.k==='dia') arr.sort();
+    else arr.sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+    OPTS[d.k]=arr; SEL[d.k]=new Set(arr); }); // default: todo marcado
+  LOADED=true; LOADING=false;
+  $('cd_status').textContent=`${ROWS.length.toLocaleString('es-ES')} filas · ${OPTS.centro.length} centros · ${ROWS.filter(r=>r.tiene).length.toLocaleString('es-ES')} con Real real.`;
+  buildFilterUI(); wireControls(); render();
+}
+
+function buildFilterUI(){
+  const host=$('cd_filts'); host.innerHTML='';
+  DIMS.forEach(d=>{
+    const f=document.createElement('div'); f.className='cd-f';
+    f.innerHTML=`<label>${d.lab}</label>
+      <button class="cd-btn" data-dim="${d.k}"><span class="cd-txt"></span><span class="cd-cnt"></span></button>
+      <div class="cd-pop" data-pop="${d.k}">
+        ${OPTS[d.k].length>8?'<input class="cd-srch" placeholder="Buscar…">':''}
+        <div class="cd-p-act"><button data-a="all">Todos</button><button data-a="none">Ninguno</button></div>
+        <div class="cd-list"></div>
+      </div>`;
+    host.appendChild(f);
+    const list=f.querySelector('.cd-list');
+    OPTS[d.k].forEach(v=>{ const o=document.createElement('label'); o.className='cd-opt';
+      o.innerHTML=`<input type="checkbox" value="${String(v).replace(/"/g,'&quot;')}"><span>${optLabel(d.k,v)}</span>`;
+      o.querySelector('input').checked=SEL[d.k].has(v);
+      o.querySelector('input').addEventListener('change',e=>{ if(e.target.checked)SEL[d.k].add(v); else SEL[d.k].delete(v); syncBtn(d.k); render(); });
+      list.appendChild(o); });
+    const btn=f.querySelector('.cd-btn');
+    btn.addEventListener('click',e=>{ e.stopPropagation(); const p=f.querySelector('.cd-pop'); const open=p.classList.contains('open');
+      document.querySelectorAll('.cd-pop.open').forEach(x=>x.classList.remove('open')); if(!open)p.classList.add('open'); });
+    f.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
+      SEL[d.k]=all?new Set(OPTS[d.k]):new Set(); f.querySelectorAll('.cd-list input').forEach(i=>i.checked=all); syncBtn(d.k); render(); }));
+    const srch=f.querySelector('.cd-srch');
+    if(srch)srch.addEventListener('input',e=>{ const q=e.target.value.toLowerCase(); f.querySelectorAll('.cd-opt').forEach(o=>{ o.style.display=o.textContent.toLowerCase().includes(q)?'':'none'; }); });
+    syncBtn(d.k);
+  });
+  document.addEventListener('click',()=>document.querySelectorAll('.cd-pop.open').forEach(x=>x.classList.remove('open')));
+}
+function syncBtn(k){ const btn=document.querySelector(`.cd-btn[data-dim="${k}"]`); if(!btn)return;
+  const n=SEL[k].size, tot=OPTS[k].length;
+  btn.querySelector('.cd-txt').textContent = n===tot?'Todos' : n===0?'Ninguno' : n===1?optLabel(k,[...SEL[k]][0]) : n+' selecc.';
+  btn.querySelector('.cd-cnt').textContent = `${n}/${tot}`;
+}
+function wireControls(){
+  $('cd_gran').querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>{ GRAN=b.dataset.v;
+    $('cd_gran').querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('lo-on',x.dataset.v===GRAN)); render(); }));
+  const rr=$('cd_onlyRR'); rr.addEventListener('click',()=>{ ONLY_RR=!ONLY_RR; rr.classList.toggle('lo-on',ONLY_RR);
+    rr.style.background=ONLY_RR?'var(--brand)':''; rr.style.color=ONLY_RR?'#fff':''; rr.style.borderColor=ONLY_RR?'var(--brand)':''; render(); });
+  $('cd_reset').addEventListener('click',()=>{ DIMS.forEach(d=>SEL[d.k]=new Set(OPTS[d.k])); ONLY_RR=false;
+    $('cd_onlyRR').classList.remove('lo-on'); $('cd_onlyRR').style.background='';$('cd_onlyRR').style.color='';$('cd_onlyRR').style.borderColor='';
+    buildFilterUI(); render(); });
+  $('cd_dl').addEventListener('click',downloadTable);
+}
+function periodKey(r){ return GRAN==='dia'?r.dia : GRAN==='semana'?r.semana : r.mes; }
+function periodLabel(k){ return GRAN==='dia'?diaLabel(k) : GRAN==='semana'?semLabel(k) : mesLabel(k); }
+
+function filtered(){ return ROWS.filter(r=>{ if(ONLY_RR&&!r.tiene)return false;
+  for(const d of DIMS){ if(!SEL[d.k].has(r[d.k]))return false; } return true; }); }
+
+function aggregate(rows){
+  const m=new Map();
+  rows.forEach(r=>{ const k=periodKey(r); if(!k)return; let b=m.get(k);
+    if(!b){b={k,ancla:0,horario:0,hsa:0,real:0,rr:0,n:0,nrr:0};m.set(k,b);}
+    b.ancla+=r.ancla||0; b.horario+=r.horario||0; b.hsa+=r.hsa||0; b.real+=r.real||0; b.n++;
+    if(r.tiene&&r.rr!=null){ b.rr+=r.rr; b.nrr++; } });
+  const arr=[...m.values()];
+  arr.sort((a,b)=>{ if(GRAN==='dia')return a.k<b.k?-1:a.k>b.k?1:0; return (+a.k)-(+b.k); });
+  arr.forEach(b=>{ b.rrv=b.nrr>0?b.rr:null;
+    b.ancla_real=b.ancla-b.real; b.horario_real=b.horario-b.real;
+    b.ancla_rr=b.rrv==null?null:b.ancla-b.rrv; b.horario_rr=b.rrv==null?null:b.horario-b.rrv; });
+  return arr;
+}
+
+function render(){ if(!LOADED)return; const rows=filtered(); const agg=aggregate(rows); renderChart(agg); renderTable(agg,rows.length); }
+
+function renderChart(agg){
+  const x=agg.map(b=>periodLabel(b.k));
+  const ln=(y,name,color,dash)=>({x,y,name,mode:'lines+markers',type:'scatter',connectgaps:false,
+    line:{color,width:2.4,dash:dash||'solid'},marker:{size:5,color}});
+  const traces=[
+    ln(agg.map(b=>b.ancla),'Ancla',COL.ancla),
+    ln(agg.map(b=>b.horario),'Horario',COL.horario),
+    ln(agg.map(b=>b.real),'Real',COL.real),
+    ln(agg.map(b=>b.rrv),'Real real',COL.rr)
+  ];
+  const ink=cssv('--ink2','#8aa'),line=cssv('--line','#223'),panel=cssv('--panel','#111');
+  const lay={margin:{l:52,r:16,t:10,b:44},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
+    font:{color:ink,family:'Inter,sans-serif',size:12},
+    xaxis:{gridcolor:line,tickangle:x.length>16?-45:0,automargin:true},
+    yaxis:{title:'Horas',gridcolor:line,zeroline:false},
+    legend:{orientation:'h',y:1.12,x:0},hovermode:'x unified'};
+  Plotly.react('cd_chart',traces,lay,{displayModeBar:false,responsive:true});
+}
+
+const TCOLS=[['Periodo','',''],['Ancla','ancla'],['Horario','horario'],['Hor. s/asig','hsa'],['Real','real'],['Real real','rrv'],
+  ['Ancla − Real','ancla_real'],['Horario − Real','horario_real'],['Ancla − RealReal','ancla_rr'],['Horario − RealReal','horario_rr'],
+  ['Nº filas','n'],['Nº c/ RR','nrr']];
+function renderTable(agg,totalRows){
+  const t=$('cd_tbl');
+  let h='<thead><tr>'+TCOLS.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>';
+  agg.forEach(b=>{ h+='<tr><td>'+periodLabel(b.k)+'</td>'+TCOLS.slice(1).map(c=>{
+    const k=c[1]; if(k==='n'||k==='nrr')return `<td>${b[k].toLocaleString('es-ES')}</td>`;
+    return `<td>${fmt(b[k])}</td>`; }).join('')+'</tr>'; });
+  h+='</tbody>';
+  // totales
+  const sum=k=>agg.reduce((a,b)=>a+(b[k]||0),0);
+  const anc=sum('ancla'),hor=sum('horario'),re=sum('real'),nrr=agg.reduce((a,b)=>a+b.nrr,0);
+  const rrTot=nrr>0?agg.reduce((a,b)=>a+(b.rrv||0),0):null;
+  const tot={ancla:anc,horario:hor,hsa:sum('hsa'),real:re,rrv:rrTot,
+    ancla_real:anc-re,horario_real:hor-re,ancla_rr:rrTot==null?null:anc-rrTot,horario_rr:rrTot==null?null:hor-rrTot,
+    n:agg.reduce((a,b)=>a+b.n,0),nrr};
+  h+='<tfoot><tr><td>TOTAL</td>'+TCOLS.slice(1).map(c=>{const k=c[1];
+    if(k==='n'||k==='nrr')return `<td>${tot[k].toLocaleString('es-ES')}</td>`; return `<td>${fmt(tot[k])}</td>`;}).join('')+'</tr></tfoot>';
+  t.innerHTML=h;
+}
+function downloadTable(){
+  if(!LOADED)return; const agg=aggregate(filtered());
+  const head=TCOLS.map(c=>c[0]); const lines=[head.join(';')];
+  agg.forEach(b=>{ lines.push([periodLabel(b.k)].concat(TCOLS.slice(1).map(c=>{const k=c[1];const v=b[k];
+    return v==null?'':(k==='n'||k==='nrr')?v:String(v).replace('.',',');})).join(';')); });
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_filtrado.csv'; a.click(); URL.revokeObjectURL(u);
+}
+window.addEventListener('resize',()=>{ if(LOADED&&$('caudalView').style.display!=='none'){ try{Plotly.Plots.resize('cd_chart');}catch(e){} } });
 })();
 </script>
 </body>
