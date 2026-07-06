@@ -1190,7 +1190,7 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
   </div>
 
   <!-- ================= CAUDAL (MOT) ================= -->
-  <div id="caudalView" class="no-print" style="display:none">
+  <div id="caudalTab" class="no-print" style="display:none">
     <style>
     .cd-wrap{display:flex;flex-direction:column;gap:16px}
     .cd-filts{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
@@ -1230,6 +1230,9 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
             <button class="lo-tg" id="cd_onlyRR" type="button">Solo con Real real</button></div>
           <div class="cd-f"><label>&nbsp;</label>
             <button class="lo-tg" id="cd_reset" type="button">Reset filtros</button></div>
+          <div class="cd-f"><label>Archivo local</label>
+            <label class="lo-tg" for="cd_file" style="cursor:pointer">⤒ Cargar CSV…</label>
+            <input type="file" id="cd_file" accept=".csv,text/csv" style="display:none"></div>
           <div class="cd-f" style="margin-left:auto"><label>&nbsp;</label>
             <button class="lo-tg" id="cd_dl" type="button">⤓ Descargar tabla</button></div>
         </div>
@@ -1526,7 +1529,7 @@ function setMode(m){ST.mode=m;$('mComp').classList.toggle('on',m==='comp');$('mR
   $('fab').style.display=(m==='comp'&&ST.analyzed)?'':'none';
   if(m==='comp'&&ST.analyzed){requestAnimationFrame(resizeCharts);setTimeout(resizeCharts,220);}
   var vl=$('viewLiebre');if(vl)vl.style.display=(m==='obj')?'block':'none';if(m==='obj'&&window.loInit)window.loInit();
-  var cv=$('caudalView');if(cv)cv.style.display=(m==='caudal')?'block':'none';if(m==='caudal'&&window.caudalInit)window.caudalInit();
+  var cv=$('caudalTab');if(cv)cv.style.display=(m==='caudal')?'block':'none';if(m==='caudal'&&window.caudalInit)window.caudalInit();
   if(m==='rank'){initRank();renderRank();}
 }
 function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -2861,7 +2864,7 @@ const DIMS=[
   {k:'dia',    lab:'Día'}
 ];
 const MES_ES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-let ROWS=null, SEL={}, GRAN='dia', ONLY_RR=false, OPTS={}, LOADED=false, LOADING=false;
+let ROWS=null, SEL={}, GRAN='dia', ONLY_RR=false, OPTS={}, LOADED=false, LOADING=false, WIRED=false;
 
 const numv=v=>{ if(v==null)return null; const s=String(v).trim(); if(s==='')return null; const n=parseFloat(s.replace(',','.')); return isNaN(n)?null:n; };
 function diaLabel(k){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(k); return m?`${m[3]}/${m[2]}`:k; }
@@ -2872,12 +2875,21 @@ function optLabel(dim,v){ if(dim==='mes')return mesLabel(v); if(dim==='semana')r
 const fmt=(n,d=1)=>(n==null||isNaN(n))?'—':n.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
 function cssv(n,f){const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim();return v||f;}
 
+function wireFile(){ // siempre disponible, aunque la carga remota falle
+  const fi=$('cd_file'); if(fi&&!fi._w){ fi._w=1; fi.addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(!f)return;
+    $('cd_status').textContent='Leyendo '+f.name+'…';
+    Papa.parse(f,{header:true,skipEmptyLines:true,
+      complete:res=>{ try{ build(res.data); }catch(err){ $('cd_status').textContent='Error al procesar: '+err.message; console.error(err);} },
+      error:err=>{ $('cd_status').textContent='No se pudo leer el archivo: '+(err&&err.message||''); } }); }); } }
+
 window.caudalInit=function(){
+  wireFile();
   if(LOADED||LOADING)return; LOADING=true;
   $('cd_status').textContent='Cargando datos desde GitHub…';
   Papa.parse(CD_URL+'?cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
-    complete:res=>{ try{ build(res.data); }catch(e){ $('cd_status').textContent='Error al procesar: '+e.message; console.error(e);} },
-    error:e=>{ LOADING=false; $('cd_status').textContent='No se pudo cargar super_caudal.csv: '+(e&&e.message||''); }
+    complete:res=>{ LOADING=false; try{ if(!res.data||!res.data.length||!res.data[0]||res.data[0].dia===undefined){ throw new Error('CSV sin columnas esperadas'); } build(res.data); }
+      catch(e){ $('cd_status').innerHTML='<b style="color:var(--bad,#e5484d)">No se pudo cargar super_caudal.csv desde GitHub</b> ('+e.message+'). Sube el archivo al repo o pulsa <b>«⤒ Cargar CSV…»</b> para probar con el archivo local.'; console.warn('caudal remoto',e);} },
+    error:e=>{ LOADING=false; $('cd_status').innerHTML='<b style="color:var(--bad,#e5484d)">No se pudo cargar super_caudal.csv desde GitHub</b> ('+(e&&e.message||'sin conexión')+'). Sube el archivo al repo o pulsa <b>«⤒ Cargar CSV…»</b> para cargarlo desde tu equipo.'; }
   });
 };
 
@@ -2897,8 +2909,8 @@ function build(data){
     else arr.sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
     OPTS[d.k]=arr; SEL[d.k]=new Set(arr); }); // default: todo marcado
   LOADED=true; LOADING=false;
-  $('cd_status').textContent=`${ROWS.length.toLocaleString('es-ES')} filas · ${OPTS.centro.length} centros · ${ROWS.filter(r=>r.tiene).length.toLocaleString('es-ES')} con Real real.`;
-  buildFilterUI(); wireControls(); render();
+  $('cd_status').textContent=`${ROWS.length.toLocaleString('es-ES')} filas · ${OPTS.centro.length} centros · ${ROWS.filter(r=>r.tiene).length.toLocaleString('es-ES')} filas con Real real.`;
+  buildFilterUI(); if(!WIRED){wireControls();WIRED=true;} render();
 }
 
 function buildFilterUI(){
@@ -2965,9 +2977,14 @@ function aggregate(rows){
   return arr;
 }
 
-function render(){ if(!LOADED)return; const rows=filtered(); const agg=aggregate(rows); renderChart(agg); renderTable(agg,rows.length); }
+function render(){ if(!LOADED)return; try{ const rows=filtered(); const agg=aggregate(rows);
+  if(!agg.length){ $('cd_chart').innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:13px">Sin datos para los filtros elegidos.</div>';
+    $('cd_tbl').innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3)">Sin filas. Ajusta los filtros o quita «Solo con Real real».</td></tr></tbody>'; return; }
+  renderChart(agg); renderTable(agg,rows.length);
+  }catch(e){ $('cd_status').textContent='Error al pintar: '+e.message; console.error(e); } }
 
 function renderChart(agg){
+  if(typeof Plotly==='undefined'){ $('cd_chart').innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--ink3)">No se pudo cargar Plotly (sin conexión al CDN).</div>'; return; }
   const x=agg.map(b=>periodLabel(b.k));
   const ln=(y,name,color,dash)=>({x,y,name,mode:'lines+markers',type:'scatter',connectgaps:false,
     line:{color,width:2.4,dash:dash||'solid'},marker:{size:5,color}});
@@ -3015,7 +3032,7 @@ function downloadTable(){
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_filtrado.csv'; a.click(); URL.revokeObjectURL(u);
 }
-window.addEventListener('resize',()=>{ if(LOADED&&$('caudalView').style.display!=='none'){ try{Plotly.Plots.resize('cd_chart');}catch(e){} } });
+window.addEventListener('resize',()=>{ if(LOADED&&$('caudalTab').style.display!=='none'){ try{Plotly.Plots.resize('cd_chart');}catch(e){} } });
 })();
 </script>
 </body>
