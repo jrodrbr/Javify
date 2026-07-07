@@ -6,6 +6,7 @@
 <title>Preparación NTC · Diagnóstico</title>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -728,6 +729,10 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
   .drow .spark-wrap{width:100%;padding:0}
   .drow .dr-vals{width:100%}
 }
+/* Faro agrupado (Juntar): 4 bloques en vez de 7 fases */
+.mxgrid.grouped{min-width:0}
+.mxgrid.grouped .mxrow{grid-template-columns:140px repeat(4,1fr) 96px}
+@media(max-width:620px){ .mxgrid.grouped .mxrow{grid-template-columns:92px repeat(4,1fr) 64px;gap:4px} }
 </style>
 </head>
 <body>
@@ -867,10 +872,15 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
 
     <!-- FARO -->
     <div class="sec" id="secMatrix">
-      <div class="sec-hd"><div>
+      <div class="sec-hd" style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap"><div style="flex:1 1 320px">
         <div class="sec-n">Visión global · el faro</div>
         <div class="sec-h">Todas las áreas y fases, a la vez</div>
         <div class="sec-s">Cada celda combina tres lecturas: el <b>número</b> es el tiempo real de esa fase (min/lote), el <b>color</b> es la desviación frente a la referencia (rojo = más tiempo, verde = menos) y el <b>punto</b> de la esquina marca si esa diferencia tiene impacto relevante al mes. Así se ve de golpe qué área tarda más, qué fase pesa y dónde conviene mirar.</div>
+      </div>
+      <div class="no-print" style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+        <div class="modeswitch" id="faroGroupSeg" role="group" title="Agrupar las fases en bloques">
+          <button data-v="sep" class="on" aria-pressed="true">Separar</button><button data-v="junto" aria-pressed="false">Juntar</button></div>
+        <button class="btn btn-gh" id="faroPng" type="button" style="padding:8px 14px;font-size:12px">⤓ Descargar PNG</button>
       </div></div>
       <div class="matrix"><div class="mxgrid" id="matBody"></div><div class="mx-foot" id="matFoot"></div></div>
       <div id="faroDetail" style="margin-top:16px"></div>
@@ -1551,6 +1561,22 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
   if(ST.mode==='rank'){renderRank();}
   else if(ST.analyzed){MODEL=buildModel(curA,curB);renderAll();}
 }));
+// Faro: Juntar/Separar fases (P1+P2+P3 = Preparación · P4 = Pesaje · P5+P6 = Consolidación · P7 = Tiempo entre lotes)
+(function(){var seg=document.getElementById('faroGroupSeg'); if(seg)seg.querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>{
+  ST.faroGroup=(b.dataset.v==='junto');
+  seg.querySelectorAll('[data-v]').forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on);});
+  if(ST.analyzed)renderMatrix();
+}));})();
+// Faro: descargar PNG de la matriz
+(function(){var b=document.getElementById('faroPng'); if(b)b.addEventListener('click',()=>{
+  const el=document.querySelector('#secMatrix .matrix'); if(!el)return;
+  if(typeof html2canvas==='undefined'){alert('No se pudo cargar la librería de captura (sin conexión).');return;}
+  const bg=cssv('--panel','#fff'); b.disabled=true; const old=b.textContent; b.textContent='Generando…';
+  html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true}).then(canvas=>{
+    const a=document.createElement('a'); a.download='faro_'+(ST.nameA||'analizado').replace(/\s+/g,'_')+'.png'; a.href=canvas.toDataURL('image/png'); a.click();
+    b.disabled=false; b.textContent=old;
+  }).catch(e=>{b.disabled=false; b.textContent=old; console.error(e);});
+});})();
 function setMode(m){ST.mode=m;
   const modeOn=(el,on)=>{if(!el)return;el.classList.toggle('on',on);el.setAttribute('aria-pressed',on);};
   modeOn($('mComp'),m==='comp');modeOn($('mRank'),m==='rank');modeOn($('mObj'),m==='obj');modeOn($('mCaud'),m==='caudal');
@@ -1916,17 +1942,35 @@ function cellHTML(val,dv,imp,maxD,name,area,faseK,span,isTot){
   const st=(span>1?'grid-column:span '+span+';':'')+'background:'+bg;
   return '<div class="mxc'+(isTot?' tot':'')+'" style="'+st+'" data-area="'+area+'" data-fase="'+faseK+'" title="'+name+' · '+area+': '+fmt(val,2)+' min'+(dv!=null?' ('+sg(dv)+fmt(dv,2)+' vs ref · impacto '+fmtImpact(imp)+'/mes)':'')+'"><div class="mv">'+fmt(val,1)+'</div>'+(mdtxt?'<div class="md '+mdcls+'">'+mdtxt+'</div>':'')+'</div>';
 }
+// Bloques del modo "Juntar": Preparación=P1+P2+P3 · Pesaje=P4 · Consolidación=P5+P6 · Entre lotes=P7
+const FGRUPOS=[
+  {k:'g_prep', name:'Preparación',        col:'--f-prep',   keys:['p1','p2','p3','p23']},
+  {k:'g_pes',  name:'Pesaje',             col:'--f-pesaje', keys:['p4']},
+  {k:'g_cons', name:'Consolidación',      col:'--f-consol', keys:['p5','p6']},
+  {k:'g_entre',name:'Tiempo entre lotes', col:'--f-entre',  keys:['p7']}
+];
+function sumKeys(row,keys){ if(!row)return null; let s=0,any=false; keys.forEach(k=>{const v=row[MINKEY[k]]; if(v!=null){s+=v;any=true;}}); return any?s:null; }
 function renderMatrix(){
   $('faroDetail').innerHTML='';
+  const grouped=!!ST.faroGroup;
+  $('matBody').classList.toggle('grouped',grouped);
   const dispAreas=AREAS.filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.ra;});
   if(!dispAreas.length){$('matBody').innerHTML='<div class="combo-none">Sin datos para el escenario analizado.</div>';$('matFoot').innerHTML='';return;}
   let maxD=0;
-  dispAreas.forEach(a=>{const m=MODEL.find(x=>x.area===a);FASES.forEach(f=>{const dv=m.gaps[f.k];if(dv!=null&&Math.abs(dv)>maxD)maxD=Math.abs(dv);});if(!m.compat){const dv=(m.p23A!=null&&m.p23B!=null)?m.p23A-m.p23B:null;if(dv!=null&&Math.abs(dv)>maxD)maxD=Math.abs(dv);}});
-  let h='<div class="mxrow head"><div class="mxh"></div>'+FASES.map(f=>'<div class="mxh"><i style="background:'+cssv(f.col)+'"></i>'+f.name+'</div>').join('')+'<div class="mxh tot">Total lote</div></div>';
+  if(grouped){
+    dispAreas.forEach(a=>{const m=MODEL.find(x=>x.area===a);FGRUPOS.forEach(g=>{const A=sumKeys(m.ra,g.keys),B=sumKeys(m.rb,g.keys),dv=(A!=null&&B!=null)?A-B:null;if(dv!=null&&Math.abs(dv)>maxD)maxD=Math.abs(dv);});});
+  }else{
+    dispAreas.forEach(a=>{const m=MODEL.find(x=>x.area===a);FASES.forEach(f=>{const dv=m.gaps[f.k];if(dv!=null&&Math.abs(dv)>maxD)maxD=Math.abs(dv);});if(!m.compat){const dv=(m.p23A!=null&&m.p23B!=null)?m.p23A-m.p23B:null;if(dv!=null&&Math.abs(dv)>maxD)maxD=Math.abs(dv);}});
+  }
+  const cols=grouped?FGRUPOS:FASES;
+  let h='<div class="mxrow head"><div class="mxh"></div>'+cols.map(f=>'<div class="mxh"><i style="background:'+cssv(f.col)+'"></i>'+f.name+'</div>').join('')+'<div class="mxh tot">Total lote</div></div>';
   dispAreas.forEach(a=>{
     const m=MODEL.find(x=>x.area===a);
     h+='<div class="mxrow"><div class="mxa" data-area="'+a+'">'+a+'</div>';
-    if(m.compat){FASES.forEach(f=>{h+=cellHTML(m.ra[MINKEY[f.k]],m.gaps[f.k],impFase(m,f.k),maxD,f.name,a,f.k);});}
+    if(grouped){
+      FGRUPOS.forEach(g=>{const A=sumKeys(m.ra,g.keys),B=sumKeys(m.rb,g.keys),dv=(A!=null&&B!=null)?A-B:null,im=(dv!=null&&m.lotesA!=null)?dv*m.lotesA:null;
+        h+=cellHTML(A,dv,im,maxD,g.name,a,g.k);});
+    }else if(m.compat){FASES.forEach(f=>{h+=cellHTML(m.ra[MINKEY[f.k]],m.gaps[f.k],impFase(m,f.k),maxD,f.name,a,f.k);});}
     else{
       h+=cellHTML(m.ra.p1_min_medio,m.gaps.p1,impFase(m,'p1'),maxD,'Arranque',a,'p1');
       const dv=(m.p23A!=null&&m.p23B!=null)?m.p23A-m.p23B:null,im=(dv!=null&&m.lotesA!=null)?dv*m.lotesA:null;
@@ -1940,9 +1984,11 @@ function renderMatrix(){
   $('matBody').innerHTML=h;
   $('matBody').querySelectorAll('.mxc[data-fase]').forEach(c=>c.addEventListener('click',()=>renderFaroDetail(c.dataset.area,c.dataset.fase)));
   $('matBody').querySelectorAll('.mxa[data-area]').forEach(c=>c.addEventListener('click',()=>{ST.fichaArea=c.dataset.area;renderFichaTabs();renderFicha();$('secFicha').scrollIntoView({behavior:'smooth',block:'start'});}));
-  $('matFoot').innerHTML='<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,rgba('+RGB.good+',.7),var(--panel2),rgba('+RGB.bad+',.7))"></div><span>peor</span></div><div class="mx-imp-legend">el color es la desviación frente a la referencia · <b>pulsa una celda</b> para ver su detalle y tendencia</div>';
+  $('matFoot').innerHTML='<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,rgba('+RGB.good+',.7),var(--panel2),rgba('+RGB.bad+',.7))"></div><span>peor</span></div><div class="mx-imp-legend">el color es la desviación frente a la referencia'+(grouped?' · vista <b>Juntar</b> (bloques sumados); usa <b>Separar</b> para el detalle por fase':' · <b>pulsa una celda</b> para ver su detalle y tendencia')+'</div>';
 }
 function renderFaroDetail(area,faseK){
+  // en modo "Juntar" las celdas son bloques (g_*); no hay detalle por fase
+  if(faseK&&faseK.charAt(0)==='g'){$('faroDetail').innerHTML='';return;}
   const m=MODEL.find(x=>x.area===area);if(!m||!m.disponible){$('faroDetail').innerHTML='';return;}
   let name,valA,valB,col,mk;
   if(faseK==='total'){name='Tiempo total del lote';valA=m.tiempoA;valB=m.tiempoB;col='var(--ink3)';mk='tiempo';}
