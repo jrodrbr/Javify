@@ -709,6 +709,25 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
 .contrib-leg .cl{font-size:11.5px;color:var(--ink2);display:flex;align-items:center;gap:6px}
 .contrib-leg .cl i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
 .contrib-leg .cl .pc{color:var(--ink3);font-weight:700}
+/* ===================== AJUSTES MÓVIL (anti-desborde) ===================== */
+/* Van al final para ganar en la cascada a reglas base como '#rkList .drow{...280px...}'. */
+@media(max-width:980px){
+  /* Ranking: la regla base de 280px+columnas fijas desbordaba; forzar rejilla fluida. */
+  #rkList .drow,#rkList .difhead{grid-template-columns:minmax(0,1fr) auto;gap:12px}
+  #rkList .difhead span:nth-child(3),#rkList .difhead span:nth-child(4),#rkList .difhead span:nth-child(5){display:none}
+}
+@media(max-width:620px){
+  /* Flujo "cómo se prepara un lote": apilar en vertical, sin scroll lateral. */
+  .flow-track{flex-direction:column;gap:8px;overflow-x:visible}
+  .fstep,.fgroup{flex:1 1 auto;min-width:0;width:100%}
+  .farrow{display:none}
+  .fg-loop{gap:6px}
+  /* Diferencias y Ranking: cada fila pasa a tarjeta apilada a lo ancho completo. */
+  .difhead{display:none}
+  .drow,#rkList .drow{display:flex;flex-direction:column;align-items:stretch;gap:10px;grid-template-columns:none;padding:14px 16px}
+  .drow .spark-wrap{width:100%;padding:0}
+  .drow .dr-vals{width:100%}
+}
 </style>
 </head>
 <body>
