@@ -427,7 +427,7 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--brand);outlin
 .matctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .matrix{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh);padding:20px 22px;overflow-x:auto}
 .mxgrid{min-width:860px}
-.mxrow{display:grid;grid-template-columns:132px repeat(6,1fr) 96px 88px;gap:5px;align-items:stretch;margin-bottom:5px}
+.mxrow{display:grid;grid-template-columns:132px repeat(6,1fr) 116px;gap:5px;align-items:stretch;margin-bottom:5px}
 .mxrow.head{margin-bottom:8px}
 .mxh{font-size:9.5px;font-weight:750;text-transform:uppercase;letter-spacing:.3px;color:var(--ink2);text-align:center;padding:4px 3px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;line-height:1.2}
 .mxh i{width:18px;height:5px;border-radius:3px}
@@ -501,7 +501,7 @@ html.light{
 .combo-none{padding:13px;font-size:12px;color:var(--ink3);text-align:center}
 
 /* ===== FARO · doble codificación (override) ===== */
-.mxrow{grid-template-columns:140px repeat(7,1fr) 96px 88px}
+.mxrow{grid-template-columns:140px repeat(7,1fr) 116px}
 .mxc{min-height:54px;gap:1px;padding:5px 3px}
 .mxc .mv{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;line-height:1.05;color:var(--ink)}
 .mxc .md{font-family:ui-monospace,monospace;font-size:9px;font-weight:700;line-height:1}
@@ -755,8 +755,8 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
 }
 /* Faro agrupado (Juntar): 4 bloques en vez de 7 fases */
 .mxgrid.grouped{min-width:0}
-.mxgrid.grouped .mxrow{grid-template-columns:140px repeat(4,1fr) 96px 88px}
-@media(max-width:620px){ .mxgrid.grouped .mxrow{grid-template-columns:92px repeat(4,1fr) 64px 66px;gap:4px} }
+.mxgrid.grouped .mxrow{grid-template-columns:140px repeat(4,1fr) 116px}
+@media(max-width:620px){ .mxgrid.grouped .mxrow{grid-template-columns:92px repeat(4,1fr) 84px;gap:4px} }
 </style>
 </head>
 <body>
@@ -913,7 +913,7 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
       <div class="no-print faro-ctrls">
         <div class="faro-ctrl"><span class="faro-ctrl-l">Unidad</span>
           <div class="modeswitch" id="faroUnitSeg" role="group" title="Tiempo por lote, productividad por unidad, u objetivo oficial (prep/pesaje por unidad; consolidación y entre lotes por lote)">
-            <button data-v="min" class="on" aria-pressed="true">Tiempo</button><button data-v="prod" aria-pressed="false">Prod (min/ud)</button><button data-v="objof" aria-pressed="false">Objetivo oficial</button></div></div>
+            <button data-v="min" aria-pressed="false">Tiempo</button><button data-v="prod" aria-pressed="false">Prod (min/ud)</button><button data-v="objof" class="on" aria-pressed="true">Objetivo oficial</button></div></div>
         <button class="btn btn-gh" id="faroPng" type="button" style="padding:8px 14px;font-size:12px">⤓ Descargar PNG</button>
       </div></div>
       <div class="matrix"><div class="mxgrid" id="matBody"></div><div class="mx-foot" id="matFoot"></div></div>
@@ -1443,7 +1443,7 @@ function mapCorte(r){
 }
 const H={comp:340,trend:380,pick:300,cont:300,despl:320};
 
-const ST={rows:[],index:{},tiendas:[],synthPresent:[],realStores:[],meses:[],shifts:[],mesLabel:{},gen:{},genReady:false,mode:'comp',corte:'util',realUnit:'min',caudalView:'dia',caudalTblDesc:true,realWho:'A',realOrder:'natural',diffMetric:'prod',faroUnit:'min',faroUd:'mo',fichaArea:'SECOS',fichaFase:'prep',trArea:'SECOS',rkOrder:'worst',analyzed:false,single:false,nameA:'Analizado',nameB:'Referencia',_trInit:false,_chatInit:false,_rkInit:false};
+const ST={rows:[],index:{},tiendas:[],synthPresent:[],realStores:[],meses:[],shifts:[],mesLabel:{},gen:{},genReady:false,mode:'comp',corte:'util',realUnit:'min',caudalView:'dia',caudalTblDesc:true,realWho:'A',realOrder:'natural',diffMetric:'prod',faroUnit:'objof',faroUd:'mo',fichaArea:'SECOS',fichaFase:'prep',trArea:'SECOS',rkOrder:'worst',analyzed:false,single:false,nameA:'Analizado',nameB:'Referencia',_trInit:false,_chatInit:false,_rkInit:false};
 let MODEL=[],curA=null,curB=null;
 
 const $=id=>document.getElementById(id);
@@ -1634,10 +1634,12 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
   const el=document.querySelector('#secMatrix .matrix'); if(!el)return;
   if(typeof html2canvas==='undefined'){alert('No se pudo cargar la librería de captura (sin conexión).');return;}
   const bg=cssv('--panel','#fff'); b.disabled=true; const old=b.textContent; b.textContent='Generando…';
+  // en modo ficha (una sola tienda) no incluir el pie de texto en la imagen (para presentaciones)
+  const foot=document.getElementById('matFoot'); const hideFoot=(foot&&ST.single); if(hideFoot)foot.style.display='none';
   html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true}).then(canvas=>{
     const a=document.createElement('a'); a.download='faro_'+(ST.nameA||'analizado').replace(/\s+/g,'_')+'.png'; a.href=canvas.toDataURL('image/png'); a.click();
-    b.disabled=false; b.textContent=old;
-  }).catch(e=>{b.disabled=false; b.textContent=old; console.error(e);});
+    if(hideFoot)foot.style.display=''; b.disabled=false; b.textContent=old;
+  }).catch(e=>{if(hideFoot)foot.style.display=''; b.disabled=false; b.textContent=old; console.error(e);});
 });})();
 function setMode(m){ST.mode=m;
   const modeOn=(el,on)=>{if(!el)return;el.classList.toggle('on',on);el.setAttribute('aria-pressed',on);};
@@ -2015,7 +2017,8 @@ function renderReal(){
 }
 
 /* ===== FARO (valor + desviación, click para detalle) ===== */
-function divColor(v,mx){if(v==null||mx<=0)return 'var(--panel2)';const t=Math.min(1,Math.abs(v)/mx),rgb=v>0?RGB.bad:RGB.good;return 'rgba('+rgb+','+(0.08+0.62*t).toFixed(3)+')';}
+// color por % de desviación frente a la referencia (unidad-agnóstico): satura a ~30% → mismo criterio para min/ud y min/lote
+function divColor(dv,ref){if(dv==null||ref==null||!isFinite(ref)||ref===0)return 'var(--panel2)';const t=Math.min(1,Math.abs(dv/ref)/0.30),rgb=dv>0?RGB.bad:RGB.good;return 'rgba('+rgb+','+(0.06+0.64*t).toFixed(3)+')';}
 // ---- unidad del faro: 'min' (min/lote) · 'prod' (min/ud todas) · 'objof' (prep+pesaje min/ud; consol+entre min/lote) ----
 // Objetivo oficial: por unidad = picking, desplazamiento, pesaje (y sus bloques). Arranque (P1) es tiempo fijo
 // SEPARADO (min/lote); pero el bloque agrupado Preparación (g_prep = P1+P2+P3) sí va en min/ud.
@@ -2028,11 +2031,17 @@ function faroConv(min,k,uds){ if(min==null)return null;
   return min/uds*MF(); }                       // min/ud, en la unidad global (MO o Mercadona ×1,08)
 function faroDec(k){ if(ST.faroUnit==='min')return 1; if(ST.faroUnit==='objof'&&!PERUD_K1.has(k))return 1; return 2; }
 function faroUnitLbl(){ return ST.faroUnit==='min'?'min':udName(); }
-function cellHTML(val,dv,imp,maxD,name,area,faseK,span,isTot,dec){
+function cellHTML(val,dv,imp,ref,name,area,faseK,span,isTot,dec){
   dec=(dec==null)?1:dec;
-  if(val==null)return '<div class="mxc na" data-area="'+area+'" data-fase="'+faseK+'"'+(span>1?' style="grid-column:span '+span+'"':'')+'><div class="mv">n/d</div></div>';
-  const bg=isTot?'var(--panel2)':divColor(dv,maxD);
-  const eps=dec>=3?0.003:0.02;
+  const spanSt=(span>1?' style="grid-column:span '+span+'"':'');
+  if(val==null)return '<div class="mxc na" data-area="'+area+'" data-fase="'+faseK+'"'+spanSt+'><div class="mv">n/d</div></div>';
+  // sensibilidad según unidad: min/ud (2 dec) muy fina; min/lote (1 dec) más gruesa
+  const eps=dec>=2?0.005:0.05;
+  // valor ≈ 0 (p. ej. un área sin pesaje): rayita, sin comparar ni colorear
+  if(!isTot&&Math.abs(val)<eps&&(dv==null||Math.abs(dv)<eps))
+    return '<div class="mxc na"'+spanSt+' title="'+name+' · '+area+': no aplica en esta área"><div class="mv" style="color:var(--ink3);font-weight:600">—</div></div>';
+  // ≈0 → gris neutro (no rojo tenue); el color solo cuando hay diferencia real, e intensidad por % vs referencia
+  const bg=(dv!=null&&Math.abs(dv)>eps)?divColor(dv,ref):'var(--panel2)';
   let mdcls='neu',mdtxt='';if(dv!=null&&Math.abs(dv)>eps){mdcls=dv>0?'bad':'good';mdtxt=sg(dv)+fmt(dv,dec);}else if(dv!=null){mdtxt='≈0';}
   const st=(span>1?'grid-column:span '+span+';':'')+'background:'+bg;
   return '<div class="mxc'+(isTot?' tot':'')+'" style="'+st+'" data-area="'+area+'" data-fase="'+faseK+'" title="'+name+' · '+area+': '+fmt(val,dec)+' '+faroUnitLbl()+(dv!=null?' ('+sg(dv)+fmt(dv,dec)+' vs ref · impacto '+fmtImpact(imp)+'/mes)':'')+'"><div class="mv">'+fmt(val,dec)+'</div>'+(mdtxt?'<div class="md '+mdcls+'">'+mdtxt+'</div>':'')+'</div>';
@@ -2055,41 +2064,37 @@ function renderMatrix(){
   function cellOf(m,k,keys){
     const rawA=keys?sumKeys(m.ra,keys):(m.ra?m.ra[MINKEY[k]]:null);
     const val=faroConv(rawA,k,m.udsA);
-    if(ST.single)return {val,dv:null,imp:null,dec:faroDec(k)};  // ficha: sin comparación
+    if(ST.single)return {val,dv:null,imp:null,ref:null,dec:faroDec(k)};  // ficha: sin comparación
     const rawB=keys?sumKeys(m.rb,keys):(m.rb?m.rb[MINKEY[k]]:null);
     const vb=faroConv(rawB,k,m.udsB);
     const dv=(val!=null&&vb!=null)?val-vb:null;
     const imp=(rawA!=null&&rawB!=null&&m.lotesA!=null)?(rawA-rawB)*m.lotesA:null;
-    return {val,dv,imp,dec:faroDec(k)};
+    return {val,dv,imp,ref:vb,dec:faroDec(k)};
   }
   const areaCells=m=>grouped?FGRUPOS.map(g=>({c:cellOf(m,g.k,g.keys),name:g.name,k:g.k,span:1}))
     :(m.compat?FASES.map(f=>({c:cellOf(m,f.k,null),name:f.name,k:f.k,span:1}))
       :[{c:cellOf(m,'p1',null),name:'Arranque',k:'p1',span:1},{c:cellOf(m,'p23',null),name:'Preparación (sin separar)',k:'p23',span:2},
         {c:cellOf(m,'p4',null),name:faseName('p4'),k:'p4',span:1},{c:cellOf(m,'p5',null),name:faseName('p5'),k:'p5',span:1},
         {c:cellOf(m,'p6',null),name:faseName('p6'),k:'p6',span:1},{c:cellOf(m,'p7',null),name:faseName('p7'),k:'p7',span:1}]);
-  let maxD=0;
-  dispAreas.forEach(a=>{const m=MODEL.find(x=>x.area===a);areaCells(m).forEach(o=>{if(o.c.dv!=null&&Math.abs(o.c.dv)>maxD)maxD=Math.abs(o.c.dv);});});
+  // color por % de desviación frente a la referencia (cada celda con su propia referencia) → mismo criterio para todas las unidades
   const cols=grouped?FGRUPOS:FASES;
   const uStyle='display:block;font-size:8px;font-weight:600;color:var(--ink3);text-transform:none;letter-spacing:0';
   const uSub=k=>'<span style="'+uStyle+'">'+(ST.faroUnit==='min'?'min/lote':((ST.faroUnit==='prod'||PERUD_K1.has(k))?'min/ud':'min'))+'</span>';
-  const totSub='<span style="'+uStyle+'">'+(ST.faroUnit==='prod'?'min/ud':'min/lote')+'</span>';
-  let h='<div class="mxrow head"><div class="mxh"></div>'+cols.map(f=>'<div class="mxh"><i style="background:'+cssv(f.col)+'"></i>'+f.name+uSub(f.k)+'</div>').join('')+'<div class="mxh tot">Total lote'+totSub+'</div><div class="mxh tot mxprod-h">Prod<span style="'+uStyle+'">'+udName()+'</span></div></div>';
+  const isMinV=(ST.faroUnit==='min');
+  const tailLbl=isMinV?'Total lote':'Productividad', tailUnit='<span style="'+uStyle+'">'+(isMinV?'min/lote':udName())+'</span>';
+  let h='<div class="mxrow head"><div class="mxh"></div>'+cols.map(f=>'<div class="mxh"><i style="background:'+cssv(f.col)+'"></i>'+f.name+uSub(f.k)+'</div>').join('')+'<div class="mxh tot">'+tailLbl+tailUnit+'</div></div>';
   dispAreas.forEach(a=>{
     const m=MODEL.find(x=>x.area===a);
     h+='<div class="mxrow"><div class="mxa" data-area="'+a+'">'+a+'</div>';
-    areaCells(m).forEach(o=>{h+=cellHTML(o.c.val,o.c.dv,o.c.imp,maxD,o.name,a,o.k,o.span,false,o.c.dec);});
-    const rawTotA=STACK.reduce((s,f)=>s+(m.ra?(m.ra[MINKEY[f.k]]||0):0),0);
-    const rawTotB=STACK.reduce((s,f)=>s+(m.rb?(m.rb[MINKEY[f.k]]||0):0),0);
-    const prod=(ST.faroUnit==='prod');
-    const totA=prod?((m.udsA>0)?rawTotA/m.udsA*MF():null):rawTotA;
-    const totB=prod?((m.udsB>0)?rawTotB/m.udsB*MF():null):rawTotB;
-    const totDv=ST.single?null:(prod?((totA!=null&&totB!=null)?totA-totB:null):m.dTiempo);
-    h+=cellHTML(totA,totDv,(!ST.single&&m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null,maxD,'Total',a,'total',1,true,prod?2:1);
-    // columna de productividad por área (min/ud, unidad global) — para relacionar tiempo y productividad
-    const prA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA*MF():null, prB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB*MF():null;
-    const prDv=(!ST.single&&prA!=null&&prB!=null)?prA-prB:null;
-    let prMd='',prCls='neu'; if(prDv!=null&&Math.abs(prDv)>0.003){prCls=prDv>0?'bad':'good';prMd=sg(prDv)+fmt(prDv,2);}else if(prDv!=null)prMd='≈0';
-    h+='<div class="mxc tot mxprod" data-area="'+a+'" data-fase="prodcol" title="Productividad '+a+': '+(prA!=null?fmt(prA,2)+' '+udName():'n/d')+' · pulsa para ver su tendencia 12 meses"><div class="mv">'+(prA!=null?fmt(prA,2):'n/d')+'</div>'+(prMd?'<div class="md '+prCls+'">'+prMd+'</div>':'')+'</div>';
+    areaCells(m).forEach(o=>{h+=cellHTML(o.c.val,o.c.dv,o.c.imp,o.c.ref,o.name,a,o.k,o.span,false,o.c.dec);});
+    // ÚNICA columna resumen: vista Tiempo = total de minutos (media de los totales, oficial); Prod/Objetivo oficial = productividad OFICIAL (prod_total_min_ud_media), nunca minutos÷uds
+    if(isMinV){
+      h+=cellHTML(m.tiempoA, ST.single?null:m.dTiempo, (!ST.single&&m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null, m.tiempoB, 'Total del lote', a, 'total', 1, true, 1);
+    } else {
+      const prA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA*MF():null, prB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB*MF():null;
+      const prDv=(!ST.single&&prA!=null&&prB!=null)?prA-prB:null;
+      h+=cellHTML(prA, prDv, m.impacto, prB, 'Productividad', a, 'prodcol', 1, true, 2);
+    }
     h+='</div>';
   });
   $('matBody').innerHTML=h;
@@ -2097,7 +2102,7 @@ function renderMatrix(){
   $('matBody').querySelectorAll('.mxa[data-area]').forEach(c=>c.addEventListener('click',()=>{ST.fichaArea=c.dataset.area;renderFichaTabs();renderFicha();$('secFicha').scrollIntoView({behavior:'smooth',block:'start'});}));
   $('matFoot').innerHTML=ST.single
     ? '<div class="mx-imp-legend">Ficha de la tienda · valores propios, sin comparación · pulsa una celda para su tendencia de 12 meses</div>'
-    : '<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,rgba('+RGB.good+',.7),var(--panel2),rgba('+RGB.bad+',.7))"></div><span>peor</span></div><div class="mx-imp-legend">el color es la desviación frente a la referencia</div>';
+    : '<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,rgba('+RGB.good+',.7),var(--panel2),rgba('+RGB.bad+',.7))"></div><span>peor</span></div><div class="mx-imp-legend">el color es el <b>% de desviación</b> frente a la referencia (satura a ~30%): rojo = peor, verde = mejor</div>';
 }
 const FARO_MACRO={g_prep:{name:'Preparación',col:'--f-prep',keys:['p1','p2','p3','p23']},g_pes:{name:'Pesaje',col:'--f-pesaje',keys:['p4']},g_cons:{name:'Consolidación',col:'--f-consol',keys:['p5','p6']},g_entre:{name:'Tiempo entre lotes',col:'--f-entre',keys:['p7']}};
 function macroSerie(t,sh,area,keys){return ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let s=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;});}
@@ -2854,7 +2859,7 @@ function renderCalc(){
   const colUC=d=>ST.calcView==='min'?'min/lote':(perUdC(d)?(merc?'min/ud Merca':'min/ud MO'):'min/lote');
   let head='<thead><tr><th class="lo-area">Área</th>';
   cs.forEach(d=>head+=`<th>${d.s}<span class="lo-sub">${colUC(d.k)}</span></th>`);
-  head+=`<th class="lo-colgrp">Total<span class="lo-sub">${ST.calcView==='prod'?udName():'min/lote'}</span></th><th class="lo-colgrp">Prod obj<span class="lo-sub">${udName()}</span></th></tr></thead>`;
+  head+=(ST.calcView==='prod'?'':`<th class="lo-colgrp">Total<span class="lo-sub">min/lote</span></th>`)+`<th class="lo-colgrp">Prod obj<span class="lo-sub">${udName()}</span></th></tr></thead>`;
   let body='<tbody>';
   AREAS.forEach(a=>{ const r=ST.objTrim[a]; if(!r)return;
     body+=`<tr><td class="lo-area"><span class="lo-adot" style="background:${ACOL[a]}"></span>${aName(a)}</td>`;
@@ -2862,8 +2867,7 @@ function renderCalc(){
       let val=raw*k, dec=2;
       if(perUdC(d.k)){const u=udsOf(r); if(!isNaN(u)){val=val/u*(merc?1.08:1); dec=3;}}
       body+=`<td class="lo-cell"><span>${es(val,dec)}</span></td>`; });
-    let tot=(r[C.tot]||0)*k, tdec=2; if(ST.calcView==='prod'){const u=udsOf(r); if(!isNaN(u)){tot=tot/u*(merc?1.08:1); tdec=3;}}
-    body+=`<td class="lo-cell lo-tot lo-colgrp">${es(tot,tdec)}</td>`;
+    if(ST.calcView!=='prod'){const tot=(r[C.tot]||0)*k; body+=`<td class="lo-cell lo-tot lo-colgrp">${es(tot,2)}</td>`;}
     const prMO=(r[C.prod])*k;
     body+=`<td class="lo-cell lo-prod lo-colgrp"><span>${es(prMO*MF(),3)}</span></td></tr>`;
   });
@@ -2921,15 +2925,15 @@ function renderMatrix(){
   const totUnit=isPct?'%':(ST.mode==='prod'?udLbl():'min/lote');
   let head='<thead><tr><th class="lo-area">Área</th>';
   cs.forEach(d=>head+=`<th>${d.s}<span class="lo-sub">${cvColUnit(d.k)}</span></th>`);
-  head+=`<th class="lo-colgrp">Total<span class="lo-sub">${totUnit}</span></th>`;
-  head+=`<th class="lo-colgrp">Prod<span class="lo-sub">${udName()} · desglose</span></th>`;
+  if(ST.mode!=='prod')head+=`<th class="lo-colgrp">Total<span class="lo-sub">${totUnit}</span></th>`;
+  head+=`<th class="lo-colgrp">Prod<span class="lo-sub">${udName()} · oficial</span></th>`;
   head+='</tr></thead>';
   const maxByK={}; if(!isPct){ cs.forEach(d=>{let mx=0;AREAS.forEach(a=>{const v=cvVal(src[a],C,d.k);if(!isNaN(v))mx=Math.max(mx,v);});maxByK[d.k]=mx;}); }
   let body='<tbody>';
   AREAS.forEach(a=>{ const r=src[a]; if(!r)return;
     body+=`<tr><td class="lo-area"><span class="lo-adot" style="background:${ACOL[a]}"></span>${aName(a)}</td>`;
     cs.forEach(d=>{ const v=cvVal(r,C,d.k); body+=`<td class="lo-cell">${cellInner2(v,isPct,maxByK[d.k],cvDec(d.k))}</td>`; });
-    const tv=cvTot(r,C); body+=`<td class="lo-cell lo-tot lo-colgrp">${isPct?'100%':es(tv,ST.mode==='prod'?3:2)}</td>`;
+    if(ST.mode!=='prod'){const tv=cvTot(r,C); body+=`<td class="lo-cell lo-tot lo-colgrp">${isPct?'100%':es(tv,2)}</td>`;}
     const pr=C.prod?r[C.prod]:NaN;
     body+= C.prod? `<td class="lo-cell lo-prod ${pr<=OBJ_PROD?'lo-ok':'lo-bad'} lo-colgrp"><span>${es(pr*MF(),3)}</span></td>`
                  : `<td class="lo-cell lo-na lo-colgrp"><span>—</span></td>`;
