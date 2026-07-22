@@ -1038,6 +1038,50 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
   /* 8 · Filtro del ranking de Caudal: selects a 14px y a lo ancho (sin min-width fijo en línea) */
   .cd-f select.lo-tin{font-size:14px;min-width:0!important;width:100%}
 }
+
+/* ==================================================================
+   v7.4 · Modo Simple/Experto + ajustes 3ª ronda (2026-07-22)
+   ================================================================== */
+/* — Modo Simple: oculta lo no esencial en TODAS las pantallas —
+   (deja Resumen, Faro, Dónde actuar y Composición; Ranking/Objetivos/Caudal son modos aparte) */
+body.simple #secFlow,
+body.simple #secCorte,
+body.simple #secPareto,
+body.simple #secPick,
+body.simple #secDesplTot,
+body.simple #secTrend,
+body.simple #secFicha{display:none!important}
+
+@media(max-width:640px){
+  /* — Diferencias/Ranking: la "diferencia" AL LADO de Analizado/Referencia (no bajo el impacto) — */
+  .drow,#rkList .drow{grid-template-columns:auto 1fr;grid-template-areas:"area imp" "vals delta" "spark spark"}
+  .drow>div:not([class]){grid-area:delta;text-align:left!important;align-self:center;padding-left:2px}
+  /* — Pareto: en móvil el rosco (gráfico) ENCIMA de la tabla — */
+  #secPareto>.grid{display:flex;flex-direction:column}
+  #secPareto>.grid>.cbox:last-child{order:-1}
+  /* — Faro: que nada se salga de su celda; títulos más contenidos — */
+  .mxgrid .mxc,.mxgrid .mxh{overflow:hidden;min-width:0}
+  .mxh{font-size:8px;line-height:1.08}
+  .mxh small{font-size:7.5px}
+  /* — Ranking de tiendas: filtros compactos de verdad — */
+  .rk-ctrl select,.rk-ctrl input,.rk-ctrl .tin{font-size:14px!important}
+  .rk-ctrl .rk-seg button{font-size:12px!important}
+}
+
+/* — iPad / tablet (641–980px): la lista de Diferencias/Ranking dejaba un híbrido roto;
+     se convierte en tarjeta compacta coherente (evita el "rarísimo") — */
+@media(min-width:641px) and (max-width:980px){
+  .difhead{display:none}
+  .drow,#rkList .drow{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"area imp" "vals delta" "spark spark";gap:8px 14px;align-items:center;padding:14px 18px;border:1px solid var(--line);border-left:3px solid var(--ref);border-radius:var(--r)}
+  .drow.up{border-left-color:var(--up)}.drow.down{border-left-color:var(--down)}.drow.flat{border-left-color:var(--ref)}
+  .drow>.dr-area{grid-area:area}
+  .drow>.dr-imp{grid-area:imp;text-align:right}
+  .drow>.dr-vals{grid-area:vals;display:flex;flex-direction:row;gap:16px;align-items:baseline}
+  .drow>.dr-vals .dr-pair{flex-direction:row;gap:6px}
+  .drow>div:not([class]){grid-area:delta;text-align:left;align-self:center}
+  .drow>.spark-wrap{grid-area:spark;height:30px}
+  .drow>.spark-wrap>div{height:28px!important}
+}
 </style>
 </head>
 <body>
@@ -1053,6 +1097,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
       </div>
     </div>
     <div class="hdr-r">
+      <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial: resumen, faro, dónde actuar y composición) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
       <button class="tg" id="unitBtn" title="Unidad de la productividad en todo el panel: MO (Mercadona Online) o Mercadona (×1,08). Los tiempos y el caudal no cambian.">Unidad: MO</button>
       <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques (Preparación=P1+P2+P3, Pesaje, Consolidación=P5+P6, Entre lotes) o desglosadas. Afecta al faro, a la composición de tiempos, a la vista de objetivos y a sus tendencias de 12 meses.">Vista: Desglosado</button>
       <button class="tg" id="themeBtn">☾ Oscuro</button>
@@ -1189,7 +1234,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
       <div class="sec-hd" style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap"><div style="flex:1 1 320px">
         <div class="sec-n">Visión global · el faro</div>
         <div class="sec-h">Todas las áreas y fases, a la vez</div>
-        <div class="sec-s">Cada celda combina tres lecturas: el <b>número</b> es el tiempo real de esa fase (min/lote), el <b>color</b> es la desviación frente a la referencia (rojo = más tiempo, verde = menos) y el <b>punto</b> de la esquina marca si esa diferencia tiene impacto relevante al mes. Así se ve de golpe qué área tarda más, qué fase pesa y dónde conviene mirar.</div>
+        <div class="sec-s">El <b>número</b> es el tiempo real (min/lote), el <b>color</b> la desviación frente a la referencia (rojo = peor, verde = mejor) y el <b>punto</b> marca impacto relevante al mes.</div>
       </div>
       <div class="no-print faro-ctrls">
         <div class="faro-ctrl"><span class="faro-ctrl-l">Unidad</span>
@@ -1207,7 +1252,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
         <div>
           <div class="sec-n">Tiempos reales</div>
           <div class="sec-h">Cuánto tarda cada tipo de lote y en qué se va</div>
-          <div class="sec-s">El tiempo total de cada lote y su reparto por fases. En Frescos y FYV la preparación no se separa en picking y desplazamiento, por eso ahí aparece como un único bloque.</div>
+          <div class="sec-s">Tiempo total por lote y su reparto por fases. En Frescos y FYV la preparación va en un único bloque.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"><div class="modes" id="realWho"></div><div class="modes" id="realOrder"></div></div>
       </div>
@@ -1219,7 +1264,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
       <div class="sec-hd"><div>
         <div class="sec-n">Dónde actuar primero · impacto</div>
         <div class="sec-h">Diferencias frente a la referencia, ordenadas por impacto</div>
-        <div class="sec-s">El <b>impacto estimado</b> traduce la diferencia a tiempo al mes. La tendencia de 12 meses (línea de color = analizado, gris = referencia) muestra si viene de antes o es de ahora. El borde y el color indican si mejora (verde) o empeora (rojo).</div>
+        <div class="sec-s">La diferencia traducida a <b>tiempo al mes</b> (impacto). La línea de color es el analizado; la gris, la referencia.</div>
       </div>
       <div class="modes" id="diffMetric"></div></div>
       <div class="difhead"><span>Área</span><span>Tendencia 12 meses</span><span>Analizado / Referencia</span><span>Diferencia</span><span>Impacto / mes</span></div>
@@ -1634,7 +1679,7 @@ const FASES=[
   {k:'p4',col:'--f-pesaje',name:'Pesaje',code:'P4'},
   {k:'p5',col:'--f-traslado',name:'Traslado',code:'P5'},
   {k:'p6',col:'--f-consol',name:'Consolidación',code:'P6'},
-  {k:'p7',col:'--f-entre',name:'Tiempo entre lotes',code:'P7'}
+  {k:'p7',col:'--f-entre',name:'Entre lotes',code:'P7'}
 ];
 const PREP_SIN={k:'p23',col:'--f-prepsin',name:'Preparación (sin separar)',code:'P2·P3'};
 const MINKEY={p1:'p1_min_medio',p2:'p2_min_medio',p3:'p3_min_medio',p4:'p4_min_medio',p5:'p5_min_medio',p6:'p6_min_medio',p7:'p7_min_medio',p23:'p23_min_medio',prep:'prep_min_medio'};
@@ -2299,7 +2344,7 @@ function renderReal(){
 
 /* ===== FARO (valor + desviación, click para detalle) ===== */
 // color por % de desviación frente a la referencia (unidad-agnóstico): satura a ~30% → mismo criterio para min/ud y min/lote
-function divColor(dv,ref){if(dv==null||ref==null||!isFinite(ref)||ref===0)return 'var(--panel2)';const t=Math.min(1,Math.abs(dv/ref)/0.30),rgb=dv>0?RGB.bad:RGB.good;return 'rgba('+rgb+','+(0.06+0.64*t).toFixed(3)+')';}
+function divColor(dv,ref){if(dv==null||ref==null||!isFinite(ref)||ref===0)return 'var(--panel2)';var t=Math.min(1,Math.abs(dv/ref)/0.22);t=Math.pow(t,0.7);var rgb=dv>0?RGB.bad:RGB.good;return 'rgba('+rgb+','+(0.10+0.78*t).toFixed(3)+')';}
 // ---- unidad del faro: 'min' (min/lote) · 'prod' (min/ud todas) · 'objof' (prep+pesaje min/ud; consol+entre min/lote) ----
 // Objetivo oficial: por unidad = picking, desplazamiento, pesaje (y sus bloques). Arranque (P1) es tiempo fijo
 // SEPARADO (min/lote); pero el bloque agrupado Preparación (g_prep = P1+P2+P3) sí va en min/ud.
@@ -2332,7 +2377,7 @@ const FGRUPOS=[
   {k:'g_prep', name:'Preparación',        col:'--f-prep',   keys:['p1','p2','p3','p23']},
   {k:'g_pes',  name:'Pesaje',             col:'--f-pesaje', keys:['p4']},
   {k:'g_cons', name:'Consolidación',      col:'--f-consol', keys:['p5','p6']},
-  {k:'g_entre',name:'Tiempo entre lotes', col:'--f-entre',  keys:['p7']}
+  {k:'g_entre',name:'Entre lotes', col:'--f-entre',  keys:['p7']}
 ];
 function sumKeys(row,keys){ if(!row)return null; let s=0,any=false; keys.forEach(k=>{const v=row[MINKEY[k]]; if(v!=null){s+=v;any=true;}}); return any?s:null; }
 function renderMatrix(){
@@ -2385,7 +2430,7 @@ function renderMatrix(){
     ? '<div class="mx-imp-legend">Ficha de la tienda · valores propios, sin comparación · pulsa una celda para su tendencia de 12 meses</div>'
     : '<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,rgba('+RGB.good+',.7),var(--panel2),rgba('+RGB.bad+',.7))"></div><span>peor</span></div><div class="mx-imp-legend">el color es el <b>% de desviación</b> frente a la referencia (satura a ~30%): rojo = peor, verde = mejor</div>';
 }
-const FARO_MACRO={g_prep:{name:'Preparación',col:'--f-prep',keys:['p1','p2','p3','p23']},g_pes:{name:'Pesaje',col:'--f-pesaje',keys:['p4']},g_cons:{name:'Consolidación',col:'--f-consol',keys:['p5','p6']},g_entre:{name:'Tiempo entre lotes',col:'--f-entre',keys:['p7']}};
+const FARO_MACRO={g_prep:{name:'Preparación',col:'--f-prep',keys:['p1','p2','p3','p23']},g_pes:{name:'Pesaje',col:'--f-pesaje',keys:['p4']},g_cons:{name:'Consolidación',col:'--f-consol',keys:['p5','p6']},g_entre:{name:'Entre lotes',col:'--f-entre',keys:['p7']}};
 function macroSerie(t,sh,area,keys){return ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let s=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;});}
 function renderFaroDetail(area,faseK){
   const m=MODEL.find(x=>x.area===area);if(!m||!m.disponible){$('faroDetail').innerHTML='';return;}
@@ -2659,7 +2704,7 @@ function renderFicha(){
   if(!m||!m.disponible){host.innerHTML='<div class="notice warn"><span class="ic">!</span><span>El área <b>'+ST.fichaArea+'</b> no está en uno de los dos escenarios. Prueba otro mes o turno.</span></div>';return;}
   const GRP=!!window.__GROUP;
   const fcomp=GRP
-    ? [{k:'g_prep',name:'Preparación',col:'--f-prep',code:'P1·P2·P3',keys:['p1','p2','p3','p23'],mk:'m_prep'},{k:'p4',name:'Pesaje',col:'--f-pesaje',code:'P4',keys:['p4'],mk:'pesaje'},{k:'g_cons',name:'Consolidación',col:'--f-consol',code:'P5·P6',keys:['p5','p6'],mk:'m_cons'},{k:'p7',name:'Tiempo entre lotes',col:'--f-entre',code:'P7',keys:['p7'],mk:'entre'}]
+    ? [{k:'g_prep',name:'Preparación',col:'--f-prep',code:'P1·P2·P3',keys:['p1','p2','p3','p23'],mk:'m_prep'},{k:'p4',name:'Pesaje',col:'--f-pesaje',code:'P4',keys:['p4'],mk:'pesaje'},{k:'g_cons',name:'Consolidación',col:'--f-consol',code:'P5·P6',keys:['p5','p6'],mk:'m_cons'},{k:'p7',name:'Entre lotes',col:'--f-entre',code:'P7',keys:['p7'],mk:'entre'}]
     : fasesComp(m.area);
   const fval=(row,f)=>{ if(!row)return null; if(f.keys){let s=0,any=false;f.keys.forEach(k=>{const v=row[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;} return row[MINKEY[f.k]]; };
   let h='<div class="fkpi">';
@@ -3688,6 +3733,21 @@ function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by;
   const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_ranking.csv'; a.click(); URL.revokeObjectURL(u);
 }
 window.addEventListener('resize',()=>{ if(LOADED&&$('caudalTab')&&$('caudalTab').style.display!=='none'){ try{Plotly.Plots.resize('cd_chart');}catch(e){} } });
+})();
+</script>
+<script>
+/* Toggle Modo Simple/Experto (v7.4) — persistente; re-dibuja las gráficas al pasar a Experto */
+(function(){
+  var b=document.getElementById('simpleBtn'); if(!b) return;
+  function apply(m){ document.body.classList.toggle('simple', m==='simple'); b.textContent='Modo: '+(m==='simple'?'Simple':'Experto'); }
+  var m='simple'; try{ m=localStorage.getItem('ntc_mode')||'simple'; }catch(e){}
+  apply(m);
+  b.addEventListener('click',function(){
+    m=document.body.classList.contains('simple')?'experto':'simple';
+    try{ localStorage.setItem('ntc_mode',m); }catch(e){}
+    apply(m);
+    setTimeout(function(){ try{ window.dispatchEvent(new Event('resize')); }catch(e){} },80);
+  });
 })();
 </script>
 </body>
