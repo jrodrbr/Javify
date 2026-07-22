@@ -892,6 +892,98 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
   .comp-row{grid-template-columns:58px 1fr 44px;gap:7px}
   .lo-frow{grid-template-columns:70px 1fr 54px 46px;gap:6px}
 }
+
+/* ==================================================================
+   v7.1 · SISTEMA COHERENTE DE CONTROLES EN MÓVIL (2026-07-22)
+   Feedback iPhone: los controles que no son desplegables salían como
+   "burbujas" de tamaños dispares (segmentados y toggles) y los textos
+   (etiquetas, títulos, subtítulos) tenían tamaños inconsistentes.
+   Se unifican en un formulario apilado con barras de ancho completo.
+   Solo CSS; no toca la lógica.
+   ================================================================== */
+@media(max-width:640px){
+  /* — Etiquetas de control: todas al mismo tamaño — */
+  .fld label,.rk-f label,.rk-f>label,.lo-fld label,.lo-fld>label,.cd-f>label,.faro-ctrl-l,.quick-l,.cd-grp-h{
+    font-size:10px;font-weight:750;letter-spacing:.5px;margin-bottom:6px;line-height:1.2;text-transform:uppercase;
+  }
+  /* — Contenedores de filtros: apilados y a lo ancho — */
+  .lo-ctrls,.cd-viewbar,.cd-groups{flex-direction:column;align-items:stretch;gap:12px}
+  .rk-ctrl{gap:10px 12px}
+  .lo-fld,.cd-f,.rk-f,.fld,.cd-grp{width:100%;min-width:0}
+  .cd-viewbar .cd-f[style*="margin-left:auto"]{margin-left:0!important}
+  .cd-grp-row{flex-wrap:wrap;gap:8px}
+  .cd-grp-row .cd-f{flex:1 1 45%}
+  /* — Texto y desplegables: tamaño único (16px evita el zoom de iOS) y misma altura — */
+  select,.tin,.combo-in,.cin input,.lo-tin,.rk-f select,.rk-f input,.trend-ctrl select,.cd-srch{
+    font-size:16px;min-height:44px;border-radius:12px;
+  }
+  .cd-btn{font-size:14px;min-height:44px;padding:11px 12px;border-radius:12px}
+  /* — Barras segmentadas: ancho completo, segmentos IGUALES, misma altura que los campos — */
+  .lo-seg,#corteSw,#faroUnitSeg,.rk-seg,.faro-ctrl .modeswitch,.matctrl .modeswitch{
+    display:flex;width:100%;border-radius:12px;padding:4px;flex-wrap:nowrap;gap:2px;
+  }
+  .lo-seg>button,#corteSw>button,#faroUnitSeg>button,.rk-seg>button,
+  .faro-ctrl .modeswitch>button,.matctrl .modeswitch>button{
+    flex:1 1 0;min-width:0;justify-content:center;text-align:center;
+    padding:11px 4px;font-size:12px;border-radius:9px;white-space:normal;line-height:1.15;
+  }
+  .lo-seg.lo-sm{padding:4px}
+  .lo-seg.lo-sm>button{font-size:12px;padding:10px 4px}
+  .rk-seg{overflow:hidden}
+  /* — Toggles sueltos (Solo Real real, Reset, Fijar…): a lo ancho y forma coherente — */
+  .lo-fld>.lo-tg,.cd-f>.lo-tg{width:100%;border-radius:12px;padding:12px 14px;font-size:12.5px}
+  .cd-dlbtn{border-radius:12px;padding:11px 14px;font-size:12.5px}
+  .cd-toolbar{flex-wrap:wrap;gap:8px}
+  .cd-toolbar>div{flex-wrap:wrap}
+  /* — Títulos y subtítulos: jerarquía uniforme — */
+  .h-c{font-size:16px}
+  .ctitle{font-size:13.5px}
+  .csub,.s-c,.sec-s,.lo-sec-s{font-size:12.5px;line-height:1.55}
+  .lo-sec-t{font-size:17px}
+  /* — Gráficas: alturas contenidas para que quepan con su leyenda — */
+  #cd_chart{height:300px!important}
+  .cd-tbl{min-width:560px}
+  /* — Familia tipográfica también dentro de las gráficas (coherencia con la página) — */
+  .js-plotly-plot text{font-family:Inter,system-ui,sans-serif!important}
+}
+@media(max-width:430px){
+  .lo-seg>button,#corteSw>button,#faroUnitSeg>button,.rk-seg>button{font-size:11.5px;padding:10px 3px}
+  .cd-grp-row .cd-f{flex:1 1 100%}
+  .f3{grid-template-columns:1fr 1fr}
+  .h-c{font-size:15.5px}
+}
+
+/* ==================================================================
+   v7.2 · COMPACTAR filtros y tarjetas en móvil (2026-07-22)
+   Feedback iPhone: desplegables con texto cortado ("Juni"/"Glob") por
+   ir a 16px en columnas estrechas, y tarjetas de Diferencias/Impacto
+   demasiado altas (~217px). Se compactan (~118px) y se ajusta la fuente
+   de los desplegables (los <select> no provocan zoom en iOS). Solo CSS.
+   ================================================================== */
+@media(max-width:640px){
+  /* Desplegables a 14px: caben "Junio"/"Global" sin cortarse y se ven más finos */
+  select,.rk-f select,.trend-ctrl select,.lo-fld select{font-size:14px}
+  /* Comparador: escenarios más compactos; Mes/Turno en 2 columnas y Nombre a lo ancho */
+  .scn{padding:16px}
+  .f3{grid-template-columns:1fr 1fr;gap:8px}
+  .f3 .fld:last-child{grid-column:1 / -1}
+  .f3 .tin{font-size:14px}
+  /* Diferencias y Ranking: tarjeta compacta (impacto arriba-derecha, valores en línea) */
+  .drow,#rkList .drow{display:grid!important;grid-template-columns:1fr auto;grid-template-areas:"area imp" "vals vals" "spark spark";gap:6px 12px;padding:12px 14px;align-items:center}
+  .drow.nd{display:block!important;opacity:.6}
+  .drow .dr-area,#rkList .drow .dr-area{grid-area:area;font-size:13px;white-space:normal}
+  .drow .dr-area small{font-size:10px;margin-top:1px}
+  .drow .dr-imp,#rkList .drow .dr-imp{grid-area:imp;text-align:right}
+  .drow .dr-imp .k{font-size:9px}
+  .drow .dr-imp .v{font-size:14px;margin-top:0}
+  .drow .dr-vals,#rkList .drow .dr-vals{grid-area:vals;flex-direction:row!important;flex-wrap:wrap;gap:4px 16px;align-items:baseline}
+  .drow .dr-pair{flex-direction:row!important;justify-content:flex-start;gap:6px;align-items:baseline}
+  .drow .dr-pair .k{font-size:9px}
+  .drow .dr-pair .v{font-size:13px}
+  .drow .spark-wrap,#rkList .drow .spark-wrap{grid-area:spark;height:24px;gap:8px;padding:0}
+  .drow .spark-wrap>div{height:22px!important}
+  .drow .spark-trend{font-size:10px}
+}
 </style>
 </head>
 <body>
