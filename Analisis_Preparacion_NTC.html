@@ -1082,6 +1082,41 @@ body.simple #secFicha{display:none!important}
   .drow>.spark-wrap{grid-area:spark;height:30px}
   .drow>.spark-wrap>div{height:28px!important}
 }
+
+/* ==================================================================
+   v7.5 · 5ª ronda: compactar en móvil, ranking, Pareto, ocultar Objetivos y códigos P (2026-07-22)
+   ================================================================== */
+/* — Fuera "Definición de objetivos" del menú y TODOS los códigos P (flujo y ciclo) — */
+#mObj{display:none!important}
+.fcode,.cyc-t .code,.ptable .micro{display:none!important}
+
+@media(max-width:640px){
+  /* — Cajas/paddings a escala móvil (no como en ordenador) — */
+  .wrap{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
+  .cpad{padding:16px 14px}
+  .cbox-in{padding:14px 13px 12px}
+  .matrix{padding:12px 10px}
+  .headline{padding:14px}
+  .flow{padding:14px 12px}
+  .sec{margin-top:26px}
+  .sec-s{font-size:12px}
+  /* — Ranking de tiendas: filtros realmente compactos — */
+  .rk-ctrl{padding:12px;gap:8px}
+  .rk-ctrl select,.rk-ctrl input,.rk-ctrl .tin{font-size:14px!important;min-height:40px}
+  .rk-f label{font-size:9.5px}
+  /* — Ranking: la diferencia DEBAJO (el nombre de tienda es largo; solo el comparador la lleva al lado) — */
+  #rkList .drow{grid-template-columns:1fr auto;grid-template-areas:"area imp" "vals vals" "delta delta" "spark spark"}
+  #rkList .drow>div:not([class]){grid-area:delta;text-align:left!important;padding-left:0}
+  #rkList .drow .dr-vals{flex-wrap:wrap}
+  /* — Pareto: el rosco ocupa TODO el ancho cuando va arriba — */
+  #secPareto>.grid>.cbox{width:100%}
+  #cParetoDonut{width:100%}
+}
+@media(min-width:641px) and (max-width:980px){
+  /* iPad: ranking con la diferencia también debajo */
+  #rkList .drow{grid-template-areas:"area imp" "vals vals" "delta delta" "spark spark"}
+  #rkList .drow>div:not([class]){grid-area:delta;text-align:left}
+}
 </style>
 </head>
 <body>
@@ -1100,7 +1135,7 @@ body.simple #secFicha{display:none!important}
       <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial: resumen, faro, dónde actuar y composición) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
       <button class="tg" id="unitBtn" title="Unidad de la productividad en todo el panel: MO (Mercadona Online) o Mercadona (×1,08). Los tiempos y el caudal no cambian.">Unidad: MO</button>
       <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques (Preparación=P1+P2+P3, Pesaje, Consolidación=P5+P6, Entre lotes) o desglosadas. Afecta al faro, a la composición de tiempos, a la vista de objetivos y a sus tendencias de 12 meses.">Vista: Desglosado</button>
-      <button class="tg" id="themeBtn">☾ Oscuro</button>
+      <button class="tg" id="themeBtn">Tema: Claro</button>
     </div>
   </div>
 
@@ -1308,7 +1343,7 @@ body.simple #secFicha{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Desplazamiento total y tiempo entre lotes</div>
         <div class="sec-h">El tiempo que no es preparar producto</div>
-        <div class="sec-s">Dos vistas por área, una al lado de la otra: el <b>desplazamiento total</b> del lote (P1+P3+P5+P7) y, aparte, el <b>tiempo entre lotes</b> (P7). Frescos y FYV no aparecen porque su desplazamiento de preparación no se separa.</div>
+        <div class="sec-s">El <b>desplazamiento total</b> del lote y, aparte, el <b>tiempo entre lotes</b>. Frescos y FYV no aparecen (su desplazamiento no se separa).</div>
       </div></div>
       <div class="grid g2">
         <div>
@@ -1353,7 +1388,7 @@ body.simple #secFicha{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Ranking de tiendas</div>
         <div class="sec-h">Prioriza dónde ir, con criterio</div>
-        <div class="sec-s">Ordena todas las tiendas por la métrica que elijas, en un área/turno/mes concretos. Útil para detectar referencias positivas y casos a visitar. Pulsa una tienda para abrirla en el comparador.</div>
+        <div class="sec-s">Ordena las tiendas por la métrica, área, turno y mes que elijas. Pulsa una tienda para abrirla en el comparador.</div>
       </div></div>
       <div class="rk-ctrl">
         <div class="rk-f"><label for="rkMetric">Métrica</label><select id="rkMetric"></select></div>
@@ -1711,7 +1746,7 @@ const METRICS={
   consol:{label:'Consolidación',unit:'min',dec:2,col:'p6_min_medio'},
   entre:{label:'Tiempo entre lotes',unit:'min',dec:2,col:'p7_min_medio'},
   // bloques agrupados (para la tendencia en vista Agrupado): suman las fases del bloque
-  m_prep:{label:'Preparación (P1+P2+P3)',unit:'min',dec:2,sumk:['p1','p2','p3','p23']},
+  m_prep:{label:'Preparación',unit:'min',dec:2,sumk:['p1','p2','p3','p23']},
   m_pes:{label:'Pesaje (P4)',unit:'min',dec:2,col:'p4_min_medio'},
   m_cons:{label:'Consolidación (P5+P6)',unit:'min',dec:2,sumk:['p5','p6']},
   m_entre:{label:'Entre lotes (P7)',unit:'min',dec:2,col:'p7_min_medio'},
@@ -2527,7 +2562,7 @@ function barGroupSem(id,kA,kB,areas,dec,h,eps){
   Plotly.react(id,[
     {x:areas,y:yA,name:ST.nameA,type:'bar',marker:{color:colsA,cornerradius:6},text:yA.map(v=>fmt(v,dec)),textposition:'outside',textfont:{size:10,color:cssv('--ink')},cliponaxis:false,hovertemplate:'%{x} · '+ST.nameA+': %{y:.'+dec+'f}<extra></extra>'},
     {x:areas,y:yB,name:ST.nameB,type:'bar',marker:{color:ref,cornerradius:6},text:yB.map(v=>fmt(v,dec)),textposition:'outside',textfont:{size:10,color:cssv('--ink2')},cliponaxis:false,hovertemplate:'%{x} · '+ST.nameB+': %{y:.'+dec+'f}<extra></extra>'}
-  ],baseLayout({barmode:'group',height:h,margin:{l:46,r:14,t:14,b:44},bargap:0.32,bargroupgap:0.12,showlegend:false,yaxis:{range:[0,mx*1.2],gridcolor:cssv('--line'),rangemode:'tozero',automargin:true},xaxis:{tickfont:{color:cssv('--ink'),size:9.5},automargin:true,tickangle:0}}),PCFG);
+  ],baseLayout({barmode:'group',height:h,margin:{l:46,r:14,t:14,b:44},bargap:0.32,bargroupgap:0.12,showlegend:false,yaxis:{range:[0,mx*1.2],gridcolor:cssv('--line'),rangemode:'tozero',automargin:true},xaxis:{tickfont:{color:cssv('--ink'),size:9.5},automargin:true,tickangle:-30}}),PCFG);
 }
 
 /* ===== PICKING / DESPLAZAMIENTO + RATIOS ===== */
@@ -2938,7 +2973,7 @@ $('groupBtn').textContent='Vista: Agrupado';
 $('themeBtn').addEventListener('click',()=>{
   const h=document.documentElement,toLight=h.classList.contains('dark');
   h.classList.toggle('dark',!toLight);h.classList.toggle('light',toLight);
-  $('themeBtn').textContent=toLight?'☾ Oscuro':'☀ Claro';
+  $('themeBtn').textContent=toLight?'Tema: Claro':'Tema: Oscuro';
   _cssvCache={}; // el tema cambia las variables: invalidar caché antes de repintar
   if(ST.analyzed){renderSummary();renderMatrix();renderRealControls();renderReal();renderDiffControls();renderDiff();renderPickDespl();renderDesplTot();renderCont();renderTrend();renderFicha();}
   if(ST.mode==='rank')renderRank();
