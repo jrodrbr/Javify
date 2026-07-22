@@ -1132,6 +1132,23 @@ body.simple #mObj{display:none!important}
 @media(max-width:430px){
   .hdr-t{font-size:19px}
 }
+
+/* ==================================================================
+   v7.7 · 7ª ronda: FAB burbuja-logo, cajas iguales, media en ranking (2026-07-22)
+   ================================================================== */
+/* FAB: solo la burbuja (círculo), sin texto "Asistente" */
+.fab{width:56px;height:56px;padding:0;border-radius:50%;justify-content:center;gap:0}
+.fab svg{width:25px;height:25px}
+/* "El tiempo que no es preparar producto": las dos cajas del mismo tamaño */
+#secDesplTot .grid.g2{align-items:stretch}
+#secDesplTot .grid.g2>div{display:flex;flex-direction:column;min-width:0}
+#secDesplTot .cbox{flex:1}
+#secDesplTot .cbox-hd{min-height:46px}
+/* Objetivos: X para cerrar el detalle de una tienda */
+.lo-det{position:relative}
+.lo-det-h{padding-right:36px}
+.lo-detClose{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);font-size:15px;line-height:1;cursor:pointer;transition:.15s}
+.lo-detClose:hover{color:var(--ink);border-color:var(--brand)}
 </style>
 </head>
 <body>
@@ -1169,7 +1186,7 @@ body.simple #mObj{display:none!important}
     <div class="cpad">
       <div class="stp"><span class="stp-k">Qué comparar</span></div>
       <div class="h-c">Elige dos escenarios</div>
-      <div class="s-c">Compararás un escenario <b>analizado</b> frente a una <b>referencia</b>, siempre por área. Escribe el código o nombre de tienda para buscarla. Si dejas el nombre vacío, se nombra solo.</div>
+      <div class="s-c">Compara un escenario <b>analizado</b> con una <b>referencia</b>, por área.</div>
       <div class="sgrid">
         <div class="scn a">
           <div class="scn-h"><div class="scn-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3v9l5 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg></div><div class="scn-name">Escenario analizado<small>El que quieres estudiar</small></div></div>
@@ -1212,7 +1229,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">El proceso</div>
         <div class="sec-h">Cómo se prepara un lote, paso a paso</div>
-        <div class="sec-s">Un “lote” es un conjunto de pedidos que un operario prepara seguidos. Su tiempo se reparte en estas fases y al terminar enlaza con el siguiente. Estos colores se usan en todas las gráficas.</div>
+        <div class="sec-s">Un <b>lote</b> es un grupo de pedidos que se preparan seguidos. Su tiempo se reparte en estas fases.</div>
       </div></div>
       <div class="flow">
         <div class="flow-track" id="flowDes">
@@ -1326,7 +1343,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Prioridad · área + fase</div>
         <div class="sec-h">Qué combinación concreta revisar primero</div>
-        <div class="sec-s">Cada fila es una pareja <b>área + fase</b> ordenada por el <b>tiempo de más al mes</b> frente a la referencia. El rosco reparte ese total por <b>área</b>. Pulsa una fila para abrir su detalle en el faro.</div>
+        <div class="sec-s">Cada fila es un <b>área + fase</b> ordenada por el tiempo de más al mes. Pulsa para ver su detalle.</div>
       </div></div>
       <div class="grid" style="grid-template-columns:1.7fr 1fr;gap:16px;align-items:start">
         <div class="cbox"><div class="cbox-in" style="padding-top:38px"><button class="csv" data-csv="paretoTable" data-csvname="prioridad_area_fase">⤓ CSV</button><div class="ptable-wrap" style="max-height:340px;overflow:auto"><table class="ptable" id="paretoTable"></table></div></div></div>
@@ -1340,7 +1357,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Dentro de la preparación</div>
         <div class="sec-h">Picking, desplazamiento y su equilibrio</div>
-        <div class="sec-s">La preparación es la fase más grande. Aquí se separa en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse). Las barras muestran los minutos; abajo, el <b>mix</b> y el <b>ratio desplazamiento/picking</b>, que permite comparar áreas de distinto tamaño. Frescos y FYV no aparecen porque su preparación no se separa.</div>
+        <div class="sec-s">La preparación separada en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse), con su mix y ratio. Frescos y FYV no se separan.</div>
       </div></div>
       <div class="grid g2" style="margin-bottom:16px">
         <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/lote</div><div class="csub">coger producto · analizado vs referencia</div></div></div><div class="chart" id="cPick"></div></div></div>
@@ -1376,7 +1393,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Tendencia · 12 meses</div>
         <div class="sec-h">¿Mejora, empeora o está estable?</div>
-        <div class="sec-s">Evolución del analizado frente a la referencia para el área y la fase que elijas. En productividad, la línea de objetivo es 0,306 min/ud; por encima es peor, por debajo mejor.</div>
+        <div class="sec-s">Evolución del analizado frente a la referencia. Objetivo de productividad: 0,306 min/ud.</div>
       </div></div>
       <div class="trend-ctrl"><select id="trArea"></select><select id="trMetric"></select></div>
       <div class="cbox"><div class="cbox-in"><button class="png" data-png="cTrend">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="trendTitle">—</div><div class="csub" id="trendSub">—</div></div></div><div class="chart" id="cTrend"></div></div></div>
@@ -1388,7 +1405,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Radiografía por área</div>
         <div class="sec-h">Todo el detalle, con valores reales</div>
-        <div class="sec-s">Para el área elegida: tiempos con contexto, composición visual del lote, la preparación abierta cuando aplica, la evolución de la fase que quieras y una lectura de dónde actuar.</div>
+        <div class="sec-s">Todo el detalle del área: tiempos, composición del lote, picking/desplazamiento y evolución.</div>
       </div></div>
       <div class="tabs" id="fichaTabs" style="margin-bottom:18px"></div>
       <div id="fichaBody"></div>
@@ -1636,7 +1653,7 @@ body.simple #mObj{display:none!important}
       <!-- FILTROS (ámbito) -->
       <div class="card"><div class="cpad">
         <div class="h-c">Caudal · horas por indicador</div>
-        <div class="s-c">Filtra el <b>ámbito</b> con las casillas (si no marcas nada en un grupo, no filtra por ese grupo). La gráfica muestra la evolución temporal; la tabla lo desglosa según cómo agrupes.</div>
+        <div class="s-c">Filtra el <b>ámbito</b> con las casillas. La gráfica muestra la evolución; la tabla, el desglose.</div>
         <div id="cd_status" class="s-c" role="status" style="margin-top:8px;color:var(--up);display:none"></div>
         <div id="cd_filts" class="cd-groups" style="margin-top:14px"></div>
       </div></div>
@@ -1678,7 +1695,7 @@ body.simple #mObj{display:none!important}
       <div class="card"><div class="cpad">
         <div class="cd-toolbar"><div class="h-c" style="font-size:15px;margin:0">Ranking</div>
           <button class="cd-dlbtn" id="cd_rkDl" type="button">⤓ Descargar ranking</button></div>
-        <div class="s-c" style="margin:-4px 0 12px">Usa los mismos filtros de arriba. Ordena las entidades por la métrica elegida (agrega todo el ámbito filtrado, sin partir por tiempo). Ej.: filtra Proceso=Repartir y Día sem.=Lunes, rankea por Centro con métrica «Real − RealReal».</div>
+        <div class="s-c" style="margin:-4px 0 12px">Ordena por la métrica elegida sobre todo el ámbito filtrado.</div>
         <div class="cd-viewbar" style="margin-bottom:12px">
           <div class="cd-f"><label for="cd_rkBy">Rankear por</label>
             <select class="lo-tin" id="cd_rkBy" style="min-width:150px">
@@ -1699,7 +1716,7 @@ body.simple #mObj{display:none!important}
 </div><!-- /.wrap -->
 
 <!-- ASISTENTE FLOTANTE -->
-<button class="fab" id="fab" style="display:none"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor"/></svg>Asistente</button>
+<button class="fab" id="fab" style="display:none"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor"/></svg></button>
 <div class="assistant" id="assistant">
   <div class="as-head">
     <div class="as-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></div>
@@ -2878,7 +2895,14 @@ function renderRank(){
   // referencia del ranking: Objetivo=0,306 (fijo); Veteranas/Todas = su productividad OFICIAL del CSV general
   // (exactamente el valor del resumen: prod_conparadas real ≤20 / prod_efectiva ≤6); horas/caudal = 0
   let vRef;
-  if(isGen){ if(!G.isProd)vRef=null; else if(ref===OBJ_NAME)vRef=OBJ_PROD; else {const grR=genRow(ref,mes);vRef=(grR&&grR[G.prop]!=null)?grR[G.prop]:null;} }
+  if(isGen){
+    if(G.isProd){ vRef=(ref===OBJ_NAME)?OBJ_PROD:(function(){const grR=genRow(ref,mes);return (grR&&grR[G.prop]!=null)?grR[G.prop]:null;})(); }
+    else if(ref===OBJ_NAME){ vRef=null; }
+    else { // métricas absolutas (tiempo/caudal): MEDIA de la métrica sobre las tiendas del grupo de referencia
+      const pool=ST.realStores.map(function(t){const gr=genRow(t,mes); if(!gr||gr.model==='CIERRE')return null; if(ref==='Tiendas Veteranas'&&(gr.estado||estadoVet(t,mes,shift,area))!=='Veterana')return null; const v=G.calc?G.calc(gr):gr[G.prop]; return (v==null)?null:v;}).filter(function(v){return v!=null;});
+      vRef=pool.length?pool.reduce(function(s,v){return s+v;},0)/pool.length:null;
+    }
+  }
   else { vRef = special?null:valorTienda(ref,mk,area,shift,mes); }
   if(vRef!=null&&rf!==1)vRef*=rf;  // referencia/objetivo en la unidad global
   const refLbl=(ref===OBJ_NAME)?(isGen&&!G.isProd?'objetivo (0)':'objetivo'):shortStore(ref);
@@ -2903,7 +2927,7 @@ function renderRank(){
       '<div class="dr-area"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3);margin-right:5px">#'+(i+1)+'</span>'+nom+(isCur?' <span style="color:var(--brand);font-size:10px">· activa</span>':'')+
         '<small>'+attrs+'</small></div>'+
       '<div class="spark-wrap" style="gap:8px"><div style="flex:1;height:40px;min-width:0">'+svgSpark(sA,sB,220,40,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
-      '<div class="dr-vals"><div class="dr-pair"><span class="k">Tienda</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(vRef!=null?'<div class="dr-pair"><span class="k">'+(ref===OBJ_NAME?'Objetivo':shortStore(ref))+'</span><span class="v rf">'+fmt(vRef,dec)+'</span></div>':'')+'</div>'+
+      '<div class="dr-vals"><div class="dr-pair"><span class="k">Tienda</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(vRef!=null?'<div class="dr-pair"><span class="k">'+((isGen&&!G.isProd&&ref!==OBJ_NAME)?'Media '+shortStore(ref):(ref===OBJ_NAME?'Objetivo':shortStore(ref)))+'</span><span class="v rf">'+fmt(vRef,dec)+'</span></div>':'')+'</div>'+
       '<div style="text-align:right">'+(difTxt||'<span class="delta na">—</span>')+'</div>'+
       '<div class="dr-imp"><div class="k">'+subTxt+'</div><div class="v '+valCls+'">'+valTxt+'</div></div>'+
       '</div>';
@@ -2916,7 +2940,7 @@ function renderRank(){
 }
 
 /* ===== ASISTENTE FLOTANTE ===== */
-const QUICK=['¿Qué área reviso primero?','¿Dónde se va más tiempo?','¿Qué lote tarda más?','¿Qué ratio despl/picking es peor?','¿Cómo va el desplazamiento total?','¿Es puntual o tendencia?'];
+const QUICK=['¿Por dónde empiezo?','Resume la comparación','¿Cómo va la productividad?','¿Qué área pierde más tiempo?','¿Qué lote tarda más?','¿Ratio despl/picking peor?','¿Es puntual o tendencia?'];
 function initChat(){
   $('asScope').textContent=ST.nameA+' vs '+ST.nameB;$('clog').innerHTML='';chatPush('ai',chatIntro());
   if(ST._chatInit)return;ST._chatInit=true;
@@ -2926,14 +2950,31 @@ function initChat(){
   $('fab').addEventListener('click',()=>{$('assistant').classList.add('open');$('fab').classList.add('hide');});
   $('asClose').addEventListener('click',()=>{$('assistant').classList.remove('open');$('fab').classList.remove('hide');});
 }
-function chatIntro(){return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>. Pregúntame por un área, una fase, el ratio, el desplazamiento total, el impacto o por dónde empezar.';}
+function chatIntro(){return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>. Pregúntame en lenguaje normal: por dónde empezar, una área, la productividad y el objetivo, tiempos, ratio, impacto… o escribe «ayuda».';}
 function chatPush(r,html){const d=document.createElement('div');d.className='m '+r;d.innerHTML=html;$('clog').appendChild(d);$('clog').scrollTop=$('clog').scrollHeight;}
 function ask(){const q=$('cinput').value.trim();if(!q)return;chatPush('u',q.replace(/</g,'&lt;'));$('cinput').value='';setTimeout(()=>chatPush('ai',answer(q)),110);}
 function answer(q){
   const s=q.toLowerCase(),av=MODEL.filter(m=>m.disponible);
   if(!av.length)return 'No hay áreas en ambos escenarios. Cambia el mes o el turno.';
-  const am=AREAS.find(a=>s.includes(a.toLowerCase()))||(s.includes('pendiente')?'PENDIENTES':null);
+  const am=AREAS.find(a=>s.includes(a.toLowerCase()))||(s.includes('pendiente')?'PENDIENTES':s.includes('refri')?'REFRIGERADO':s.includes('congel')?'CONGELADO':(s.includes('fruta')||s.includes('verdura'))?'FYV':(s.includes('horno')||s.includes('panad'))?'HORNO':null);
   if(am){const m=MODEL.find(x=>x.area===am);if(!m||!m.disponible)return am+' no está en uno de los escenarios.';return lecturaArea(m);}
+  const has=function(){for(var i=0;i<arguments.length;i++){if(s.indexOf(arguments[i])>=0)return true;}return false;};
+  const byImp=function(){return MODEL.filter(x=>x.disponible&&x.impacto!=null&&x.impacto>0).sort((a,b)=>b.impacto-a.impacto);};
+  if(has('hola','buenas','ayuda','qué puedes','que puedes','cómo funciona','como funciona','qué sabes','que sabes','ejemplos'))
+    return 'Puedo responderte con tus datos sobre: <b>por dónde empezar</b>, una <b>área</b> (Secos, Refrigerado, Congelado, Frescos, FYV…), la <b>productividad y el objetivo</b>, los <b>tiempos por lote</b>, el <b>ratio desplazamiento/picking</b>, el <b>desplazamiento total</b>, el <b>tiempo entre lotes</b>, las <b>unidades</b> y el <b>impacto al mes</b>. Escríbeme en lenguaje normal.';
+  if(has('resum','cómo voy','como voy','qué tal','que tal','visión','vision','en general','balance')){
+    const t=byImp()[0],obj=OBJ_PROD*MF(),nMal=av.filter(m=>m.prodA!=null&&mfv(m.prodA)>obj+0.003).length;
+    return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>: '+(t?'donde más margen hay es <b>'+t.area+'</b> ('+fmtImpact(t.impacto)+'/mes de más; lo explica '+causaText(t)+'). ':'no hay un área que destaque por perder tiempo. ')+(nMal>0?('<b>'+nMal+' de '+av.length+'</b> áreas están por encima del objetivo de productividad ('+fmt(obj,3)+' '+udName()+').'):'La productividad va en objetivo en casi todas las áreas.');
+  }
+  if(has('productividad','min/ud','min ud','objetivo','cumpl','meta')){
+    const bs=[...av].filter(x=>x.prodA!=null); if(!bs.length)return 'Sin datos de productividad en estos escenarios.';
+    const best=[...bs].sort((a,b)=>mfv(a.prodA)-mfv(b.prodA))[0],worst=[...bs].sort((a,b)=>mfv(b.prodA)-mfv(a.prodA))[0],obj=OBJ_PROD*MF(),ok=bs.filter(m=>mfv(m.prodA)<=obj+0.003).length;
+    return 'Objetivo: <b>'+fmt(obj,3)+' '+udName()+'</b>. En '+ST.nameA+', la más rápida es <b>'+best.area+'</b> ('+fmt(mfv(best.prodA),3)+') y la más lenta <b>'+worst.area+'</b> ('+fmt(mfv(worst.prodA),3)+'). Cumplen el objetivo <b>'+ok+' de '+bs.length+'</b> áreas.';
+  }
+  if(has('unidad','uds','pedidos','volumen')){const m=[...av].filter(x=>x.udsA!=null).sort((a,b)=>b.udsA-a.udsA)[0];if(!m)return 'Sin datos de unidades por lote.';return 'El lote con más unidades en '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(m.udsA,0)+' uds/lote).';}
+  if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+'/mes de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
+  if(has('caudal','flota MOT','ancla','horario')) return 'El caudal (horas por indicador: ancla, horario, real) está en la pestaña <b>Caudal</b> del menú de arriba.';
+  if(has('otra tienda','otras tiendas','ranking','ranquin','mejores tiendas','peores tiendas','comparar tiendas','qué tienda','que tienda')) return 'Para comparar tiendas entre sí usa el modo <b>Ranking de tiendas</b> del menú: ordena por la métrica que quieras y pulsa una para abrirla aquí.';
   if(s.includes('ratio')||s.includes('equilibrio')){const c=av.filter(m=>m.compat&&m.dRatio!=null);if(!c.length)return 'No hay áreas con ratio disponible (Frescos y FYV no se separan).';const peor=[...c].sort((a,b)=>b.dRatio-a.dRatio)[0];return 'El peor ratio desplazamiento/picking frente a la referencia está en <b>'+peor.area+'</b>: '+fmt(peor.ratioA,2)+' vs '+fmt(peor.ratioB,2)+'. Hay demasiado desplazamiento por cada minuto de picking.';}
   if(s.includes('desplazamiento total')||s.includes('despl total')){const c=av.filter(m=>m.compat&&m.dDesplTot!=null);if(!c.length)return 'Sin desplazamiento total comparable.';const peor=[...c].sort((a,b)=>b.dDesplTot-a.dDesplTot)[0];return 'En desplazamiento total (arranque+desplazamiento+traslado+entre lotes), donde más se desvía es <b>'+peor.area+'</b> ('+sg(peor.dDesplTot)+fmt(peor.dDesplTot,1)+' min/lote).';}
   if(s.includes('tarda')||s.includes('largo')){const m=[...av].filter(x=>x.tiempoA!=null).sort((a,b)=>b.tiempoA-a.tiempoA)[0];return 'El lote más largo de <b>'+ST.nameA+'</b> es <b>'+m.area+'</b>: '+fmt(m.tiempoA,1)+' min/lote.';}
@@ -3432,6 +3473,7 @@ function renderStores(){
 }
 window.loSelStore=function(t){ ST.sel=String(t); if(ST.detPer!=='trim'&&!(ST.stMes[t]&&ST.stMes[t][ST.detPer]))ST.detPer='trim'; renderStores(); renderDet(); };
 window.loSetDetPer=function(p){ ST.detPer=p; renderDet(); };
+window.loCloseDet=function(){ ST.sel=null; renderStores(); renderDet(); };
 function renderDet(){
   const t=ST.sel; if(!t){document.getElementById('lo_stDet').innerHTML='<div class="lo-det-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>Pulsa una tienda para ver su desglose por subproceso y comparar meses.</div>';return;}
   const C=cols(ST.corte), cs=activeCols();
@@ -3443,7 +3485,7 @@ function renderDet(){
   // selector de periodo
   let pers=`<button class="${isTrim?'lo-on':''}" onclick="loSetDetPer('trim')">Trimestre</button>`;
   ST.meses.forEach(mm=>{ const has=ST.stMes[t]&&ST.stMes[t][mm]; pers+=`<button class="${per===mm?'lo-on':''}" ${has?'':'disabled style="opacity:.4"'} onclick="loSetDetPer('${mm}')">${fmtMes(mm)}</button>`; });
-  let h=`<div class="lo-det-h"><div class="lo-nm">Tienda ${t}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
+  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
     <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div>
     <button class="lo-tg" onclick="ST.sel=null;renderStores();renderDet()">Cerrar ✕</button></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
