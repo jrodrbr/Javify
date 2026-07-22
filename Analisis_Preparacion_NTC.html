@@ -1149,6 +1149,13 @@ body.simple #mObj{display:none!important}
 .lo-det-h{padding-right:36px}
 .lo-detClose{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);font-size:15px;line-height:1;cursor:pointer;transition:.15s}
 .lo-detClose:hover{color:var(--ink);border-color:var(--brand)}
+/* Caudal: fijar también el NOMBRE del centro (2ª columna dimensión), no solo el número */
+@media(max-width:640px){
+  table.cd-tbl thead th:first-child,table.cd-tbl tbody td:first-child,table.cd-tbl tfoot td:first-child{min-width:56px;max-width:56px}
+  table.cd-tbl td.cd-dim:nth-child(2),table.cd-tbl th.cd-dim:nth-child(2){position:sticky;left:56px;background:var(--panel);z-index:3;max-width:130px}
+  table.cd-tbl thead th.cd-dim:nth-child(2){z-index:6;background:var(--panel3)}
+  table.cd-tbl tfoot td.cd-dim:nth-child(2){z-index:6;background:var(--panel2)}
+}
 </style>
 </head>
 <body>
@@ -2940,7 +2947,7 @@ function renderRank(){
 }
 
 /* ===== ASISTENTE FLOTANTE ===== */
-const QUICK=['¿Por dónde empiezo?','Resume la comparación','¿Cómo va la productividad?','¿Qué área pierde más tiempo?','¿Qué lote tarda más?','¿Ratio despl/picking peor?','¿Es puntual o tendencia?'];
+const QUICK=['¿Por dónde empiezo?','Resume la comparación','¿Cómo va la productividad?','¿Cuál es la más rápida?','¿Cuál es la más lenta?','¿Qué área va mejor?','¿Qué área va peor?','Mejores y peores áreas','¿Qué lote tarda más?','¿Cuántas unidades por lote?','¿Ratio despl/picking peor?','¿Desplazamiento total?','¿Tiempo entre lotes?','¿Impacto total?','¿Es puntual o tendencia?','Ayuda'];
 function initChat(){
   $('asScope').textContent=ST.nameA+' vs '+ST.nameB;$('clog').innerHTML='';chatPush('ai',chatIntro());
   if(ST._chatInit)return;ST._chatInit=true;
@@ -2971,7 +2978,11 @@ function answer(q){
     const best=[...bs].sort((a,b)=>mfv(a.prodA)-mfv(b.prodA))[0],worst=[...bs].sort((a,b)=>mfv(b.prodA)-mfv(a.prodA))[0],obj=OBJ_PROD*MF(),ok=bs.filter(m=>mfv(m.prodA)<=obj+0.003).length;
     return 'Objetivo: <b>'+fmt(obj,3)+' '+udName()+'</b>. En '+ST.nameA+', la más rápida es <b>'+best.area+'</b> ('+fmt(mfv(best.prodA),3)+') y la más lenta <b>'+worst.area+'</b> ('+fmt(mfv(worst.prodA),3)+'). Cumplen el objetivo <b>'+ok+' de '+bs.length+'</b> áreas.';
   }
+  if(has('mejores y peores','clasifica','clasificación','clasificacion','ranking de áreas','ranking de areas','ordena las áreas','ordena las areas','mejores áreas','peores áreas','mejores y peores áreas')){const bs=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(a.prodA)-mfv(b.prodA));if(bs.length<2)return 'Sin datos suficientes de productividad.';const top=bs.slice(0,3).map(m=>m.area+' ('+fmt(mfv(m.prodA),3)+')').join(', ');const bot=bs.slice(-3).reverse().map(m=>m.area+' ('+fmt(mfv(m.prodA),3)+')').join(', ');return 'Por productividad en '+ST.nameA+' — <b>mejores</b>: '+top+'. <b>Peores</b>: '+bot+'.';}
+  if(has('más rápida','mas rapida','más rápido','mas rapido','la más veloz','cuál es la más rápida')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(a.prodA)-mfv(b.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más rápida de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(mfv(m.prodA),3)+' '+udName()+').';}
+  if(has('más lenta','mas lenta','más lento','mas lento')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(b.prodA)-mfv(a.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más lenta de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(mfv(m.prodA),3)+' '+udName()+').';}
   if(has('unidad','uds','pedidos','volumen')){const m=[...av].filter(x=>x.udsA!=null).sort((a,b)=>b.udsA-a.udsA)[0];if(!m)return 'Sin datos de unidades por lote.';return 'El lote con más unidades en '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(m.udsA,0)+' uds/lote).';}
+  if(has('impacto total','en total','suma','cuánto pierdo','cuanto pierdo','tiempo total de más','total de más')){const r=byImp();if(!r.length)return 'No hay tiempo de más destacable frente a '+ST.nameB+'.';const tot=r.reduce((sm,m)=>sm+(m.impacto||0),0);return 'En total, frente a '+ST.nameB+' hay <b>'+fmtImpact(tot)+'/mes</b> de más, repartidos en '+r.length+' áreas; la que más pesa es <b>'+r[0].area+'</b>.';}
   if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+'/mes de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
   if(has('caudal','flota MOT','ancla','horario')) return 'El caudal (horas por indicador: ancla, horario, real) está en la pestaña <b>Caudal</b> del menú de arriba.';
   if(has('otra tienda','otras tiendas','ranking','ranquin','mejores tiendas','peores tiendas','comparar tiendas','qué tienda','que tienda')) return 'Para comparar tiendas entre sí usa el modo <b>Ranking de tiendas</b> del menú: ordena por la métrica que quieras y pulsa una para abrirla aquí.';
@@ -3436,7 +3447,7 @@ function renderRanking(){
   const smallLbl=M.k.startsWith('ta_')?"efec ≤6'":(M.k==='g_efec'?"real ≤20'":"efec ≤6'");
   let h='<div class="lo-rkrow" style="cursor:default;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Tienda</div><div style="text-align:center">Distancia al objetivo ('+es(obj,dd)+' '+uLbl+')</div><div style="text-align:right">'+bigLbl+' · <span style="color:var(--ink3)">'+smallLbl+'</span></div></div>';
   top.forEach(x=>{ const slow=x.d>0, w=Math.abs(x.d)/mxd*48;
-    h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}</div>
+    h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}${(window.__CENTRONOM&&window.__CENTRONOM[x.t])?' · '+window.__CENTRONOM[x.t]:''}</div>
       <div class="lo-rkbar"><span class="lo-mid" style="left:50%"></span><i style="${slow?`left:50%;width:${w}%;background:var(--up)`:`right:50%;width:${w}%;background:var(--down)`}"></i></div>
       <div class="lo-rkval"><span style="color:${slow?'var(--up)':'var(--down)'}">${es(x.v,dd)}</span><small style="color:var(--ink3)">${es(x.s,dd)}</small><span class="lo-delta ${slow?'lo-up':'lo-down'}">${slow?'▲':'▼'} ${es(Math.abs(x.d),dd)}</span></div></div>`;
   });
@@ -3462,7 +3473,7 @@ function renderStores(){
   AREAS.forEach(a=>h+=`<th><span class="lo-adot" style="background:${ACOL[a]};margin-right:5px"></span>${a==='PENDIENTES'?'PEND':a.slice(0,5)}<span class="lo-sub">${sub}</span></th>`);
   h+=`<th class="lo-colgrp">Global<span class="lo-sub">${sub}</span></th></tr></thead><tbody>`;
   list.forEach(t=>{ const m=ST.stTrim[t]||{};
-    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${t}</td>`;
+    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${t}${(window.__CENTRONOM&&window.__CENTRONOM[t])?' · '+window.__CENTRONOM[t]:''}</td>`;
     AREAS.forEach(a=>{ const r=m[a]; if(!r){h+='<td class="lo-cell lo-na"><span>·</span></td>';return;}
       const v=stCorteVal(r),o=stCorteVal(ST.objTrim[a]),d=v-o;
       h+=`<td class="lo-cell lo-prod ${isNaN(d)?'':(d<=0?'lo-ok':'lo-bad')}"><span>${es(v*MF(),3)}</span></td>`; });
@@ -3474,6 +3485,7 @@ function renderStores(){
 window.loSelStore=function(t){ ST.sel=String(t); if(ST.detPer!=='trim'&&!(ST.stMes[t]&&ST.stMes[t][ST.detPer]))ST.detPer='trim'; renderStores(); renderDet(); };
 window.loSetDetPer=function(p){ ST.detPer=p; renderDet(); };
 window.loCloseDet=function(){ ST.sel=null; renderStores(); renderDet(); };
+window.loRerenderStores=function(){ try{renderStores();}catch(e){} try{renderRanking();}catch(e){} };
 function renderDet(){
   const t=ST.sel; if(!t){document.getElementById('lo_stDet').innerHTML='<div class="lo-det-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>Pulsa una tienda para ver su desglose por subproceso y comparar meses.</div>';return;}
   const C=cols(ST.corte), cs=activeCols();
@@ -3485,7 +3497,7 @@ function renderDet(){
   // selector de periodo
   let pers=`<button class="${isTrim?'lo-on':''}" onclick="loSetDetPer('trim')">Trimestre</button>`;
   ST.meses.forEach(mm=>{ const has=ST.stMes[t]&&ST.stMes[t][mm]; pers+=`<button class="${per===mm?'lo-on':''}" ${has?'':'disabled style="opacity:.4"'} onclick="loSetDetPer('${mm}')">${fmtMes(mm)}</button>`; });
-  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
+  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}${(window.__CENTRONOM&&window.__CENTRONOM[t])?' · '+window.__CENTRONOM[t]:''}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
     <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div>
     <button class="lo-tg" onclick="ST.sel=null;renderStores();renderDet()">Cerrar ✕</button></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
@@ -3597,6 +3609,7 @@ function build(data){
     ancla:numv(r.ancla), horario:numv(r.horario), real:numv(r.real),
     rr:numv(r.real_real), tiene:String(r.tiene_realreal).trim()==='1'
   }));
+  try{window.__CENTRONOM=Object.fromEntries(ROWS.filter(r=>r.centro&&r.centro_nombre).map(r=>[r.centro,r.centro_nombre]));if(window.loRerenderStores)window.loRerenderStores();}catch(e){}
   OPTS={};
   FDIMS.forEach(d=>{ const s=new Set(); ROWS.forEach(r=>{ if(r[d.k]!=='')s.add(r[d.k]); });
     let arr=[...s];
