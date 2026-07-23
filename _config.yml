@@ -1,10 +1,18 @@
-# GitHub Pages (Jekyll) — solo publicamos el dashboard HTML.
+# GitHub Pages (Jekyll) — solo publicamos el dashboard HTML (Javify.html) y sus iconos.
 # Los CSV se leen desde raw.githubusercontent.com (servicio "raw" de git), NO desde Pages,
 # así que excluirlos del build hace el deploy mucho más ligero y fiable.
 exclude:
   - "*.csv"
   - "*.sql"
   - "*.bak.html"
+  - "*.bak_*.html"                    # backups con fecha (p. ej. ...bak_2026-07-22.html)
+  - "Analisis_Preparacion_NTC*.html"  # versiones antiguas del dashboard (ahora es Javify.html)
+  - "ChatGPT Image*.png"              # imagen fuente del icono, no hace falta publicarla
+  - "favicon-64.png"                  # tamaño de favicon no usado en el HTML
   - "README.md"
   - "CONTEXTO_PROYECTO_NTC.md"
   - "Objetivos_Liebre_NTC.html"
+
+# Archivos que SÍ se publican (deben estar subidos):
+#   Javify.html, site.webmanifest, favicon.ico, favicon-16/32/48.png,
+#   apple-touch-icon.png (+ -120/-152/-167/-192/-512), icon-192-round.png, icon-512-round.png
