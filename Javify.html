@@ -70,7 +70,7 @@ section{margin-top:22px}
 
 .lo-ctrls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin:16px 0 14px}
 .lo-fld label{display:block;font-size:10px;font-weight:750;letter-spacing:.6px;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}
-.lo-seg{display:inline-flex;flex-wrap:wrap;max-width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:3px}
+.lo-seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:3px}
 .lo-seg button{padding:8px 14px;border-radius:999px;background:transparent;border:0;color:var(--ink2);font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap}
 .lo-seg button.lo-on{background:var(--brand);color:#fff;box-shadow:0 3px 9px var(--brand-soft)}
 .lo-seg.lo-sm button{padding:6px 11px;font-size:11px}
@@ -1234,6 +1234,8 @@ body.simple #secPick .grid.g2{display:none!important}
   .rk-f select{min-width:0!important}
   .rk-ctrl .rk-seg button{font-size:11.5px!important;padding:8px 10px!important}
 }
+/* v7.19 · Pareto a 1 columna también en iPad/tablet (el donut quedaba en columna estrecha y se salía) */
+@media(max-width:1024px){#secPareto>.grid{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
@@ -1698,7 +1700,7 @@ body.simple #secPick .grid.g2{display:none!important}
     .cd-grp{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:10px 12px 11px;display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-width:0}
     .cd-grp-h{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--brand)}
     .cd-grp-row{display:flex;flex-wrap:nowrap;gap:7px}
-    .cd-f{position:relative;flex:1 1 165px;min-width:0}
+    .cd-f{position:relative;flex:1 1 0;min-width:0}
     .cd-f>label{display:block;font-size:9px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px;white-space:nowrap}
     .cd-btn{width:100%;min-width:0;padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;align-items:center}
     .cd-btn:hover{border-color:var(--brand-bd)}
@@ -1714,7 +1716,13 @@ body.simple #secPick .grid.g2{display:none!important}
     .cd-p-act{display:flex;gap:6px;margin-bottom:6px;position:sticky;top:0}
     .cd-p-act button{flex:1;padding:6px;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
     .cd-p-act button:hover{color:var(--ink)}
-    .cd-viewbar{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+    .cd-viewbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px 14px;align-items:end}
+    /* Tablet/escritorio: los segmentados llenan su celda con botones que se encogen (no se salen ni se deforman) */
+    @media(min-width:641px){
+      .cd-viewbar .lo-seg{display:flex;width:100%}
+      .cd-viewbar .lo-seg>button{flex:1 1 0;min-width:0;justify-content:center;text-align:center;white-space:nowrap}
+      .cd-viewbar .lo-tin,.cd-viewbar select.lo-tin{width:100%;min-width:0}
+    }
     .cd-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
     .cd-dlbtn{padding:8px 13px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap}
     .cd-dlbtn:hover{color:var(--ink);border-color:var(--brand-bd)}
@@ -2252,7 +2260,7 @@ function renderAll(){
   ['secDiff','secPareto','secPick','secDesplTot','secCont','secFicha'].forEach(id=>{const e=$(id);if(e)e.style.display=ST.single?'none':'';});
   requestAnimationFrame(()=>{resizeCharts();setTimeout(resizeCharts,220);});
 }
-const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalDonut'];
+const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalDonut','cParetoDonut'];
 function resizeCharts(){CHARTS.forEach(id=>{const el=$(id);if(el&&el.data)try{Plotly.Plots.resize(el);}catch(e){}});}
 window.addEventListener('resize',()=>{if(ST.analyzed||ST.mode==='rank')resizeCharts();});
 
