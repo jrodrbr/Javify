@@ -1029,11 +1029,12 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
   table.lo-mx tbody tr:hover td.lo-area{background:var(--panel2)}
   table.lo-mx tbody tr.lo-sel td.lo-area{background:color-mix(in srgb,var(--brand) 14%,var(--panel))}
 
-  /* 7 · Caudal (cd-tbl): 1ª columna (tienda/dimensión) FIJA + cabecera/pie opacos, sin transparencias */
-  table.cd-tbl thead th:first-child,table.cd-tbl tbody td:first-child,table.cd-tbl tfoot td:first-child{position:sticky;left:0;background:var(--panel);z-index:3}
-  table.cd-tbl thead th{background:var(--panel3)}
-  table.cd-tbl thead th:first-child{z-index:6;background:var(--panel3)}
-  table.cd-tbl tfoot td:first-child{z-index:6;background:var(--panel2)}
+  /* 7 · Caudal (cd-tbl): SOLO la 1ª columna (número) fija, OPACA de verdad y estrecha (el nombre no se fija para que quepa la tabla) */
+  table.cd-tbl thead th{background:var(--panel3)!important}
+  table.cd-tbl tbody td:first-child{position:sticky;left:0;background:var(--panel)!important;z-index:3;min-width:44px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  table.cd-tbl thead th:first-child{position:sticky;left:0;z-index:6;background:var(--panel3)!important;min-width:44px;max-width:62px}
+  table.cd-tbl tfoot td:first-child{position:sticky;left:0;z-index:6;background:var(--panel2)!important}
+  table.cd-tbl tbody tr:hover td:first-child{background:var(--panel2)!important}
 
   /* 8 · Filtro del ranking de Caudal: selects a 14px y a lo ancho (sin min-width fijo en línea) */
   .cd-f select.lo-tin{font-size:14px;min-width:0!important;width:100%}
@@ -1043,13 +1044,15 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
    v7.4 · Modo Simple/Experto + ajustes 3ª ronda (2026-07-22)
    ================================================================== */
 /* — Modo Simple: oculta lo no esencial en TODAS las pantallas —
-   (deja Resumen, Faro, Dónde actuar y Composición; Ranking/Objetivos/Caudal son modos aparte) */
+   (deja Resumen, Faro, Dónde actuar y el equilibrio picking/desplazamiento; Ranking/Objetivos/Caudal son modos aparte) */
 body.simple #secCorte,
-body.simple #secPick,
+body.simple #secReal,
 body.simple #secDesplTot,
 body.simple #secTrend,
 body.simple #secFicha,
 body.simple #mObj{display:none!important}
+/* En Simple, dentro de "Dentro de la preparación" mostrar SOLO el equilibrio (ratios), no las gráficas de picking/desplazamiento */
+body.simple #secPick .grid.g2{display:none!important}
 
 @media(max-width:640px){
   /* — Diferencias/Ranking: la "diferencia" AL LADO de Analizado/Referencia (no bajo el impacto) — */
@@ -1102,18 +1105,18 @@ body.simple #mObj{display:none!important}
   .rk-ctrl{padding:12px;gap:8px}
   .rk-ctrl select,.rk-ctrl input,.rk-ctrl .tin{font-size:14px!important;min-height:40px}
   .rk-f label{font-size:9.5px}
-  /* — Ranking: la diferencia DEBAJO (el nombre de tienda es largo; solo el comparador la lleva al lado) — */
-  #rkList .drow{grid-template-columns:1fr auto;grid-template-areas:"area imp" "vals vals" "delta delta" "spark spark"}
-  #rkList .drow>div:not([class]){grid-area:delta;text-align:left!important;padding-left:0}
+  /* — Ranking: la diferencia a la DERECHA, bajo el valor (min/ud), no bajo la tienda (así no se mueve con el nombre) — */
+  #rkList .drow{grid-template-columns:1fr auto;grid-template-areas:"area imp" "vals delta" "spark spark"}
+  #rkList .drow>div:not([class]){grid-area:delta;text-align:right!important;padding-left:0;align-self:center}
   #rkList .drow .dr-vals{flex-wrap:wrap}
   /* — Pareto: el rosco ocupa TODO el ancho cuando va arriba — */
   #secPareto>.grid>.cbox{width:100%}
   #cParetoDonut{width:100%}
 }
 @media(min-width:641px) and (max-width:980px){
-  /* iPad: ranking con la diferencia también debajo */
-  #rkList .drow{grid-template-areas:"area imp" "vals vals" "delta delta" "spark spark"}
-  #rkList .drow>div:not([class]){grid-area:delta;text-align:left}
+  /* iPad: ranking con la diferencia a la derecha bajo el valor */
+  #rkList .drow{grid-template-columns:1fr auto;grid-template-areas:"area imp" "vals delta" "spark spark"}
+  #rkList .drow>div:not([class]){grid-area:delta;text-align:right}
 }
 
 /* ==================================================================
@@ -1149,12 +1152,35 @@ body.simple #mObj{display:none!important}
 .lo-det-h{padding-right:36px}
 .lo-detClose{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);font-size:15px;line-height:1;cursor:pointer;transition:.15s}
 .lo-detClose:hover{color:var(--ink);border-color:var(--brand)}
-/* Caudal: fijar también el NOMBRE del centro (2ª columna dimensión), no solo el número */
+/* Caudal (modo): al fijar, SOLO el número (col1 estrecha y opaca, ver bloque de arriba); el nombre NO se fija (se comía la tabla) */
+
+/* ==================================================================
+   v7.9 · 9ª ronda: escenarios compactos + tabla-mes de caudal fija (2026-07-23)
+   ================================================================== */
+/* "Evolución 12 meses" del caudal (resumen): columna Mes fija a la izquierda y OPACA */
+#caudalMonthTbl td:first-child,#caudalMonthTbl th:first-child{position:sticky;left:0}
+#caudalMonthTbl td:first-child{background:var(--panel)!important;z-index:2}
+#caudalMonthTbl th:first-child{background:var(--panel2)!important;z-index:4}
 @media(max-width:640px){
-  table.cd-tbl thead th:first-child,table.cd-tbl tbody td:first-child,table.cd-tbl tfoot td:first-child{min-width:56px;max-width:56px}
-  table.cd-tbl td.cd-dim:nth-child(2),table.cd-tbl th.cd-dim:nth-child(2){position:sticky;left:56px;background:var(--panel);z-index:3;max-width:130px}
-  table.cd-tbl thead th.cd-dim:nth-child(2){z-index:6;background:var(--panel3)}
-  table.cd-tbl tfoot td.cd-dim:nth-child(2){z-index:6;background:var(--panel2)}
+  /* "Elige dos escenarios" mucho más compacto en iPhone */
+  #step2 .cpad{padding:12px}
+  #step2 .stp{margin-bottom:6px}
+  #step2 .h-c{font-size:14px}
+  #step2 .s-c{font-size:11.5px;margin-top:2px}
+  #step2 .sgrid{gap:10px;margin-top:10px}
+  #step2 .scn{padding:11px}
+  #step2 .scn-h{margin-bottom:8px}
+  #step2 .scn-ic{width:22px;height:22px}
+  #step2 .scn-name{font-size:12.5px}
+  #step2 .scn-name small{font-size:10px;margin-top:0}
+  #step2 .fld{margin-bottom:8px}
+  #step2 .fld label{font-size:9px;margin-bottom:3px}
+  #step2 select,#step2 .tin,#step2 .combo-in{min-height:38px;padding:8px 10px}
+  #step2 .f3{gap:6px}
+  #step2 .quick{margin-top:8px;gap:5px}
+  #step2 .qb{padding:6px 10px;font-size:11px}
+  #step2 .gorow{margin-top:12px}
+  #step2 .btn-go{padding:11px 22px;font-size:13px}
 }
 </style>
 </head>
@@ -1927,6 +1953,8 @@ function buildFromRows(raw,fname){
 
 /* ===== COMBOBOX BUSCADOR DE TIENDA ===== */
 function genName(t){const o=ST.gen[t];if(!o)return null;for(const mk in o){if(o[mk]&&o[mk].center_name)return o[mk].center_name;}return null;}
+window.genName=genName;
+window.stName=function(t){ if(t==null)return ''; var n=window.genName&&window.genName(t); if(!n&&window.genName){ var d=String(t).replace(/\D/g,''); if(d&&d!==String(t)) n=window.genName(d); } if(!n) n=window.__CENTRONOM&&(window.__CENTRONOM[t]||window.__CENTRONOM[String(t).replace(/\D/g,'')]); return n||''; };
 function comboItems(){const it=[];ST.synthPresent.forEach(t=>it.push({val:t,label:shortStore(t),group:'Referencias',tag:'ref'}));ST.realStores.forEach(t=>{const nm=genName(t);it.push({val:t,label:nm||('Tienda '+t),group:'Tiendas'});});return it;}
 function setCombo(id,val){const inp=$(id);inp.dataset.val=val;inp.value=val?shortStore(val):'';}
 function makeCombo(id){
@@ -2332,7 +2360,7 @@ function renderCaudal(){
   const sEf=genSerie(t,mes?'caudal_efectivo_h_total':'caudal_efectivo_h');
   const sEfT=genSerie(t,'caudal_efectivo_h_total'),sReT=genSerie(t,'caudal_real_h_total');
   const sPar=mes?sReT.map((v,i)=>(v!=null&&sEfT[i]!=null)?v-sEfT[i]:null):genSerie(t,'tiempo_de_paradas_min').map(v=>v==null?null:v/60);
-  const lay=baseLayout({height:268,margin:{l:48,r:16,t:30,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:ink2},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true,zeroline:false,autorange:true,title:{text:'horas',font:{size:10,color:cssv('--ink3')}}}});
+  const lay=baseLayout({height:268,margin:{l:48,r:16,t:56,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.3,x:0,font:{size:10,color:ink2},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true,zeroline:false,autorange:true,title:{text:'horas',font:{size:10,color:cssv('--ink3')}}}});
   // líneas (sin apilar) y eje ajustado a los datos para ver dónde está cada una; Real por encima
   Plotly.react('cCaudal',[
     {x,y:sEf,name:'Efectivas',legendrank:3,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:efc,width:2,shape:'spline'},marker:{size:4}},
@@ -3447,7 +3475,7 @@ function renderRanking(){
   const smallLbl=M.k.startsWith('ta_')?"efec ≤6'":(M.k==='g_efec'?"real ≤20'":"efec ≤6'");
   let h='<div class="lo-rkrow" style="cursor:default;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Tienda</div><div style="text-align:center">Distancia al objetivo ('+es(obj,dd)+' '+uLbl+')</div><div style="text-align:right">'+bigLbl+' · <span style="color:var(--ink3)">'+smallLbl+'</span></div></div>';
   top.forEach(x=>{ const slow=x.d>0, w=Math.abs(x.d)/mxd*48;
-    h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}${(window.__CENTRONOM&&window.__CENTRONOM[x.t])?' · '+window.__CENTRONOM[x.t]:''}</div>
+    h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}${window.stName&&window.stName(x.t)?' · '+window.stName(x.t):''}</div>
       <div class="lo-rkbar"><span class="lo-mid" style="left:50%"></span><i style="${slow?`left:50%;width:${w}%;background:var(--up)`:`right:50%;width:${w}%;background:var(--down)`}"></i></div>
       <div class="lo-rkval"><span style="color:${slow?'var(--up)':'var(--down)'}">${es(x.v,dd)}</span><small style="color:var(--ink3)">${es(x.s,dd)}</small><span class="lo-delta ${slow?'lo-up':'lo-down'}">${slow?'▲':'▼'} ${es(Math.abs(x.d),dd)}</span></div></div>`;
   });
@@ -3473,7 +3501,7 @@ function renderStores(){
   AREAS.forEach(a=>h+=`<th><span class="lo-adot" style="background:${ACOL[a]};margin-right:5px"></span>${a==='PENDIENTES'?'PEND':a.slice(0,5)}<span class="lo-sub">${sub}</span></th>`);
   h+=`<th class="lo-colgrp">Global<span class="lo-sub">${sub}</span></th></tr></thead><tbody>`;
   list.forEach(t=>{ const m=ST.stTrim[t]||{};
-    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${t}${(window.__CENTRONOM&&window.__CENTRONOM[t])?' · '+window.__CENTRONOM[t]:''}</td>`;
+    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${t}${window.stName&&window.stName(t)?' · '+window.stName(t):''}</td>`;
     AREAS.forEach(a=>{ const r=m[a]; if(!r){h+='<td class="lo-cell lo-na"><span>·</span></td>';return;}
       const v=stCorteVal(r),o=stCorteVal(ST.objTrim[a]),d=v-o;
       h+=`<td class="lo-cell lo-prod ${isNaN(d)?'':(d<=0?'lo-ok':'lo-bad')}"><span>${es(v*MF(),3)}</span></td>`; });
@@ -3497,7 +3525,7 @@ function renderDet(){
   // selector de periodo
   let pers=`<button class="${isTrim?'lo-on':''}" onclick="loSetDetPer('trim')">Trimestre</button>`;
   ST.meses.forEach(mm=>{ const has=ST.stMes[t]&&ST.stMes[t][mm]; pers+=`<button class="${per===mm?'lo-on':''}" ${has?'':'disabled style="opacity:.4"'} onclick="loSetDetPer('${mm}')">${fmtMes(mm)}</button>`; });
-  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}${(window.__CENTRONOM&&window.__CENTRONOM[t])?' · '+window.__CENTRONOM[t]:''}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
+  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}${window.stName&&window.stName(t)?' · '+window.stName(t):''}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
     <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div>
     <button class="lo-tg" onclick="ST.sel=null;renderStores();renderDet()">Cerrar ✕</button></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
