@@ -70,7 +70,7 @@ section{margin-top:22px}
 
 .lo-ctrls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin:16px 0 14px}
 .lo-fld label{display:block;font-size:10px;font-weight:750;letter-spacing:.6px;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}
-.lo-seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:3px}
+.lo-seg{display:inline-flex;flex-wrap:wrap;max-width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:3px}
 .lo-seg button{padding:8px 14px;border-radius:999px;background:transparent;border:0;color:var(--ink2);font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap}
 .lo-seg button.lo-on{background:var(--brand);color:#fff;box-shadow:0 3px 9px var(--brand-soft)}
 .lo-seg.lo-sm button{padding:6px 11px;font-size:11px}
@@ -83,7 +83,7 @@ table.lo-mx th,table.lo-mx td{padding:11px 11px;text-align:right;border-bottom:1
 table.lo-mx thead th{position:sticky;top:0;background:var(--panel3);color:var(--ink2);font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;z-index:2}
 table.lo-mx thead th .lo-sub{display:block;font-size:9px;font-weight:600;color:var(--ink3);letter-spacing:0;text-transform:none;margin-top:2px}
 table.lo-mx td.lo-area,table.lo-mx th.lo-area{text-align:left;position:sticky;left:0;background:var(--panel);z-index:1;font-weight:750;color:var(--ink);width:118px}
-table.lo-mx td,table.lo-mx th{overflow:hidden;text-overflow:ellipsis}
+table.lo-mx th,table.lo-mx td.lo-area{overflow:hidden;text-overflow:ellipsis}
 table.lo-mx thead th.lo-area{background:var(--panel3);z-index:3}
 table.lo-mx tbody tr:hover td,table.lo-mx tbody tr:hover td.lo-area{background:var(--panel2)}
 table.lo-mx tbody tr.lo-sel td,table.lo-mx tbody tr.lo-sel td.lo-area{background:var(--brand-soft)}
@@ -1030,7 +1030,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
 
   /* 4 · Pareto: la rejilla lleva grid-template-columns en línea (1.7fr 1fr) → forzar 1 columna */
   #secPareto>.grid{grid-template-columns:1fr!important}
-  #cParetoDonut{height:240px!important}
+  #cParetoDonut{height:310px!important}
   #secPareto .ctitle{font-size:13.5px}
   #secPareto .csub{font-size:11.5px}
 
@@ -1421,7 +1421,7 @@ body.simple #secPick .grid.g2{display:none!important}
     <div class="sec" id="secPareto">
       <div class="sec-hd"><div>
         <div class="sec-n">Prioridad · área + fase</div>
-        <div class="sec-h">Qué combinación concreta revisar primero</div>
+        <div class="sec-h">Qué combinación revisar primero</div>
         <div class="sec-s">Cada fila es un <b>área + fase</b> ordenada por el tiempo de más al mes. Pulsa para ver su detalle.</div>
       </div></div>
       <div class="grid" style="grid-template-columns:1.7fr 1fr;gap:16px;align-items:start">
@@ -1670,10 +1670,18 @@ body.simple #secPick .grid.g2{display:none!important}
               <option value="prod">Productividad global ↑</option>
               <option value="code">Código</option>
             </select></div>
+          <div class="lo-fld"><label>Mostrar</label>
+            <div class="lo-seg lo-sm" id="lo_stCountSeg">
+              <button data-v="10">10</button>
+              <button data-v="20" class="lo-on">20</button>
+              <button data-v="50">50</button>
+              <button data-v="999">Todas</button>
+            </div></div>
         </div>
         <div class="lo-det" id="lo_stDet"><div class="lo-det-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>Pulsa una tienda para ver su desglose por subproceso y comparar meses.</div></div>
         <div style="display:flex;justify-content:flex-end;margin-bottom:6px;margin-top:16px"><button class="csv" style="position:static" data-csv="lo_stTbl" data-csvname="objetivos_tiendas">⤓ CSV</button></div>
         <div class="lo-tbl-wrap"><table class="lo-mx" id="lo_stTbl"></table></div>
+        <div id="lo_stNote" style="font-size:11px;color:var(--ink3);margin-top:8px"></div>
       </div>
     </section>
 
@@ -1690,7 +1698,7 @@ body.simple #secPick .grid.g2{display:none!important}
     .cd-grp{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:10px 12px 11px;display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-width:0}
     .cd-grp-h{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--brand)}
     .cd-grp-row{display:flex;flex-wrap:nowrap;gap:7px}
-    .cd-f{position:relative;flex:1 1 0;min-width:0}
+    .cd-f{position:relative;flex:1 1 165px;min-width:0}
     .cd-f>label{display:block;font-size:9px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px;white-space:nowrap}
     .cd-btn{width:100%;min-width:0;padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;align-items:center}
     .cd-btn:hover{border-color:var(--brand-bd)}
@@ -3261,7 +3269,7 @@ function cellInner2(v,isPct,mx,dec){ if(v==null||isNaN(v))return'<span class="lo
   return `<span>${isPct?es(v,1)+'%':es(v,dec)}</span>`; }
 
 const ST={corte:'util',mode:'min',uunit:'mo',per:'trim',mes:null,group:'agr',sel:null,detPer:'trim',monArea:'GLOBAL',
-  rkMetric:'g_real',rkOrder:'worst',rkCount:10,stCorte:'util',calcCorte:'util',calcView:'min',calcUnit:'merc',stSort:'prod',stSearch:'',
+  rkMetric:'g_real',rkOrder:'worst',rkCount:10,stCorte:'util',calcCorte:'util',calcView:'min',calcUnit:'merc',stSort:'prod',stSearch:'',stCount:20,
   objTrim:{},objMes:{},stTrim:{},stMes:{},glob:{trimGen:null,mesGen:{},trimStore:{},mesStore:{}},meses:[],stores:[],hasOf:false};
 
 window.loInit=function(){ if(window._loInit)return; window._loInit=1; Papa.parse(CSV_URL+(CSV_URL.includes('?')?'&':'?')+'cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
@@ -3548,6 +3556,9 @@ function renderStores(){
   if(ST.stSearch){const q=ST.stSearch.toLowerCase();list=list.filter(t=>String(t).toLowerCase().includes(q));}
   if(ST.stSort==='prod')list.sort((a,b)=>(storeGlobCorte(a)||9)-(storeGlobCorte(b)||9));
   else list.sort((a,b)=>(+a||0)-(+b||0));
+  const totalN=list.length;
+  const lim=(ST.stSearch||ST.stCount>=999)?list.length:(ST.stCount||20);
+  list=list.slice(0,lim);
   const sub=(ST.stCorte==='par'?udName()+' paradas':udName());
   const og=globObjCorte();
   let h='<thead><tr><th class="lo-area">Tienda</th>';
@@ -3562,8 +3573,9 @@ function renderStores(){
   });
   if(!list.length)h+='<tr><td class="lo-area">—</td><td class="lo-cell lo-na" colspan="8"><span>Sin resultados</span></td></tr>';
   document.getElementById('lo_stTbl').innerHTML=h+'</tbody>';
+  try{var _n=document.getElementById('lo_stNote');if(_n)_n.textContent='Mostrando '+list.length+' de '+totalN+' tiendas'+(ST.stSearch?' · búsqueda "'+ST.stSearch+'"':'')+'.';}catch(e){}
 }
-window.loSelStore=function(t){ ST.sel=String(t); if(ST.detPer!=='trim'&&!(ST.stMes[t]&&ST.stMes[t][ST.detPer]))ST.detPer='trim'; renderStores(); renderDet(); };
+window.loSelStore=function(t){ ST.sel=String(t); if(ST.detPer!=='trim'&&!(ST.stMes[t]&&ST.stMes[t][ST.detPer]))ST.detPer='trim'; renderStores(); renderDet(); try{var _d=document.getElementById('lo_stDet');if(_d)_d.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){} };
 window.loSetDetPer=function(p){ ST.detPer=p; renderDet(); };
 window.loCloseDet=function(){ ST.sel=null; renderStores(); renderDet(); };
 window.loRerenderStores=function(){ try{renderStores();}catch(e){} try{renderRanking();}catch(e){} };
@@ -3622,6 +3634,7 @@ function wire(){
   seg('lo_stCorteSeg',v=>{ST.stCorte=v;renderStores();});
   document.getElementById('lo_stSearch').addEventListener('input',e=>{ST.stSearch=e.target.value.trim();renderStores();});
   document.getElementById('lo_stSort').addEventListener('change',e=>{ST.stSort=e.target.value;renderStores();});
+  seg('lo_stCountSeg',v=>{ST.stCount=+v;renderStores();});
   // tooltip faro
   const faro=document.getElementById('lo_faro');
   faro.addEventListener('mousemove',e=>{const s=e.target.closest('[data-min]');if(s){tipShow(`<b>${s.dataset.nm}</b><br>${s.dataset.min} min/lote · ${s.dataset.pct}%`,e.clientX,e.clientY);}else tipHide();});
@@ -3838,10 +3851,10 @@ function renderChart(agg){
   const pad=Math.max(maxY*0.06,0.6);
   const lay={margin:{l:56,r:16,t:8,b:(x[0]&&x[0].length>5)?70:44},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
     font:{color:ink,family:'Inter,sans-serif',size:12},
-    xaxis:{type:'category',tickmode:'array',tickvals:tv,ticktext:tv,tickangle:n>14?-45:0,automargin:true,showgrid:false},
-    yaxis:{title:{text:'Horas'},gridcolor:line,zeroline:false,range:[-pad,maxY*1.10]},
-    legend:{orientation:'h',y:1.15,x:0},hovermode:'x unified'};
-  Plotly.react(box,traces,lay,{displayModeBar:false,responsive:true});
+    xaxis:{type:'category',tickmode:'array',tickvals:tv,ticktext:tv,tickangle:n>14?-45:0,automargin:true,showgrid:false,fixedrange:true},
+    yaxis:{title:{text:'Horas'},gridcolor:line,zeroline:false,range:[-pad,maxY*1.10],fixedrange:true},
+    legend:{orientation:'h',y:1.15,x:0},hovermode:'x unified',dragmode:false};
+  Plotly.react(box,traces,lay,{displayModeBar:false,responsive:true,scrollZoom:false,doubleClick:false});
 }
 function downloadChart(){ const box=$('cd_chart'); if(typeof Plotly==='undefined'||!box||!box.data)return;
   try{ Plotly.downloadImage(box,{format:'png',filename:'caudal_grafica',width:1500,height:640,scale:2}); }catch(e){} }
