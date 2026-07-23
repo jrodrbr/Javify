@@ -3939,11 +3939,11 @@ window.addEventListener('resize',()=>{ if(LOADED&&$('caudalTab')&&$('caudalTab')
 (function(){
   var b=document.getElementById('simpleBtn'); if(!b) return;
   function apply(m){ document.body.classList.toggle('simple', m==='simple'); b.textContent='Modo: '+(m==='simple'?'Simple':'Experto'); }
-  var m='simple'; try{ m=localStorage.getItem('ntc_mode')||'simple'; }catch(e){}
+  var m='simple'; try{ m=localStorage.getItem('ntc_mode2')||'simple'; }catch(e){}
   apply(m);
   b.addEventListener('click',function(){
     m=document.body.classList.contains('simple')?'experto':'simple';
-    try{ localStorage.setItem('ntc_mode',m); }catch(e){}
+    try{ localStorage.setItem('ntc_mode2',m); }catch(e){}
     apply(m);
     // Objetivos no es para modo Simple: al pasar a Simple estando en Objetivos, ir a Comparar tienda
     if(m==='simple'){ var mo=document.getElementById('mObj'); if(mo&&mo.classList.contains('on')){ var mc=document.getElementById('mComp'); if(mc) mc.click(); } }
