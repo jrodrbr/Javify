@@ -1182,6 +1182,27 @@ body.simple #secPick .grid.g2{display:none!important}
   #step2 .gorow{margin-top:12px}
   #step2 .btn-go{padding:11px 22px;font-size:13px}
 }
+
+/* ==================================================================
+   v7.10 · flujo sin desbordes + ranking objetivos truncado + panel de ajustes (2026-07-23)
+   ================================================================== */
+.fcard{overflow:hidden}
+.fg-loop .fname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fg-loop .fdesc{overflow:hidden}
+/* Ranking de objetivos: nombre a ancho fijo, se corta con … (sin varios saltos de línea) */
+.lo-rkname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* Ocultar asistente (sustituido por Ajustes) */
+#fab,#assistant{display:none!important}
+/* Botón flotante de Ajustes (⚙) + panel con Modo/Vista/Unidad/Tema */
+#cfgFab{display:flex}
+#cfgPanel{position:fixed;right:16px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:63;width:236px;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line2);border-radius:var(--r);box-shadow:var(--sh-lg);padding:12px;display:none;flex-direction:column;gap:8px}
+#cfgPanel.open{display:flex}
+#cfgPanel .cfg-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);margin-bottom:2px}
+#cfgPanel .cfg-x{width:26px;height:26px;border-radius:7px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);cursor:pointer;font-size:13px;line-height:1}
+#cfgPanel .tg{width:100%;justify-content:center;text-align:center;min-height:40px}
+@media(max-width:640px){
+  #cfgPanel{right:12px;left:12px;width:auto;max-width:none;bottom:calc(76px + env(safe-area-inset-bottom))}
+}
 </style>
 </head>
 <body>
@@ -1194,12 +1215,6 @@ body.simple #secPick .grid.g2{display:none!important}
         <div class="hdr-ey">Mercadona Online</div>
         <div class="hdr-t">Análisis de preparación NTC</div>
       </div>
-    </div>
-    <div class="hdr-r">
-      <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial: resumen, faro, dónde actuar y composición) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
-      <button class="tg" id="unitBtn" title="Unidad de la productividad en todo el panel: MO (Mercadona Online) o Mercadona (×1,08). Los tiempos y el caudal no cambian.">Unidad: MO</button>
-      <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques (Preparación=P1+P2+P3, Pesaje, Consolidación=P5+P6, Entre lotes) o desglosadas. Afecta al faro, a la composición de tiempos, a la vista de objetivos y a sus tendencias de 12 meses.">Vista: Desglosado</button>
-      <button class="tg" id="themeBtn">Tema: Claro</button>
     </div>
   </div>
 
@@ -1271,9 +1286,9 @@ body.simple #secPick .grid.g2{display:none!important}
           <div class="fgroup">
             <div class="fg-head"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0 1 13-3l3 3M20 15a8 8 0 0 1-13 3l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v5h-5M4 20v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Preparación · en bucle</div>
             <div class="fg-loop">
-              <div class="fcard" style="--c:var(--f-picking)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14l-1 9H6L5 8zm2.5 0 1-4h7l1 4M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div><div class="fname">Picking</div><div class="fdesc">Coger el producto.</div><div class="fcode">P2</div></div>
+              <div class="fcard" style="--c:var(--f-picking)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14l-1 9H6L5 8zm2.5 0 1-4h7l1 4M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div><div class="fname">Picking</div><div class="fdesc">Coger.</div><div class="fcode">P2</div></div>
               <div class="fg-cyc"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0 1 13-3l3 3M20 15a8 8 0 0 1-13 3l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v5h-5M4 20v-5h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-              <div class="fcard" style="--c:var(--f-despl)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M13 4a1.6 1.6 0 1 0 0-.01M7 21l3-5 1-4-3 1-2 4m6-1 3 2 1 4M11 12l4-1 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="fname">Desplazamiento</div><div class="fdesc">Andar hasta el siguiente.</div><div class="fcode">P3</div></div>
+              <div class="fcard" style="--c:var(--f-despl)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M13 4a1.6 1.6 0 1 0 0-.01M7 21l3-5 1-4-3 1-2 4m6-1 3 2 1 4M11 12l4-1 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="fname">Desplaz.</div><div class="fdesc">Moverse.</div><div class="fcode">P3</div></div>
             </div>
             <div class="fg-note">No es uno y luego el otro: <b>se alternan sin parar</b> hasta tener todo el pedido. Es el grueso del tiempo del lote.</div>
           </div>
@@ -1288,9 +1303,9 @@ body.simple #secPick .grid.g2{display:none!important}
           <div class="fgroup">
             <div class="fg-head"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0 1 13-3l3 3M20 15a8 8 0 0 1-13 3l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v5h-5M4 20v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Preparación · en bucle</div>
             <div class="fg-loop">
-              <div class="fcard" style="--c:var(--f-picking)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14l-1 9H6L5 8zm2.5 0 1-4h7l1 4M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div><div class="fname">Picking</div><div class="fdesc">Coger el producto.</div><div class="fcode">P2</div></div>
+              <div class="fcard" style="--c:var(--f-picking)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14l-1 9H6L5 8zm2.5 0 1-4h7l1 4M9 12h6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></div><div class="fname">Picking</div><div class="fdesc">Coger.</div><div class="fcode">P2</div></div>
               <div class="fg-cyc"><svg viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0 1 13-3l3 3M20 15a8 8 0 0 1-13 3l-3-3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4v5h-5M4 20v-5h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-              <div class="fcard" style="--c:var(--f-despl)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M13 4a1.6 1.6 0 1 0 0-.01M7 21l3-5 1-4-3 1-2 4m6-1 3 2 1 4M11 12l4-1 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="fname">Desplazamiento</div><div class="fdesc">Andar hasta el siguiente.</div><div class="fcode">P3</div></div>
+              <div class="fcard" style="--c:var(--f-despl)"><div class="ficon"><svg viewBox="0 0 24 24" fill="none"><path d="M13 4a1.6 1.6 0 1 0 0-.01M7 21l3-5 1-4-3 1-2 4m6-1 3 2 1 4M11 12l4-1 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="fname">Desplaz.</div><div class="fdesc">Moverse.</div><div class="fcode">P3</div></div>
             </div>
             <div class="fg-note">Coger el producto y desplazarse <b>se alternan sin parar</b> hasta completar el pedido. Es el grueso del tiempo del lote (Preparación).</div>
           </div>
@@ -1749,6 +1764,14 @@ body.simple #secPick .grid.g2{display:none!important}
 </div><!-- /.wrap -->
 
 <!-- ASISTENTE FLOTANTE -->
+<button class="fab" id="cfgFab" title="Ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+<div class="cfg-panel" id="cfgPanel" role="dialog" aria-label="Ajustes">
+  <div class="cfg-h"><span>Ajustes</span><button class="cfg-x" id="cfgClose" aria-label="Cerrar">✕</button></div>
+  <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
+  <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques o desglosadas. Afecta al faro, la composición, objetivos y tendencias.">Vista: Desglosado</button>
+  <button class="tg" id="unitBtn" title="Unidad de la productividad: MO (Mercadona Online) o Mercadona (×1,08). Tiempos y caudal no cambian.">Unidad: MO</button>
+  <button class="tg" id="themeBtn">Tema: Claro</button>
+</div>
 <button class="fab" id="fab" style="display:none"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor"/></svg></button>
 <div class="assistant" id="assistant">
   <div class="as-head">
@@ -1954,7 +1977,7 @@ function buildFromRows(raw,fname){
 /* ===== COMBOBOX BUSCADOR DE TIENDA ===== */
 function genName(t){const o=ST.gen[t];if(!o)return null;for(const mk in o){if(o[mk]&&o[mk].center_name)return o[mk].center_name;}return null;}
 window.genName=genName;
-window.stName=function(t){ if(t==null)return ''; var n=window.genName&&window.genName(t); if(!n&&window.genName){ var d=String(t).replace(/\D/g,''); if(d&&d!==String(t)) n=window.genName(d); } if(!n) n=window.__CENTRONOM&&(window.__CENTRONOM[t]||window.__CENTRONOM[String(t).replace(/\D/g,'')]); return n||''; };
+window.stName=function(t){ if(t==null)return ''; var n=window.genName&&window.genName(t); if(!n&&window.genName){ var d=String(t).replace(/\D/g,''); if(d&&d!==String(t)) n=window.genName(d); } if(!n) n=window.__CENTRONOM&&(window.__CENTRONOM[t]||window.__CENTRONOM[String(t).replace(/\D/g,'')]); if(n){ n=String(n).replace(/\s*\([^)]*\)\s*$/,'').trim(); } return n||''; };
 function comboItems(){const it=[];ST.synthPresent.forEach(t=>it.push({val:t,label:shortStore(t),group:'Referencias',tag:'ref'}));ST.realStores.forEach(t=>{const nm=genName(t);it.push({val:t,label:nm||('Tienda '+t),group:'Tiendas'});});return it;}
 function setCombo(id,val){const inp=$(id);inp.dataset.val=val;inp.value=val?shortStore(val):'';}
 function makeCombo(id){
@@ -3473,10 +3496,9 @@ function renderRanking(){
   const mxd=Math.max(0.0001,...arr.map(x=>Math.abs(x.d)));
   const bigLbl=M.unit.includes('lote')?"t/lote ≤20'":"real ≤20'";
   const smallLbl=M.k.startsWith('ta_')?"efec ≤6'":(M.k==='g_efec'?"real ≤20'":"efec ≤6'");
-  let h='<div class="lo-rkrow" style="cursor:default;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Tienda</div><div style="text-align:center">Distancia al objetivo ('+es(obj,dd)+' '+uLbl+')</div><div style="text-align:right">'+bigLbl+' · <span style="color:var(--ink3)">'+smallLbl+'</span></div></div>';
-  top.forEach(x=>{ const slow=x.d>0, w=Math.abs(x.d)/mxd*48;
-    h+=`<div class="lo-rkrow" onclick="loSelStore('${x.t}')"><div class="lo-rkname">Tienda ${x.t}${window.stName&&window.stName(x.t)?' · '+window.stName(x.t):''}</div>
-      <div class="lo-rkbar"><span class="lo-mid" style="left:50%"></span><i style="${slow?`left:50%;width:${w}%;background:var(--up)`:`right:50%;width:${w}%;background:var(--down)`}"></i></div>
+  let h='<div class="lo-rkrow" style="cursor:default;grid-template-columns:1fr auto;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Tienda · objetivo '+es(obj,dd)+' '+uLbl+'</div><div style="text-align:right">'+bigLbl+' · <span style="color:var(--ink3)">'+smallLbl+'</span></div></div>';
+  top.forEach(x=>{ const slow=x.d>0;
+    h+=`<div class="lo-rkrow" style="grid-template-columns:1fr auto" onclick="loSelStore('${x.t}')"><div class="lo-rkname">${window.stName(x.t)||('Tienda '+x.t)}</div>
       <div class="lo-rkval"><span style="color:${slow?'var(--up)':'var(--down)'}">${es(x.v,dd)}</span><small style="color:var(--ink3)">${es(x.s,dd)}</small><span class="lo-delta ${slow?'lo-up':'lo-down'}">${slow?'▲':'▼'} ${es(Math.abs(x.d),dd)}</span></div></div>`;
   });
   document.getElementById('lo_rkBox').innerHTML=h+`<div style="font-size:11px;color:var(--ink3);margin-top:10px">Centro = objetivo (${es(obj,dd)} ${uLbl}). Número grande = ${M.unit.includes('lote')?'tiempo/lote':'real'}; gris pequeño = ${M.k.startsWith('ta_')?'efectivo':(M.k==='g_efec'?'real':'efectiva')}. Mostrando ${top.length} de ${arr.length}.</div>`;
@@ -3501,7 +3523,7 @@ function renderStores(){
   AREAS.forEach(a=>h+=`<th><span class="lo-adot" style="background:${ACOL[a]};margin-right:5px"></span>${a==='PENDIENTES'?'PEND':a.slice(0,5)}<span class="lo-sub">${sub}</span></th>`);
   h+=`<th class="lo-colgrp">Global<span class="lo-sub">${sub}</span></th></tr></thead><tbody>`;
   list.forEach(t=>{ const m=ST.stTrim[t]||{};
-    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${t}${window.stName&&window.stName(t)?' · '+window.stName(t):''}</td>`;
+    h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${window.stName(t)||('Tienda '+t)}</td>`;
     AREAS.forEach(a=>{ const r=m[a]; if(!r){h+='<td class="lo-cell lo-na"><span>·</span></td>';return;}
       const v=stCorteVal(r),o=stCorteVal(ST.objTrim[a]),d=v-o;
       h+=`<td class="lo-cell lo-prod ${isNaN(d)?'':(d<=0?'lo-ok':'lo-bad')}"><span>${es(v*MF(),3)}</span></td>`; });
@@ -3525,9 +3547,8 @@ function renderDet(){
   // selector de periodo
   let pers=`<button class="${isTrim?'lo-on':''}" onclick="loSetDetPer('trim')">Trimestre</button>`;
   ST.meses.forEach(mm=>{ const has=ST.stMes[t]&&ST.stMes[t][mm]; pers+=`<button class="${per===mm?'lo-on':''}" ${has?'':'disabled style="opacity:.4"'} onclick="loSetDetPer('${mm}')">${fmtMes(mm)}</button>`; });
-  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">Tienda ${t}${window.stName&&window.stName(t)?' · '+window.stName(t):''}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
-    <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div>
-    <button class="lo-tg" onclick="ST.sel=null;renderStores();renderDet()">Cerrar ✕</button></div>`;
+  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">${window.stName(t)||('Tienda '+t)}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
+    <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
   cs.forEach(d=>h+=`<th>${d.s}</th>`); h+=`<th class="lo-colgrp">Total</th><th>Prod</th><th>vs obj área</th></tr></thead><tbody>`;
   AREAS.forEach(a=>{ const r=m[a]; if(!r)return; const o=objSrc[a];
@@ -3885,11 +3906,20 @@ window.addEventListener('resize',()=>{ if(LOADED&&$('caudalTab')&&$('caudalTab')
     m=document.body.classList.contains('simple')?'experto':'simple';
     try{ localStorage.setItem('ntc_mode',m); }catch(e){}
     apply(m);
+    // Objetivos no es para modo Simple: al pasar a Simple estando en Objetivos, ir a Comparar tienda
+    if(m==='simple'){ var mo=document.getElementById('mObj'); if(mo&&mo.classList.contains('on')){ var mc=document.getElementById('mComp'); if(mc) mc.click(); } }
     setTimeout(function(){
       try{ window.dispatchEvent(new Event('resize')); }catch(e){}
       try{ if(window.Plotly) document.querySelectorAll('.js-plotly-plot').forEach(function(el){ try{ window.Plotly.Plots.resize(el); }catch(e){} }); }catch(e){}
     },120);
   });
+})();
+/* Panel de Ajustes flotante (⚙): abre/cierra y se cierra al pulsar fuera */
+(function(){
+  var f=document.getElementById('cfgFab'), p=document.getElementById('cfgPanel'), x=document.getElementById('cfgClose'); if(!f||!p) return;
+  f.addEventListener('click',function(e){ e.stopPropagation(); p.classList.toggle('open'); });
+  if(x) x.addEventListener('click',function(){ p.classList.remove('open'); });
+  document.addEventListener('click',function(e){ if(p.classList.contains('open') && !p.contains(e.target) && e.target!==f && !f.contains(e.target)) p.classList.remove('open'); });
 })();
 </script>
 </body>
