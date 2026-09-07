@@ -26,17 +26,160 @@
 (function(){
   if(!window.Plotly) return;
   var _new=Plotly.newPlot, _react=Plotly.react;
-  function fix(lay,cfg){
+  /* ancho real del hueco donde va la grafica (para medir la leyenda de verdad y no a ojo) */
+  function anchoDe(d,lay){
+    /* el ancho fijo del layout manda: es el caso de las descargas, que se pintan en un div
+       fuera de vista y no dependen del tamano de la ventana */
+    if(lay && lay.width>10) return lay.width;
+    try{ var el=(typeof d==='string')?document.getElementById(d):d;
+      if(el&&el.clientWidth>10) return el.clientWidth; }catch(e){}
+    return (typeof window!=='undefined'&&window.innerWidth)||900;
+  }
+  function fix(lay,cfg,data,d){
     lay=lay||{}; lay.dragmode=false;
+    /* Numeros a la espanola en TODA grafica: coma decimal y punto de millar. Vale para los
+       ejes y para los tooltips, que salian con punto ("0.331"). */
+    if(lay.separators==null) lay.separators=',.';
+    var i,t;
+    /* VALOR REPETIDO EN EL TOOLTIP. Plotly mete en el hover la Y y ADEMAS el 'text' de la
+       serie, y en este dashboard el text ES la misma cifra que va pintada sobre el punto:
+       salia "Efectiva : 0.331" y debajo "0,331". Se quita el text del hover. */
+    if(data&&data.length) for(i=0;i<data.length;i++){ t=data[i];
+      if(t && !t.hovertemplate && !t.hoverinfo && t.text &&
+         typeof t.mode==='string' && t.mode.indexOf('text')>=0){ t.hoverinfo='x+y+name'; }
+    }
+    /* LEYENDA.
+       Medido en el navegador con cinco series a 1300 / 760 / 358 / 300 px de ancho: el
+       reparto POR DEFECTO de Plotly es el que mejor se porta. Da 45 px de aire entre textos
+       en escritorio, baja de fila sola cuando no caben y NUNCA solapa. Forzar un ancho de
+       entrada (entrywidth) es lo que estropeaba las cosas: en 'fraction' las entradas o se
+       tocan o se separan absurdamente, y en 'pixels' bajaba de fila antes de hacer falta.
+       Asi que aqui NO se toca el reparto. Lo que si hace falta es:
+         1) NO poner itemsizing:'constant' -> con eso Plotly dibuja el punto y la raya del
+            simbolo a un tamano fijo grande, que en el movil se comia la entrada;
+         2) letra un punto mas pequena en pantallas estrechas;
+         3) anclar la leyenda por abajo, justo encima del area, para que al crecer lo haga
+            hacia arriba y no hacia dentro de la grafica;
+         4) reservar en el margen de arriba el alto de las filas que va a ocupar. Las filas se
+            calculan simulando el mismo reparto codicioso que hace Plotly (se van sumando
+            entradas y se baja de fila cuando no cabe la siguiente).
+       Si quien llama ya fijo un entrywidth, se respeta y no se calculan filas. */
+    /* En el movil los margenes de escritorio se comen un tercio del ancho. Se aprietan (el
+       automargin de los ejes los vuelve a abrir si las etiquetas no cabrian). */
+    if(anchoDe(d,lay)<=560){
+      lay.margin=lay.margin||{};
+      if(lay.margin.l==null||lay.margin.l>44) lay.margin.l=44;
+      if(lay.margin.r==null||lay.margin.r>12) lay.margin.r=12;
+    }
+    if(lay.legend && lay.legend.orientation==='h'){
+      var vis=[];
+      if(data&&data.length) for(i=0;i<data.length;i++){ if(data[i]&&data[i].showlegend!==false) vis.push(String(data[i].name||'')); }
+      if(vis.length>1){
+        var ancho=anchoDe(d,lay);
+        var fs=(lay.legend.font&&lay.legend.font.size)||11;
+        if(ancho<=560 && fs>10){ fs=10;
+          lay.legend.font={size:fs,color:(lay.legend.font&&lay.legend.font.color)||undefined,
+                           family:(lay.legend.font&&lay.legend.font.family)||undefined}; }
+        if(lay.legend.itemsizing==='constant') delete lay.legend.itemsizing;
+        if(lay.legend.y!=null && lay.legend.y>=1){ lay.legend.y=1.03; lay.legend.yanchor='bottom'; }
+        if(lay.legend.entrywidth==null){
+          var iw=lay.legend.itemwidth||30;
+          var libre=Math.max(140, ancho - (((lay.margin&&lay.margin.l)||50) + ((lay.margin&&lay.margin.r)||20)));
+          /* ancho de una entrada: simbolo + texto (medido: 0,55 x el tamano de letra por
+             caracter) + aire. El coeficiente va un poco por encima de lo que mide la fuente a
+             proposito: si la cuenta se queda corta, la ultima fila se mete en la grafica. */
+          /* OJO: Plotly gasta por entrada entrywidth + itemwidth, no solo entrywidth. Con
+             cinco series y el hueco justo eso bajaba la ultima de fila sin necesidad. */
+          var mide=function(t){ return iw + t.length*fs*0.55 + 22; };
+          var largo=0; for(i=0;i<vis.length;i++) if(vis[i].length>largo) largo=vis[i].length;
+          var anchoTexto=Math.ceil(largo*fs*0.55 + 22);
+          var entrada=iw+anchoTexto;
+          /* Con sitio de sobra (escritorio y el lienzo de 1800 px de las descargas) se fija el
+             ancho de columna: Plotly por defecto deja 2 px entre una entrada y el simbolo de
+             la siguiente y el texto se ve pegado, que es lo que pasaba en las imagenes
+             descargadas. En pantalla estrecha NO se fija: ahi el reparto por defecto es el que
+             mejor se porta (medido) y cualquier ancho impuesto acaba recortando. */
+          /* Solo en el lienzo de las descargas (1800 px). En pantalla, hasta en un Mac
+             ancho, se deja el reparto por defecto: es el que mejor se porta (medido) y al
+             imponer un ancho Plotly bajaba de fila sin necesidad. */
+          if(ancho>=1500){
+            var cols=Math.max(1,Math.min(vis.length,Math.floor(libre/entrada)));
+            lay.legend.entrywidthmode='pixels';
+            lay.legend.entrywidth=Math.max(anchoTexto,
+              Math.min(Math.floor(libre*0.98/cols)-iw, Math.round(anchoTexto*1.7)));
+          }
+          var filas=1, usado=0, paso=(lay.legend.entrywidth?lay.legend.entrywidth+iw:0);
+          for(i=0;i<vis.length;i++){
+            var w=paso?paso:mide(vis[i]);
+            if(usado>0 && usado+w>libre){ filas++; usado=w; } else usado+=w;
+          }
+          /* con ancho impuesto Plotly a veces necesita una fila mas de la que sale de la
+             cuenta: se reserva una de propina (en la imagen sobran 50 px de margen y no se
+             nota, y a cambio la leyenda nunca pisa la grafica) */
+          if(paso) filas++;
+          lay.margin=lay.margin||{};
+          lay.margin.t=Math.max(lay.margin.t||0, 8+filas*Math.round(fs*1.9));
+        }
+      }
+    }
     if(lay.xaxis){ lay.xaxis.fixedrange=true; } else { lay.xaxis={fixedrange:true}; }
     if(lay.yaxis){ lay.yaxis.fixedrange=true; } else { lay.yaxis={fixedrange:true}; }
+    /* Etiqueta de hover: la MISMA en todas las graficas. Aqui van la letra, el color del
+       texto y el color de respaldo del fondo; el redondeo de la caja lo pone el modulo
+       "tooltips redondeados" del final del fichero. */
+    var _cs=getComputedStyle(document.documentElement), _v=function(n){return _cs.getPropertyValue(n).trim();};
+    var _movil=(typeof window!=='undefined'&&window.innerWidth<=560);
+    lay.hoverlabel={bgcolor:_v('--tip-bg')||_v('--panel'), bordercolor:_v('--tip-bd')||_v('--line2'),
+      align:'left', namelength:_movil?24:40,
+      font:{family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif',
+            size:_movil?11:12.5, color:_v('--ink')}};
     cfg=cfg||{};
     cfg.displayModeBar=false; cfg.scrollZoom=false; cfg.doubleClick=false;
     cfg.showAxisDragHandles=false; cfg.showAxisRangeEntryBoxes=false; cfg.editable=false;
     return [lay,cfg];
   }
-  Plotly.newPlot=function(d,data,lay,cfg){ var f=fix(lay,cfg); return _new.call(Plotly,d,data,f[0],f[1]); };
-  Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg); return _react.call(Plotly,d,data,f[0],f[1]); };
+  /* ------------------------------------------------------------------------------------
+     GRAFICAS PINTADAS CON LA TARJETA OCULTA
+     Si al pintar el contenedor no tiene ancho (seccion en display:none, pestana sin abrir,
+     el panel todavia oculto mientras cargan los datos), Plotly usa su tamano por defecto,
+     700x450, y al mostrarse la tarjeta se queda con ese tamano: se veia el titulo y el
+     subtitulo pero no la grafica, y solo se arreglaba moviendo la ventana. Pasaba con
+     Desplazamiento total y Tiempo entre lotes.
+     No se puede posponer el pintado (el resto del codigo cuenta con que el div ya tiene
+     datos), asi que se pinta igual, se apunta el div y un vigia le manda un resize en cuanto
+     tiene ancho de verdad. El vigia solo corre mientras haya algo pendiente.
+     ------------------------------------------------------------------------------------ */
+  var pendientes=[], vigia=null, vueltas=0;
+  function vigilar(){
+    if(vigia||!pendientes.length) return;
+    vueltas=0;
+    vigia=setInterval(function(){
+      vueltas++;
+      for(var i=pendientes.length-1;i>=0;i--){
+        var el=pendientes[i];
+        if(!el || el.isConnected===false || !el.parentNode){ pendientes.splice(i,1); continue; }
+        if(el.clientWidth>10 && el.clientHeight>10){
+          pendientes.splice(i,1);
+          try{ var p=Plotly.Plots.resize(el); if(p&&p.catch) p.catch(function(){}); }catch(e){}
+        }
+      }
+      /* 2 minutos de vigilancia como maximo: si en ese tiempo no se ha mostrado, es que esa
+         tarjeta no se va a abrir, y cuando se abra el ResizeObserver del final se encarga */
+      if(!pendientes.length || vueltas>480){ clearInterval(vigia); vigia=null; }
+    },250);
+  }
+  function apuntar(d){
+    var el=null;
+    try{ el=(typeof d==='string')?document.getElementById(d):d; }catch(e){}
+    if(!el || !el.style) return;
+    if(el.clientWidth>10 && el.clientHeight>10) return;   // se pinto bien
+    if(pendientes.indexOf(el)<0) pendientes.push(el);
+    vigilar();
+  }
+  Plotly.newPlot=function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
+    var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); return r; };
+  Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
+    var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); return r; };
 })();
 /* Sin zoom en la PAGINA: ni pellizco, ni doble toque, ni ctrl+rueda (se comporta como una app) */
 (function(){
@@ -181,9 +324,7 @@ table.lo-mx tr.lo-detrow .lo-det{margin:10px 0 14px;box-shadow:var(--sh-sm)}
 .lo-note.lo-info .lo-ic{color:var(--brand)}.lo-note.lo-warn .lo-ic{color:var(--warn)}
 .lo-foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink3);line-height:1.6}
 .lo-foot code{font-family:ui-monospace,monospace;color:var(--ink2)}
-#lo_tip{position:fixed;z-index:80;pointer-events:none;background:var(--panel3);border:1px solid var(--line2);border-radius:8px;padding:7px 11px;font-size:12px;color:var(--ink);box-shadow:var(--sh);opacity:0;transition:opacity .1s;white-space:nowrap}
-#lo_tip.lo-on{opacity:1}
-#lo_tip b{font-family:ui-monospace,monospace}
+/* #lo_tip se pinta con los demas tooltips, al final del fichero (bloque TOOLTIPS) */
 
 .lo-critwrap{display:flex;align-items:stretch;gap:14px;margin-top:16px;flex-wrap:wrap}
 .lo-crit{flex:1;min-width:250px;display:flex;gap:14px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
@@ -208,6 +349,11 @@ table.lo-mx tr.lo-detrow .lo-det{margin:10px 0 14px;box-shadow:var(--sh-sm)}
   --p-start:#8089cc;--p-prep:#16b87f;--p-weigh:#e3ad57;--p-move:#54a6da;--p-consol:#bd7ec0;--p-cont:#8694ac;
   --r:14px;--r-lg:22px;--r-sm:10px;--r-xs:7px;
   --sh:0 10px 34px rgba(0,0,0,.34);--sh-sm:0 3px 14px rgba(0,0,0,.22);--sh-lg:0 24px 60px rgba(0,0,0,.5);
+  /* Estos cuatro estaban escritos con color-mix(). html2canvas no sabe leerlo y lanzaba
+     "unsupported color function", asi que fallaba la descarga en PNG de cualquier tabla o
+     tarjeta que los tocara. Escritos a mano, se ven igual y la captura funciona. */
+  --brand-sh:rgba(22,184,127,.32);--brand-glow:rgba(22,184,127,.45);
+  --track-bg:rgba(107,127,159,.13);--sel-bg:#133036;--entre-soft:rgba(224,154,175,.15);
   --maxw:1320px;
 }
 html.light{
@@ -221,6 +367,8 @@ html.light{
   --warn:#b5781a;--warn-soft:rgba(181,120,26,.1);
   --p-start:#4b5c72;--p-prep:#0f9c65;--p-weigh:#cf982f;--p-move:#3691c4;--p-consol:#a85fab;--p-cont:#6f7f9b;
   --sh:0 10px 30px rgba(20,40,70,.08);--sh-sm:0 3px 12px rgba(20,40,70,.06);--sh-lg:0 22px 54px rgba(20,40,70,.13);
+  --brand-sh:rgba(15,156,101,.32);--brand-glow:rgba(15,156,101,.45);
+  --track-bg:rgba(126,147,181,.13);--sel-bg:#ddf1e9;--entre-soft:rgba(212,132,156,.15);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth;scrollbar-gutter:stable;touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
@@ -260,7 +408,7 @@ h1,h2,h3,h4{letter-spacing:-.02em}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh)}
 .cpad{padding:24px 26px}
 .stp{display:inline-flex;align-items:center;gap:10px;margin-bottom:12px}
-.stp-n{width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,var(--brand2),var(--brand));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:850;font-size:12px;box-shadow:0 3px 9px color-mix(in srgb,var(--brand) 30%,transparent)}
+.stp-n{width:24px;height:24px;border-radius:7px;background:linear-gradient(140deg,var(--brand2),var(--brand));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:850;font-size:12px;box-shadow:0 3px 9px var(--brand-sh)}
 .stp-k{font-size:10px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--brand)}
 .h-c{font-size:18px;font-weight:800}
 .s-c{font-size:13px;color:var(--ink2);margin-top:5px;max-width:760px;line-height:1.55}
@@ -381,7 +529,7 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 .btn{border:0;border-radius:var(--r-sm);font:inherit;font-weight:750;cursor:pointer;transition:.16s}
 .btn:hover:not(:disabled){transform:translateY(-1px)}
 .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
-.btn-go{color:#fff;background:linear-gradient(135deg,var(--brand2),var(--brand));padding:13px 30px;font-size:14px;font-weight:850;box-shadow:0 7px 22px color-mix(in srgb,var(--brand) 34%,transparent)}
+.btn-go{color:#fff;background:linear-gradient(135deg,var(--brand2),var(--brand));padding:13px 30px;font-size:14px;font-weight:850;box-shadow:0 7px 22px var(--brand-sh)}
 .btn-gh{color:var(--ink2);background:var(--panel2);padding:10px 18px;border:1px solid var(--line2);font-size:12.5px}
 .btn-gh:hover{color:var(--ink);border-color:var(--line3)}
 
@@ -408,7 +556,9 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 .fcard{flex:1;border-radius:var(--r);padding:16px 15px 15px;background:var(--panel2);border:1px solid var(--line);position:relative;transition:.18s}
 .fcard:hover{transform:translateY(-2px);box-shadow:var(--sh-sm)}
 .fcard:before{content:'';position:absolute;top:0;left:14px;right:14px;height:3px;border-radius:0 0 3px 3px;background:var(--c)}
-.ficon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;margin-bottom:11px;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c)}
+.ficon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;margin-bottom:11px;position:relative;color:var(--c)}
+.ficon:before{content:'';position:absolute;inset:0;border-radius:inherit;background:var(--c);opacity:.16}
+.ficon svg{position:relative}
 .ficon svg{width:21px;height:21px}
 .fname{font-size:13.5px;font-weight:800;line-height:1.2}
 .fdesc{font-size:11px;color:var(--ink2);margin-top:6px;line-height:1.45}
@@ -454,10 +604,13 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 /* una sola linea: si el titulo se parte, las cuatro tarjetas dejan de estar alineadas */
 .kpi-l{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kpi-r{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:21px}   /* min-height: la tarjeta de Óptima no lleva pastilla de delta y quedaba 7 px mas baja */
 .kpi-v{font-size:26px;font-weight:850;margin:8px 0 4px;letter-spacing:-.5px;font-family:ui-monospace,monospace;display:flex;align-items:baseline;gap:6px}
 .kpi-v small{font-size:12px;font-weight:600;color:var(--ink3);letter-spacing:0}
-.kpi-r{font-size:11.5px;color:var(--ink2);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+/* Una sola regla (estaba declarada dos veces y se pisaban). nowrap es para el texto de cada
+   pastilla; flex-wrap es para que las pastillas salten de linea. min-height: la tarjeta de
+   Optima no lleva pastilla de delta y quedaba 7 px mas baja. */
+.kpi-r{font-size:11.5px;color:var(--ink2);display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:21px}
 .kpi-r .ref-v{font-family:ui-monospace,monospace}
 
 /* ===== TIEMPOS REALES (composición) ===== */
@@ -691,7 +844,7 @@ details.metodo .m-body p b{color:var(--ink);font-weight:750}
 }
 
 /* ===== ASISTENTE FLOTANTE ===== */
-.fab{position:fixed;bottom:22px;right:22px;z-index:60;height:52px;padding:0 20px 0 16px;border-radius:999px;background:linear-gradient(135deg,var(--brand2),var(--brand));color:#fff;border:0;cursor:pointer;box-shadow:0 12px 32px color-mix(in srgb,var(--brand) 45%,transparent);display:flex;align-items:center;gap:9px;font:inherit;font-size:13px;font-weight:800;transition:.18s}
+.fab{position:fixed;bottom:22px;right:22px;z-index:60;height:52px;padding:0 20px 0 16px;border-radius:999px;background:linear-gradient(135deg,var(--brand2),var(--brand));color:#fff;border:0;cursor:pointer;box-shadow:0 12px 32px var(--brand-glow);display:flex;align-items:center;gap:9px;font:inherit;font-size:13px;font-weight:800;transition:.18s}
 .fab:hover{transform:translateY(-2px)}
 .fab svg{width:21px;height:21px}
 .fab.hide{transform:scale(.5);opacity:0;pointer-events:none}
@@ -844,7 +997,7 @@ html.light{--f-prep:#5b8fcc}
 .fg-cyc{display:flex;align-items:center;justify-content:center;color:var(--f-prep);min-width:30px;flex:0 0 auto}
 .fg-cyc svg{width:26px;height:26px}
 .fg-note{font-size:11px;color:var(--ink2);line-height:1.5}
-.flow-cycle{margin-top:16px;padding:14px 16px;background:linear-gradient(100deg,color-mix(in srgb,var(--f-entre) 15%,transparent),transparent);border-color:var(--f-entre)}
+.flow-cycle{margin-top:16px;padding:14px 16px;background:linear-gradient(100deg,var(--entre-soft),transparent);border-color:var(--f-entre)}
 .cyc-ic{width:44px;height:44px;border-radius:12px;background:var(--f-entre)}
 .cyc-ic svg{width:24px;height:24px}
 .cyc-t{font-size:14.5px}
@@ -910,7 +1063,7 @@ html.light{--f-prep:#5b8fcc}
 .par-lab{font-size:12.5px;font-weight:750}
 .par-lab .pill{display:inline-block;margin-left:7px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--bad);background:var(--bad-soft);border:1px solid var(--bad-bd);border-radius:999px;padding:2px 7px;vertical-align:middle}
 .par-lab small{display:block;font-size:10px;color:var(--ink3);font-weight:600;margin-top:2px}
-.par-track{height:22px;background:color-mix(in srgb,var(--ink3) 13%,transparent);border:1px solid var(--line2);border-radius:7px;overflow:hidden;position:relative}
+.par-track{height:22px;background:var(--track-bg);border:1px solid var(--line2);border-radius:7px;overflow:hidden;position:relative}
 .par-fill{height:100%;border-radius:6px 0 0 6px;min-width:3px}
 .par-val{text-align:right;font-family:ui-monospace,monospace;font-weight:800;font-size:14px}
 .par-val .pct{font-size:11px;color:var(--ink2);font-weight:700;font-family:inherit}
@@ -922,11 +1075,15 @@ html.light{--f-prep:#5b8fcc}
 .comp-name{font-size:13.5px;font-weight:850}
 .comp-cmp{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:999px}
 .comp-cmp.peor{color:var(--bad);background:var(--bad-soft)}
-.comp-cmp.mejor{color:var(--good);background:var(--down-soft)}
+.comp-cmp.mejor{color:var(--good);background:var(--good-soft)}
 .comp-tot{margin-left:auto;font-size:11px;color:var(--ink2);font-family:ui-monospace,monospace}
 .comp-row{display:grid;grid-template-columns:96px 1fr 58px;gap:13px;align-items:center;margin-bottom:8px}
 .comp-lab{font-size:11.5px;font-weight:700;color:var(--ink2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.comp-bar{display:flex;height:22px;border-radius:8px;overflow:hidden;background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line)}
+/* La parte NO pintada de la barra no aporta nada (el total va escrito a la derecha) y en la
+   imagen descargada salia como un bloque gris feo de punta a punta. Se deja el carril
+   transparente con una linea fina, que se ve igual en pantalla y en la descarga. */
+.comp-bar{display:flex;height:22px;border-radius:8px;overflow:hidden;background:transparent;
+  border:1px solid var(--line)}
 .comp-seg{height:100%;transition:.15s;cursor:default}
 .comp-seg:hover{filter:brightness(1.14)}
 .comp-val{font-family:ui-monospace,monospace;font-weight:850;font-size:13px;text-align:right}
@@ -1009,7 +1166,7 @@ details.calc .calc-cards{padding-bottom:14px;margin-top:0}
 /* iPad y ventanas medianas: el faro desglosado son 9 columnas con min-width 860 y en 787 px
    utiles obligaba a arrastrar. Aqui entra entero conservando los nombres largos (se parten en
    dos lineas, que van alineadas abajo). */
-@media(max-width:1080px) and (min-width:641px){
+@media(max-width:1080px) and (min-width:431px){
   .mxgrid:not(.grouped){min-width:0}
   .mxgrid:not(.grouped) .mxrow{grid-template-columns:104px repeat(7,1fr) 88px;gap:3px}
   .mxgrid:not(.grouped) .mxh{font-size:8px;letter-spacing:-.2px;overflow-wrap:anywhere;line-height:1.1;padding:2px 0;white-space:nowrap}
@@ -1286,7 +1443,9 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
    ================================================================== */
 @media(max-width:640px){
   /* 1 · Comparador "Elige dos escenarios": texto de control más contenido */
-  select,.tin,.combo-in,.cin input,.lo-tin,.rk-f select,.rk-f input,.trend-ctrl select,.cd-srch{font-size:14px}
+  /* Solo los DESPLEGABLES bajan a 14px. Los campos de texto se quedan en 16px: por debajo
+     de 16 px Safari en iPhone hace zoom automatico al enfocarlos y descoloca la pagina. */
+  select,.rk-f select,.trend-ctrl select{font-size:14px}
   #step2 .h-c{font-size:15px}
   #step2 .s-c{font-size:12px}
   .scn{padding:15px}
@@ -1318,7 +1477,7 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
   table.lo-mx td.lo-area{z-index:4;background:var(--panel)}
   table.lo-mx thead th.lo-area{z-index:6;background:var(--panel3)}
   table.lo-mx tbody tr:hover td.lo-area{background:var(--panel2)}
-  table.lo-mx tbody tr.lo-sel td.lo-area{background:color-mix(in srgb,var(--brand) 14%,var(--panel))}
+  table.lo-mx tbody tr.lo-sel td.lo-area{background:var(--sel-bg)}
 
   /* 7 · Caudal (cd-tbl): SOLO la 1ª columna (número) fija, OPACA de verdad y estrecha (el nombre no se fija para que quepa la tabla) */
   table.cd-tbl thead th{background:var(--panel3)!important}
@@ -1739,7 +1898,7 @@ body.simple #mObj{display:none!important}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"><div class="modes" id="realWho"></div><div class="modes" id="realOrder"></div></div>
       </div>
-      <div class="cbox"><div class="cbox-in"><button class="png" data-png="cReal" data-pngname="composicion_tiempo">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="realTitle">Composición del tiempo por área</div><div class="csub">minutos por lote · el número al final es el tiempo total del lote · pasa el ratón por cada tramo para el detalle</div></div></div><div class="chart" id="cReal"></div><div class="proc-legend" id="realLegend"></div></div></div>
+      <div class="cbox"><div class="cbox-in"><button class="png" data-png="cReal" data-pngname="composicion_tiempo">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="realTitle">Composición del tiempo por área</div><div class="csub" id="realSub">el número al final es el tiempo total del lote</div></div></div><div class="chart" id="cReal"></div><div class="proc-legend" id="realLegend"></div></div></div>
     </div>
 
     <!-- PREPARACIÓN: PICKING / DESPLAZAMIENTO + RATIOS -->
@@ -1750,8 +1909,8 @@ body.simple #mObj{display:none!important}
         <div class="sec-s">La preparación separada en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse), con su mix y ratio. Frescos y FYV no se separan.</div>
       </div></div>
       <div class="grid g2" style="margin-bottom:16px">
-        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/ud</div><div class="csub">coger producto · productividad (min/ud, escala con las unidades) · analizado vs referencia</div></div></div><div class="chart" id="cPick"></div></div></div>
-        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDespl">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento · min/lote</div><div class="csub">moverse por el área · min/lote (según el recorrido, no las unidades) · analizado vs referencia</div></div></div><div class="chart" id="cDespl"></div></div></div>
+        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/ud</div><div class="csub">coger producto · analizado frente a referencia</div></div></div><div class="chart" id="cPick"></div></div></div>
+        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDespl">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento · min/lote</div><div class="csub">moverse por el área · analizado frente a referencia</div></div></div><div class="chart" id="cDespl"></div></div></div>
       </div>
       <div class="ctitle" style="margin-bottom:4px">Equilibrio picking / desplazamiento por área</div>
       <div class="csub" style="margin-bottom:12px">qué parte de la preparación es cada cosa, y el ratio desplazamiento ÷ picking frente a la referencia</div>
@@ -1768,11 +1927,11 @@ body.simple #mObj{display:none!important}
       </div></div>
       <div class="grid g2">
         <div>
-          <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDesplTot">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento total por área · min/lote</div><div class="csub" id="desplTotSub">arranque + desplazamiento + traslado + tiempo entre lotes</div></div></div><div class="chart" id="cDesplTot"></div></div></div>
+          <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDesplTot">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento total por área · min/lote</div><div class="csub" id="desplTotSub">analizado frente a referencia</div></div></div><div class="chart" id="cDesplTot"></div></div></div>
           <div class="notice info" style="margin-top:12px"><span class="ic">i</span><span id="desplTotNote">—</span></div>
         </div>
         <div>
-          <div class="cbox"><div class="cbox-in"><button class="png" data-png="cCont">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Tiempo entre lotes por área · min/lote</div><div class="csub" id="contSub">analizado vs referencia</div></div></div><div class="chart" id="cCont"></div></div></div>
+          <div class="cbox"><div class="cbox-in"><button class="png" data-png="cCont">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Tiempo entre lotes por área · min/lote</div><div class="csub" id="contSub">analizado frente a referencia</div></div></div><div class="chart" id="cCont"></div></div></div>
           <div class="notice info" style="margin-top:12px"><span class="ic">i</span><span id="contNote">—</span></div>
         </div>
       </div>
@@ -2076,7 +2235,7 @@ body.simple #mObj{display:none!important}
     table.cd-tbl th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:normal;line-height:1.15;vertical-align:bottom;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.2px;color:var(--ink2);background:var(--panel3);position:sticky;top:0;z-index:2;max-width:66px}
     table.cd-tbl th.cd-dim,table.cd-tbl td.cd-dim{text-align:left;white-space:nowrap;max-width:none}
     table.cd-tbl tbody tr:hover td{background:var(--panel2)}
-    table.cd-tbl td.cd-neg{color:#e5484d;font-weight:600}table.cd-tbl td.cd-pos{color:#12b5a5;font-weight:600}
+    table.cd-tbl td.cd-neg{color:var(--bad);font-weight:600}table.cd-tbl td.cd-pos{color:var(--good);font-weight:600}
     table.cd-tbl tfoot td{font-weight:800;background:var(--panel2);border-top:2px solid var(--ink2);border-bottom:none;padding-top:12px;padding-bottom:12px;position:sticky;bottom:-1px;z-index:4}
     table.cd-tbl thead th[data-k]{cursor:pointer;user-select:none}
     table.cd-tbl thead th[data-k]:hover{color:var(--ink)}
@@ -2569,6 +2728,18 @@ const sg=v=>v>0?'+':'';
 function normArea(a){if(a==null)return '';let s=String(a).trim().toUpperCase();return s==='PENDIENTE'?'PENDIENTES':s;}
 function mesKeyFromCell(v){if(v==null)return '';const t=String(v).trim();let m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return m[3]+'-'+String(+m[2]).padStart(2,'0');m=t.match(/^(\d{4})[-/](\d{1,2})/);if(m)return m[1]+'-'+String(+m[2]).padStart(2,'0');const d=new Date(t);if(!isNaN(d))return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');return t;}
 function mesLabel(k){const m=k.match(/^(\d{4})-(\d{2})$/);if(m){const me=MESES_ES[+m[2]-1];return (me?me.charAt(0).toUpperCase()+me.slice(1):m[2])+' '+m[1];}return k;}
+/* Etiquetas del eje x de las series de 12 meses. En pantalla estrecha se abrevian
+   ("Sep 25" en vez de "Septiembre 2025"): con el nombre entero y girado se comian media
+   grafica en el iPhone y en el iPad en vertical. */
+function xMeses(){
+  const corto=(typeof window!=='undefined'&&window.innerWidth<=900);
+  return ST.meses.map(function(k){
+    if(!corto) return ST.mesLabel[k]||k;
+    const m=/^(\d{4})-(\d{2})$/.exec(k); if(!m) return ST.mesLabel[k]||k;
+    const me=MESES_ES[+m[2]-1]||m[2];
+    return me.charAt(0).toUpperCase()+me.slice(1,3)+' '+m[1].slice(2);
+  });
+}
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
 function setStatus(t,s){var d=$('dotTxt');if(d)d.textContent=t;var o=$('dot');if(o)o.className='sdot'+(s?(' '+s):'');}
 const LIEBRE_HIST='__LIEBRE_HIST__';   // media histórica de las tiendas liebre (se agrega en cliente)
@@ -2630,7 +2801,9 @@ function renderCompFarolas(){
   if(!grp){ host.innerHTML=''; return; }                       // A = Objetivo -> no hay farolas que mostrar
   var ref=ST.single?null:faSelFromScenario(curB?curB.tienda:null);
   var head='<div class="fa-sech" style="margin-bottom:12px"><div class="t">Farolas'+
-    (ref&&window.__faSelName?(' · frente a '+window.__faSelName(ref)):'')+'</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="cf_rings" data-pngbg="bg" data-pngname="roscos_farolas_comparacion" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div>';
+    (ref&&window.__faSelName?(' · frente a '+window.__faSelName(ref)):'')+'</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="cf_rings" data-pngbg="bg" data-pngname="roscos_farolas_comparacion"'+
+    ' data-pngtitle="'+esc1('Farolas · '+(window.__faSelName?window.__faSelName(grp):''))+'"'+
+    ' data-pngsub="'+esc1((ref&&window.__faSelName?('frente a '+window.__faSelName(ref)+' · '):'')+(ST.mesLabel[curA.mesKey]||''))+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div>';
   host.innerHTML=head+'<div id="cfFaBody"></div>';
   var ok=window.faSummary($('cfFaBody'),{group:grp, mesKey:curA.mesKey, ref:ref});
   if(!ok&&!$('cfFaBody').innerHTML) host.innerHTML='';
@@ -2759,7 +2932,7 @@ function makeCombo(id){
     if(e.key==='ArrowUp'){hi=Math.max(0,hi-1);render(inp.value);return;}
     if(e.key==='Enter'){e.preventDefault();pick(hi<0?0:hi);return;}
     if(e.key==='Escape'){close();inp.blur();return;}
-    if(e.key.length===1&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&inp.dataset.val&&inp.value===fullStore(inp.dataset.val)){ inp.value=''; }
+    if(e.key&&e.key.length===1&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&inp.dataset.val&&inp.value===fullStore(inp.dataset.val)){ inp.value=''; }
   });
   inp.addEventListener('input',()=>{hi=-1;open();render(inp.value);});
   inp.addEventListener('blur',()=>setTimeout(close,120));
@@ -2907,10 +3080,17 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
   const bg=cssv('--panel','#fff'); b.disabled=true; const old=b.textContent; b.textContent='Generando…';
   // en modo ficha (una sola tienda) no incluir el pie de texto en la imagen (para presentaciones)
   const foot=document.getElementById('matFoot'); const hideFoot=(foot&&ST.single); if(hideFoot)foot.style.display='none';
-  html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true}).then(canvas=>{
-    const a=document.createElement('a'); a.download='faro_'+(ST.nameA||'analizado').replace(/\s+/g,'_')+'.png'; a.href=canvas.toDataURL('image/png'); a.click();
+  const _t='Faro de fases por \u00e1rea ('+udName()+')', _s=pngCtx();
+  document.documentElement.classList.add('pngshot');
+  const _lim=()=>document.documentElement.classList.remove('pngshot');
+  html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,
+      windowWidth:Math.max(document.documentElement.clientWidth,el.scrollWidth+200),
+      windowHeight:Math.max(document.documentElement.clientHeight,el.scrollHeight+200)}).then(canvas=>{
+    _lim();
+    window.__deliver(pngName(_t,'faro')+'.png', window.__pngBanda(canvas,_t,_s,bg), true);
     if(hideFoot)foot.style.display=''; b.disabled=false; b.textContent=old;
-  }).catch(e=>{if(hideFoot)foot.style.display=''; b.disabled=false; b.textContent=old; console.error(e);});
+  }).catch(e=>{_lim(); if(hideFoot)foot.style.display=''; b.disabled=false; b.textContent=old;
+    console.error(e); alert('No se pudo generar el PNG: '+(e&&e.message||e));});
 });})();
 function setMode(m){ST.mode=m; try{ if(typeof saveCfg==='function') saveCfg(); }catch(e){}
   const modeOn=(el,on)=>{if(!el)return;el.classList.toggle('on',on);el.setAttribute('aria-pressed',on);};
@@ -3035,21 +3215,42 @@ function svgSpark(a,b,w,hh,lineColor){
 function sparkTrend(a,lower){const sl=slope(a),b=avg(a);if(sl==null||b==null||Math.abs(sl)<b*0.004)return {cls:'neu',txt:'estable',ar:''};const worse=lower?sl>0:sl<0;return {cls:worse?'bad':'good',txt:sl>0?'sube':'baja',ar:sl>0?arrowUp:arrowDown};}
 
 /* ===== ORQUESTADOR ===== */
+/* Cada bloque se pinta AISLADO. Antes iban todos seguidos sin red: si uno lanzaba, los de
+   despues no se pintaban y las tarjetas se quedaban en blanco, con el titulo y el subtitulo
+   pero sin grafica, y sin decir por que. Ahora el que falle escribe el motivo en su propia
+   tarjeta y los demas siguen. */
+function pintar(nombre,fn,idAviso){
+  try{ fn(); }
+  catch(e){
+    console.error('Javify · '+nombre, e);
+    var el=idAviso?$(idAviso):null;
+    if(el) el.innerHTML='<div style="padding:20px 18px;font-size:12.5px;line-height:1.55;color:var(--bad)">'+
+      'No se ha podido pintar esto.<br><code style="font-family:ui-monospace;font-size:11.5px;color:var(--ink2)">'+
+      String((e&&e.message)||e).replace(/[<>&]/g,' ')+'</code></div>';
+  }
+}
 function renderAll(){
   /* renderMatrix PRIMERO: publica window.__faroCell, la fuente unica que usan el
      resumen ejecutivo y "Qué revisar primero" para no contradecir al mapa de calor. */
-  renderMatrix();
-  renderSummary();
-  renderRealControls();renderReal();
-  renderDiffControls();renderDiff();
-  renderPareto();
-  renderPickDespl();renderDesplTot();renderCont();
-  renderFichaTabs();renderFicha();
-  initTrend();renderTrend();
-  initChat();
+  pintar('faro',renderMatrix);
+  pintar('resumen',renderSummary);
+  pintar('composición (controles)',renderRealControls);
+  pintar('composición del tiempo',renderReal,'cReal');
+  pintar('impacto (controles)',renderDiffControls);
+  pintar('impacto',renderDiff);
+  pintar('reparto por área',renderPareto,'cParetoDonut');
+  pintar('picking y desplazamiento',renderPickDespl,'cPick');
+  pintar('desplazamiento total',renderDesplTot,'cDesplTot');
+  pintar('tiempo entre lotes',renderCont,'cCont');
+  pintar('radiografía (pestañas)',renderFichaTabs);
+  pintar('radiografía',renderFicha);
+  pintar('tendencia (init)',initTrend);
+  pintar('tendencia',renderTrend,'cTrend');
+  pintar('asistente',initChat);
   // modo ficha (A=B): oculta las secciones puramente comparativas (impacto, ratios, ficha por área)
   ['secDiff','secPareto','secPick','secDesplTot','secCont','secFicha'].forEach(id=>{const e=$(id);if(e)e.style.display=ST.single?'none':'';});
-  requestAnimationFrame(()=>{resizeCharts();setTimeout(resizeCharts,220);});
+  /* red de seguridad: si alguna seccion estaba oculta al pintar, al aparecer hay que remedir */
+  requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
 }
 const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalDonut','cParetoDonut'];
 /* Plotly.Plots.resize RECHAZA una promesa si el div esta oculto (no lanza): sin el .catch
@@ -3070,7 +3271,8 @@ function baseLayout(extra){
     xaxis:{gridcolor:line,zerolinecolor:line2,tickfont:{color:ink2,size:11},linecolor:line2,automargin:true},
     yaxis:{gridcolor:'rgba(0,0,0,0)',tickfont:{color:cssv('--ink'),size:12},linecolor:line2,automargin:true},
     legend:{orientation:'h',y:1.13,x:0,font:{color:ink2,size:10.5},bgcolor:'rgba(0,0,0,0)'},
-    hoverlabel:{font:{family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif',size:12},bordercolor:line2},barmode:'stack',bargap:0.42};
+    /* la etiqueta de hover es igual en todas: la pone el envoltorio de Plotly del head */
+    barmode:'stack',bargap:0.42};
   const lay=Object.assign(base,extra||{});
   // Tooltips: como máximo 3 decimales (antes salían hasta 6). Respeta el yaxis que traiga cada gráfica.
   lay.yaxis=Object.assign({hoverformat:'.3~f'},lay.yaxis||{});
@@ -3257,7 +3459,7 @@ function renderCaudal(){
     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 2px"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+efc+';margin-right:7px"></span>Efectivas</span><b style="font-family:ui-monospace,monospace">'+fmt(efec,dec)+' h'+(pej!=null?' · '+fmt(pej,0)+'%':'')+'</b></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 2px"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+pac+';margin-right:7px"></span>Paradas</span><b style="font-family:ui-monospace,monospace">'+fmt(par,dec)+' h'+(pej!=null?' · '+fmt(100-pej,0)+'%':'')+'</b></div>';
   // ---- EVOLUCIÓN 12 meses (área apilada: efectivas + paradas = real; óptimo punteado) ----
-  const t=curA.tienda,x=ST.meses.map(k=>ST.mesLabel[k]);
+  const t=curA.tienda,x=xMeses();
   const sOpt=genSerie(t,mes?'caudal_optimo_h_total':'caudal_optimo_h');
   const sReal=genSerie(t,mes?'caudal_real_h_total':'caudal_real_h');
   const sEf=genSerie(t,mes?'caudal_efectivo_h_total':'caudal_efectivo_h');
@@ -3353,7 +3555,8 @@ function renderReal(){
   const pct=ST.realUnit==='pct';const KEY=pct?PCTKEY:MINKEY;
   const STK=window.__GROUP?STACK_GROUPED:STACK_REAL;   // fases desglosadas o 4 bloques agrupados (selector global)
   const segVal=(row,f)=>{ if(!row)return null; if(f.keys){let s=0,any=false;f.keys.forEach(k=>{const v=row[KEY[k]];if(v!=null){s+=(pct?v*100:v);any=true;}});return any?s:null;} const v=row[KEY[f.k]]; return v==null?null:(pct?v*100:v); };
-  $('realTitle').textContent='Composición del tiempo por lote · '+shortStore(curA.tienda)+(ST.single?'':' vs '+shortStore(curB.tienda))+' · '+(pct?'%':'minutos')+' · '+(window.__GROUP?'agrupado':'desglosado');
+  $('realTitle').textContent='Composición del tiempo por lote'+(pct?' (%)':' (min/lote)');
+  {const rs=$('realSub'); if(rs) rs.innerHTML=scnSub()+' · el número al final es el tiempo total del lote';}
   $('realLegend').innerHTML=STK.map(f=>'<span class="pl"><i style="background:'+cssv(f.col)+'"></i>'+f.name+'</span>').join('');
   const areas=[...viewAreas()].filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&(m.ra||m.rb);});
   if(!areas.length){Plotly.purge('cReal');$('cReal').innerHTML='<div class="combo-none">Sin áreas comparables.</div>';return;}
@@ -3380,7 +3583,7 @@ function renderReal(){
   $('cReal').innerHTML=h;
   // tooltip al pasar el cursor por cada segmento
   let tp=document.getElementById('segTip');
-  if(!tp){tp=document.createElement('div');tp.id='segTip';tp.style.cssText='position:fixed;z-index:9999;pointer-events:none;background:var(--panel3);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:6px 10px;font-size:11.5px;line-height:1.4;box-shadow:var(--sh);display:none';document.body.appendChild(tp);}
+  if(!tp){tp=document.createElement('div');tp.id='segTip';tp.style.display='none';   /* la piel va en el CSS (#segTip), con los demas tooltips */ document.body.appendChild(tp);}
   const host=$('cReal');
   host.onmousemove=e=>{const s=e.target.closest('.comp-seg');if(s&&s.dataset.tip){tp.innerHTML=s.dataset.tip;tp.style.display='block';tp.style.left=Math.min(e.clientX+14,innerWidth-160)+'px';tp.style.top=(e.clientY+14)+'px';}else tp.style.display='none';};
   host.onmouseleave=()=>{tp.style.display='none';};
@@ -3633,7 +3836,7 @@ function renderFaroDetail(area,faseK){
   else if(sl<0)lectura='Viene <b class="cool">mejorando</b> (bajando) de forma sostenida.';
   else lectura='Viene <b class="hot">empeorando</b> (subiendo) en los últimos meses.';
   if(d!=null)lectura+=' Frente a '+ST.nameB+' está '+(Math.abs(d)<eps?'<b>en línea</b>':(d>0?'<b class="hot">por encima</b> (peor)':'<b class="cool">por debajo</b> (mejor)'))+'.';
-  $('faroDetail').innerHTML='<div class="fdpanel"><div class="fd-head"><span class="fd-dot" style="background:'+col+'"></span><div class="fd-ttl">'+area+' · '+name+'</div><button class="fd-close" id="fdClose">✕</button></div>'+
+  $('faroDetail').innerHTML='<div class="fdpanel"><div class="fd-head"><span class="fd-dot" style="background:'+col+'"></span><div class="fd-ttl">'+area+' · '+name+'</div><button class="fd-close" id="fdClose" aria-label="Cerrar" title="Cerrar">✕</button></div>'+
     '<div class="fd-grid">'+
     '<div class="fd-m"><div class="l">'+ST.nameA+'</div><div class="v">'+fmt(valA,dec)+'</div></div>'+
     (ST.single?'':'<div class="fd-m"><div class="l">'+ST.nameB+'</div><div class="v">'+fmt(valB,dec)+'</div></div>'+
@@ -3641,7 +3844,8 @@ function renderFaroDetail(area,faseK){
     '<div class="fd-m"><div class="l">Impacto / mes</div><div class="v" style="color:'+(imp==null?'inherit':imp>0?'var(--bad)':imp<0?'var(--good)':'inherit')+'">'+fmtImpact(imp)+'</div></div>')+
     '<div class="fd-m"><div class="l">Nº de lotes</div><div class="v">'+fmt(m.lotesA,0)+'</div></div>'+
     '</div>'+
-    '<div class="fd-chart"><div style="position:relative"><button class="png" data-png="cFaroDetail" data-pngname="faro_detalle">⤓ PNG</button><div class="csub" style="margin-bottom:7px">Tendencia 12 meses · '+area+' · '+name+' ('+unitLbl+')</div><div class="chart" id="cFaroDetail" style="height:200px"></div></div><div class="fd-read">'+lectura+'</div></div></div>';
+    '<div class="fd-chart"><div style="position:relative"><button class="png" data-png="cFaroDetail" data-pngname="faro_detalle"'+
+      ' data-pngtitle="'+esc1(name+' · '+area+' ('+unitLbl+')')+'" data-pngsub="'+esc1(scnSub())+'">⤓ PNG</button><div class="csub" style="margin-bottom:7px">Tendencia 12 meses ('+unitLbl+')</div><div class="chart" id="cFaroDetail" style="height:200px"></div></div><div class="fd-read">'+lectura+'</div></div></div>';
   /* Al cerrar la tendencia se vuelve a la celda que la abrio (o al mapa de calor si ya no
      esta): antes el detalle desaparecia y te quedabas abajo, sin referencia de donde ibas. */
   /* Al cerrar la tendencia se sube SIEMPRE al mismo sitio: la fila de controles del faro (el
@@ -3653,7 +3857,7 @@ function renderFaroDetail(area,faseK){
     var dst=document.querySelector('#secMatrix .faro-ctrls')||$('faroUnitSeg')||$('secMatrix');
     if(dst) requestAnimationFrame(()=>{ dst.scrollIntoView({behavior:'smooth',block:'start'}); });
   });
-  const xf=ST.meses.map(k=>ST.mesLabel[k]),realC='#4f8fe0',refc=cssv('--ref');
+  const xf=xMeses(),realC='#4f8fe0',refc=cssv('--ref');
   const _a=[...sA,...sB].filter(v=>v!=null),_mn=_a.length?Math.min(..._a):0,_mx=_a.length?Math.max(..._a):1,_pad=((_mx-_mn)||_mx||1)*0.2;
   const fdTraces=[];
   if(!ST.single)fdTraces.push({x:xf,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:refc,width:2,dash:'dot',shape:'spline'}});
@@ -3760,7 +3964,11 @@ function renderPareto(){
 const legendSem='<span style="color:var(--good);font-weight:700">■ mejor</span> · <span style="color:var(--bad);font-weight:700">■ peor</span> · <span style="color:var(--ref);font-weight:700">■ referencia</span>';
 function barGroupSem(id,kA,kB,areas,dec,h,eps){
   const yA=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kA];}),yB=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kB];});
-  const colsA=areas.map((a,i)=>barColor((yA[i]!=null&&yB[i]!=null)?yA[i]-yB[i]:null,eps||0));
+  /* La tienda analizada va SIEMPRE en verde o rojo, aunque la diferencia sea de decimas: que
+     coincidan todos los decimales es rarisimo, y el gris (que es el color de la referencia)
+     hacia pensar que no habia dato. El gris se reserva para la referencia y para cuando falta
+     el valor. Por eso el umbral es 0 y no el 'eps' que llega. */
+  const colsA=areas.map((a,i)=>barColor((yA[i]!=null&&yB[i]!=null)?yA[i]-yB[i]:null,0));
   const ref=cssv('--ref'),all=[...yA,...yB].filter(v=>v!=null),mx=all.length?Math.max(...all):1;
   Plotly.react(id,[
     {x:areas,y:yA,name:ST.nameA,type:'bar',marker:{color:colsA,cornerradius:6},text:yA.map(v=>fmt(v,dec)),textposition:'outside',textfont:{size:10,color:cssv('--ink')},cliponaxis:false,hovertemplate:'%{x} · '+ST.nameA+': %{y:.'+dec+'f}<extra></extra>'},
@@ -3793,12 +4001,13 @@ function renderDesplTot(){
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ad.length){Plotly.purge('cDesplTot');$('desplTotNote').textContent='Sin áreas con desplazamiento total comparable.';return;}
   barGroupSem('cDesplTot','desplTotA','desplTotB',ad,2,H.pick,0.2);
-  $('desplTotSub').innerHTML='arranque + desplazamiento + traslado + tiempo entre lotes · '+legendSem;
+  $('desplTotSub').textContent='analizado frente a referencia';
   let top=null,sumDT=0,sumT=0;ad.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.dDesplTot!=null&&(!top||m.dDesplTot>top.dDesplTot))top=m;sumDT+=m.desplTotA||0;sumT+=m.tiempoA||0;});
   const pct=sumT>0?sumDT/sumT*100:null;
   let n='';if(pct!=null)n+='En las áreas con desglose, el desplazamiento total es de media el <b>'+fmt(pct,0)+'%</b> del tiempo del lote de <b>'+ST.nameA+'</b>: mucho tiempo se va en moverse y enlazar, no solo en coger producto. ';
   if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesA;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
-  n+='<b>Frescos y FYV</b> no se incluyen: su desplazamiento de preparación no se separa, así que el dato no sería comparable.';
+  n+='<b>Frescos y FYV</b> no se incluyen: su desplazamiento de preparación no se separa, así que el dato no sería comparable. ';
+  n+='Suma arranque + desplazamiento + traslado + tiempo entre lotes. '+legendSem;
   $('desplTotNote').innerHTML=n;
 }
 
@@ -3807,14 +4016,14 @@ function renderCont(){
   const ac=viewAreas().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible&&(m.p7A!=null||m.p7B!=null);}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ac.length){Plotly.purge('cCont');$('contNote').textContent='Sin datos de tiempo entre lotes.';return;}
   barGroupSem('cCont','p7A','p7B',ac,2,H.pick,0.1);
-  $('contSub').innerHTML='analizado vs referencia · '+legendSem;
+  $('contSub').textContent='analizado frente a referencia';
   let top=null;ac.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.gaps.p7!=null&&(!top||m.gaps.p7>top.gaps.p7))top=m;});
   const tot7=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).p7A||0),0),totT=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).tiempoA||0),0);
   const pct=totT>0?tot7/totT*100:null;
   let n='';if(pct!=null)n+='El tiempo entre lotes supone de media un <b>'+fmt(pct,1)+'%</b> del tiempo del lote en <b>'+ST.nameA+'</b>. ';
   if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesA;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
   n+='Es tiempo que no prepara producto: esperas, cambios de área o el carro del siguiente lote sin preparar.';
-  $('contNote').innerHTML=n;
+  $('contNote').innerHTML=n+' '+legendSem;
 }
 
 /* ===== DÓNDE ACTUAR (diff con tendencia grande) ===== */
@@ -3877,37 +4086,46 @@ function initTrend(){if(!ST._trInit){ST.trArea=$('trArea').value;ST._trInit=true
 function renderTrendGen(mk,x){
   const tA=curA.tienda,tB=curB.tienda,lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
   const lay=baseLayout({height:H.trend+22,margin:{l:54,r:18,t:26,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2')},automargin:true,zeroline:false}});
-  const lbl=(arr,d)=>arr.map(v=>v==null?'':fmt(v,d));
+  /* En pantalla estrecha se rotula un mes de cada dos: con doce cifras seguidas encima de la
+     linea no se leia ninguna. La serie se pinta entera, solo se aclaran las etiquetas. */
+  const estr=(typeof window!=='undefined'&&window.innerWidth<=560);
+  const lbl=(arr,d)=>arr.map((v,i)=>(v==null||(estr&&i%2===1))?'':fmt(v,d));
   let traces=[],title='',sub='';
   if(mk==='gprod'){
     const efA=genSerie(tA,'prod_efectiva_min_ud').map(mfv),cpA=genSerie(tA,'prod_conparadas_min_ud').map(mfv);
     const efB=genSerie(tB,'prod_efectiva_min_ud').map(mfv),cpB=genSerie(tB,'prod_conparadas_min_ud').map(mfv);
     traces=[];
     if(!ST.single){
-      traces.push({x,y:efB,name:ST.nameB+' efec.',type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:1.8,dash:'dot',shape:'spline'}});
-      traces.push({x,y:cpB,name:ST.nameB+' c/par.',type:'scatter',mode:'lines',connectgaps:false,line:{color:cssv('--ink3'),width:1.6,dash:'dot',shape:'spline'}});
+      /* Nombres CORTOS: quien es la referencia ya lo dice el subtitulo ("frente a X"), y el
+         legendrank deja delante las dos series de la tienda analizada. En el movil las dos
+         punteadas comparten UNA sola entrada ("Referencia"): con cinco entradas la leyenda se
+         comia media grafica y la ultima se recortaba. */
+      traces.push({x,y:efB,name:estr?'Referencia':'Efectiva (ref.)',legendrank:3,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:1.8,dash:'dot',shape:'spline'}});
+      traces.push({x,y:cpB,name:'C/paradas (ref.)',legendrank:4,showlegend:!estr,type:'scatter',mode:'lines',connectgaps:false,line:{color:cssv('--ink3'),width:1.6,dash:'dot',shape:'spline'}});
     }
-    traces.push({x,y:cpA,name:'Con paradas',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:'#e08a3c',width:2.6,shape:'spline'},marker:{size:6,color:'#e08a3c',line:{width:1.5,color:cssv('--panel')}},text:lbl(cpA,3),textposition:'bottom center',textfont:{size:8,color:'#e08a3c'}});
-    traces.push({x,y:efA,name:'Efectiva',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}});
-    traces.push({x,y:x.map(()=>OBJ_PROD*MF()),name:'Objetivo '+fmt(OBJ_PROD*MF(),3),type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj '+fmt(OBJ_PROD*MF(),3):''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
-    title='Productividad efectiva + con paradas ('+udName()+') · Global tienda';sub='sólidas = '+ST.nameA+' · punteadas = '+ST.nameB+' · roja discontinua = objetivo '+fmt(OBJ_PROD*MF(),3)+' · unidad '+udName();
+    traces.push({x,y:cpA,name:'Con paradas',legendrank:2,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:'#e08a3c',width:2.6,shape:'spline'},marker:{size:6,color:'#e08a3c',line:{width:1.5,color:cssv('--panel')}},text:lbl(cpA,3),textposition:'bottom center',textfont:{size:8,color:'#e08a3c'}});
+    traces.push({x,y:efA,name:'Efectiva',legendrank:1,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}});
+    /* el valor del objetivo ya va escrito sobre la propia linea ("obj 0,306"): en la leyenda
+       basta la palabra, si no se repite dos veces lo mismo. */
+    traces.push({x,y:x.map(()=>OBJ_PROD*MF()),name:'Objetivo',legendrank:5,type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(OBJ_PROD*MF(),3):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
+    title='Productividad efectiva y con paradas ('+udName()+')';sub=scnSub();
   }else if(mk==='gcaudal'){
     const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h');
     traces=[{x,y:op,name:'Óptimo',type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},
             {x,y:real,name:'Real',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(real,1),textposition:'top center',textfont:{size:8,color:lineA}}];
-    title='Caudal real vs óptimo (h/día) · Global tienda';sub='horas/día del centro · '+ST.nameA;
+    title='Caudal real y óptimo (h/día)';sub=ST.nameA;
   }else{
     const hm=genSerie(tA,'diferencia_caudal_h_total'),cols=hm.map(v=>v==null?ref:(v>0?bad:good));
     traces=[{x,y:hm,name:'Horas de más/mes',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:7,color:cols,line:{width:1.5,color:cssv('--panel')}},text:lbl(hm,1),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}];
-    traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj 0':''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
-    title='Horas de más / mes (real − óptimo) · Global tienda';sub='positivo = horas de más que el óptimo · '+ST.nameA+' · objetivo 0 activable en leyenda';
+    traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},text:x.map((_,i)=>i===0?'obj 0':''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
+    title='Horas de más al mes (real − óptimo)';sub=ST.nameA+' · positivo = más horas que el óptimo';
   }
   Plotly.react('cTrend',traces,lay,PCFG);
   $('trendTitle').textContent=title;$('trendSub').textContent=sub;
 }
 function renderTrend(){
   const area=$('trArea').value;
-  const x=ST.meses.map(k=>ST.mesLabel[k]);
+  const x=xMeses();
   if(area==='__global'&&ST.genReady){refreshTrMetricOptions();const gmk=$('trMetric').value;renderTrendGen(GTREND[gmk]?gmk:'gprod',x);return;}
   const mk=$('trMetric').value,M=METRICS[mk];
   const noDeg=M.deg&&!tieneDesglose(area);
@@ -3916,22 +4134,24 @@ function renderTrend(){
   const lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
   if(noDeg){
     Plotly.react('cTrend',[],baseLayout({height:H.trend,annotations:[{text:'Esta métrica no se puede separar en '+area+' (la preparación no abre picking/desplazamiento).',showarrow:false,font:{color:cssv('--ink2'),size:13},x:0.5,y:0.5,xref:'paper',yref:'paper'}],xaxis:{visible:false},yaxis:{visible:false}}),PCFG);
-    $('trendTitle').textContent=M.label+' · '+(area==='__global'?'Global tienda':area);$('trendSub').textContent='no comparable en esta área';return;
+    $('trendTitle').textContent=M.label+(area==='__global'?'':' · '+area);$('trendSub').textContent='no comparable en esta área';return;
   }
   const realC='#4f8fe0';
   const traces=[];
   if(!ST.single)traces.push({x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}});
-  traces.push({x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map(v=>v==null?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}});
+  traces.push({x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}});
   // objetivo del área (Objetivos Tiendas Liebre) — línea roja discontinua, activable en la leyenda, aparece aun comparando dos tiendas
   const objRow=(typeof OBJ_ROWS!=='undefined'&&OBJ_ROWS)?OBJ_ROWS[area]:null;
   let objVal=objRow?metricVal(mapCorte(objRow),area,mk):null; if(objVal!=null&&tf!==1)objVal*=tf;
-  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo '+fmt(objVal,M.dec),type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===x.length-1?'obj '+fmt(objVal,M.dec):''),textposition:'top left',textfont:{size:9,color:bad},hoverinfo:'skip'});
+  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(objVal,M.dec):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
   const lay=baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,autorange:true}});
   Plotly.react('cTrend',traces,lay,PCFG);
-  $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+' · '+area;
+  $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+(area==='__global'?'':' · '+area);
+  /* el subtitulo dice SOLO quien es quien: el rango de meses ya esta en el eje x, la unidad en
+     el titulo, y que la referencia va punteada lo dice la leyenda. */
   $('trendSub').innerHTML=ST.single
-    ? '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span> · evolución 12 meses (ficha, sin comparación)'
-    : '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span> frente a <span style="font-weight:700">'+ST.nameB+'</span> (referencia · punteado)';
+    ? '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span>'
+    : '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span> frente a <span style="font-weight:700">'+ST.nameB+'</span>';
 }
 // (v6.3) renderTrendInsights y renderTrendWatch eliminadas: no se invocaban desde ningún sitio
 
@@ -3954,7 +4174,7 @@ function renderFicha(){
   h+=fk('Unidades/lote',m.udsA,m.udsB,m.dUds,false,1,0,true);
   h+=fk('Preparación',m.prepA,m.prepB,m.dPrep,true,2,0.05);
   h+='</div>';
-  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_fase">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada fase</div><div class="csub">min/lote, en el orden del proceso · '+ST.nameA+' vs '+ST.nameB+' · impacto = diferencia × nº de lotes · la mini-gráfica son los 12 meses (analizado vs referencia)</div></div></div>'+
+  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_fase">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada fase</div><div class="csub">min/lote, en el orden del proceso · impacto = diferencia × nº de lotes</div></div></div>'+
     '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Fase</th><th>'+ST.nameA+'</th><th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes</th><th class="spk">12 meses</th></tr></thead><tbody>';
   fcomp.forEach(f=>{const a=fval(m.ra,f),b=fval(m.rb,f),d=(a!=null&&b!=null)?a-b:null,imp=(d!=null&&m.lotesA!=null)?d*m.lotesA:null;
     const mk=f.mk||FASE2MK[f.k],sA=serie(curA.tienda,curA.shift,m.area,mk),sB=serie(curB.tienda,curB.shift,m.area,mk);
@@ -3965,7 +4185,7 @@ function renderFicha(){
   // (card "De dónde viene el tiempo de más" eliminado a petición: las barras eran poco estéticas y aportaban poco)
   const opts=[{v:'prod',l:'Productividad'},{v:'tiempo',l:'Tiempo por lote'}].concat(fcomp.map(f=>({v:f.mk||FASE2MK[f.k],l:f.name}))).concat((m.compat&&!GRP)?[{v:'despltot',l:'Desplazamiento total'},{v:'ratio',l:'Ratio despl/picking'}]:[]);
   if(!opts.some(o=>o.v===ST.fichaFase)){const ft=m.faseTop?FASE2MK[m.faseTop]:null; ST.fichaFase=(ft&&opts.some(o=>o.v===ft))?ft:'prod';}
-  h+='<div class="cbox"><div class="cbox-in"><div class="cbox-hd"><div><div class="ctitle">Evolución del área</div><div class="csub">cómo cambia la fase o métrica elegida en esta área · analizado vs referencia (12 meses)</div></div><button class="png dl-in" data-png="cFevo" data-pngname="evolucion_area" style="margin-right:8px;align-self:center">⤓ PNG</button><select id="fichaFaseSel" style="width:auto;min-width:150px">'+opts.map(o=>opt(o.v,o.l,o.v===ST.fichaFase)).join('')+'</select></div><div class="chart" id="cFevo"></div></div></div>';
+  h+='<div class="cbox"><div class="cbox-in"><div class="cbox-hd"><div><div class="ctitle">Evolución · '+ST.fichaArea+'</div><div class="csub">analizado frente a referencia</div></div><button class="png dl-in" data-png="cFevo" data-pngname="evolucion_area" data-pngtitle="'+esc1(((METRICS[ST.fichaFase]&&METRICS[ST.fichaFase].label)||ST.fichaFase)+' · '+ST.fichaArea)+'" data-pngsub="'+esc1(scnSub())+'" style="margin-right:8px;align-self:center">⤓ PNG</button><select id="fichaFaseSel" style="width:auto;min-width:150px">'+opts.map(o=>opt(o.v,o.l,o.v===ST.fichaFase)).join('')+'</select></div><div class="chart" id="cFevo"></div></div></div>';
   h+='<div class="card" style="margin-top:15px"><div class="cpad"><div class="sec-n" style="margin-bottom:11px">Lectura automática</div><div class="fread">'+lecturaArea(m)+'</div>';
   if(!m.compat)h+='<div class="notice warn" style="margin-top:13px"><span class="ic">!</span><span>En <b>'+m.area+'</b> la preparación no separa picking y desplazamiento, así que se lee como un solo bloque y no hay ratio ni desplazamiento total comparables.</span></div>';
   h+='</div></div>';
@@ -3976,10 +4196,10 @@ function renderFicha(){
 function renderFevo(){
   const m=MODEL.find(x=>x.area===ST.fichaArea);if(!m)return;const mk=ST.fichaFase,M=METRICS[mk];
   const sA=serie(curA.tienda,curA.shift,m.area,mk),sB=serie(curB.tienda,curB.shift,m.area,mk);
-  const x=ST.meses.map(k=>ST.mesLabel[k]),realC='#4f8fe0',ref=cssv('--ref'),bad=cssv('--bad');
+  const x=xMeses(),realC='#4f8fe0',ref=cssv('--ref'),bad=cssv('--bad');
   const _all=[...sA,...sB].filter(v=>v!=null),_mn=_all.length?Math.min(..._all):0,_mx=_all.length?Math.max(..._all):1,_pad=((_mx-_mn)||_mx||1)*0.20;
   const lay=baseLayout({height:256,margin:{l:48,r:16,t:24,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.18,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:9},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,range:[_mn-_pad,_mx+_pad]}});
-  plot('cFevo',[{x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},{x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map(v=>v==null?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}],lay);
+  plot('cFevo',[{x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},{x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}],lay);
 }
 function lecturaArea(m){
   const p=[],peor=m.dProd!=null&&m.dProd>UMBRAL.prod,mejor=m.dProd!=null&&m.dProd<-UMBRAL.prod;
@@ -4252,7 +4472,7 @@ $('csv').addEventListener('click',()=>{
   const head=['area','prod_'+ST.nameA.replace(/[;,]/g,' '),'prod_'+ST.nameB.replace(/[;,]/g,' '),'dif_prod','tiempo_anal','tiempo_ref','dif_tiempo','despl_total_anal','ratio_dp_anal','impacto_min_mes','fase_explica','situacion'];
   const L=[head.join(';')];
   MODEL.filter(m=>viewAreas().includes(m.area)).forEach(m=>L.push([m.area,m.prodA,m.prodB,m.dProd,m.tiempoA,m.tiempoB,m.dTiempo,m.desplTotA,m.ratioA,m.impacto,causaText(m),ESTADO_LBL[m.estado]].map(v=>v==null?'':String(v).replace('.',',')).join(';')));
-  const b=new Blob(['\ufeff'+L.join('\n')],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='diagnostico_NTC.csv';a.click();URL.revokeObjectURL(u);
+  window.__deliver('diagnostico_NTC.csv', new Blob(['\ufeff'+L.join('\n')],{type:'text/csv;charset=utf-8'}), false);
 });
 // Descargas (delegado a nivel documento → cubre gráficas y tablas de todos los bloques, incluso las que se pintan después)
 function tableToCsv(id,name){const t=(typeof id==='string')?$(id):id;if(!t)return;
@@ -4294,14 +4514,166 @@ function pngIgnore(el){
     return !(t==='LINK'||t==='HEAD'||t==='META'||t==='BASE'||t==='TITLE');
   };
 }
+
+/* ============================================================================================
+   TITULO DE LAS DESCARGAS
+   Una grafica bajada sin titulo no se entiende a los dos meses. Aqui van las dos piezas que se
+   lo ponen: __pngPlotly para las graficas de Plotly (repinta un clon fuera de vista, grande, con
+   el titulo arriba y la leyenda en una banda debajo del titulo) y __pngBanda para las capturas
+   de html2canvas (le anade una banda de titulo dibujada sobre el propio canvas).
+   El texto sale del resolvedor pngTit(): una linea grande con la metrica y el area, y otra
+   pequena con el escenario, la unidad, el corte de tiempo y el periodo.
+   Los dos leen los colores del tema en el momento de la descarga, asi que la imagen sale en
+   claro o en oscuro segun como este el dashboard.
+   ============================================================================================ */
+var PNG_FONT='-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,Helvetica,Arial,sans-serif';
+
+window.__pngPlotly=function(el,tit,sub,fname){
+  var W=1800,H=1020,F=PNG_FONT;
+  var ink=cssv('--ink','#111'),ink2=cssv('--ink2','#555'),ink3=cssv('--ink3','#888'),panel=cssv('--panel','#fff');
+  var data,lay;
+  try{ data=JSON.parse(JSON.stringify(el.data)); lay=JSON.parse(JSON.stringify(el.layout||{})); }
+  catch(e){ /* si el clon falla, al menos que se baje la grafica */
+    return Plotly.toImage(el,{format:'png',width:1200,height:620,scale:2})
+      .then(function(u){ window.__deliver(fname,u,true); }); }
+  var tmp=document.createElement('div');
+  tmp.style.cssText='position:fixed;left:-10000px;top:0;width:'+W+'px;height:'+H+'px;pointer-events:none';
+  document.body.appendChild(tmp);
+  data.forEach(function(t){
+    if(t.line&&typeof t.line.width==='number') t.line.width=t.line.width*2.1;
+    if(t.marker&&typeof t.marker.size==='number') t.marker.size=t.marker.size*2.1;
+    if(t.textfont) t.textfont.size=23;
+    if(t.type==='pie') t.textfont={size:27,family:F};
+  });
+  lay.font={family:F,color:ink2,size:28};
+  lay.paper_bgcolor=panel; lay.plot_bgcolor=panel;
+  if(lay.xaxis){ lay.xaxis.tickfont={size:26,family:F}; lay.xaxis.automargin=true; }
+  if(lay.yaxis){ lay.yaxis.tickfont={size:26,family:F}; lay.yaxis.automargin=true;
+    if(lay.yaxis.title) lay.yaxis.title.font={size:26,family:F,color:ink3}; }
+  if(lay.annotations) lay.annotations.forEach(function(a){ a.font=a.font||{}; a.font.size=24; });
+  if(lay.shapes) lay.shapes.forEach(function(x){ if(x.line) x.line.width=2; });
+  var hayLeg=(lay.showlegend!==false);
+  /* itemwidth a escala de la imagen: con 30 px el simbolo quedaba diminuto al lado de una
+     letra de 26 px y las entradas se veian pegadas */
+  if(hayLeg) lay.legend={orientation:'h',xref:'paper',yref:'paper',x:0,xanchor:'left',y:1.02,yanchor:'bottom',
+    font:{size:26,family:F,color:ink},bgcolor:'rgba(0,0,0,0)',borderwidth:0,tracegroupgap:0,itemwidth:46};
+  var sb=sub?String(sub):'';
+  /* El titulo NO se le pide a Plotly: con dos lineas se sube y se corta por arriba, y el
+     'pad' se lo salta. Se dibuja despues sobre la imagen (__pngBandaUrl), que ademas es lo
+     que hace que salga identico al de las capturas de html2canvas. */
+  lay.title=undefined;
+  lay.margin={l:130,r:110,t:(hayLeg?86:26),b:((lay.xaxis&&lay.xaxis.tickangle)?152:100)};
+  lay.width=W; lay.height=H; lay.autosize=false;
+  return Plotly.newPlot(tmp,data,lay,{displayModeBar:false,staticPlot:true})
+    .then(function(){ return Plotly.toImage(tmp,{format:'png',width:W,height:H,scale:2}); })
+    .then(function(u){ return window.__pngBandaUrl(u,tit,sb,panel); })
+    .then(function(u){ window.__deliver(fname,u,true); try{Plotly.purge(tmp);}catch(_){} tmp.remove(); })
+    .catch(function(err){ console.warn('png',err); try{Plotly.purge(tmp);}catch(_){} tmp.remove();
+      alert('No se pudo generar el PNG: '+(err&&err.message||err)); });
+};
+
+window.__pngBanda=function(cv,tit,sub,bg){
+  if(!tit) return cv.toDataURL('image/png');
+  var F=PNG_FONT;
+  /* la letra de la banda va en proporcion al ancho de la imagen, para que se vea igual de
+     grande tanto en una captura de 1.800 px como en una grafica de 3.600 */
+  var E=Math.min(3,Math.max(1.5,cv.width/1200));
+  var padX=26*E, padT=24*E, hueco=20*E, fT=30*E, fS=17*E;
+  var med=document.createElement('canvas').getContext('2d');
+  var maxW=cv.width-padX*2, esc=1;
+  med.font='800 '+fT+'px '+F;
+  while(med.measureText(tit).width>maxW && esc>0.68){ esc-=0.04; med.font='800 '+(fT*esc)+'px '+F; }
+  var fTr=fT*esc, lin=[];
+  med.font='400 '+fS+'px '+F;
+  if(sub){ var trozos=String(sub).split(' · '), cur='';
+    trozos.forEach(function(w){ var t2=cur?(cur+' · '+w):w;
+      if(med.measureText(t2).width>maxW && cur){ lin.push(cur); cur=w; } else cur=t2; });
+    if(cur) lin.push(cur);
+    if(lin.length>2) lin=[lin[0], lin.slice(1).join(' · ')];
+  }
+  var banda=Math.round(padT+fTr*1.16+(lin.length?(8*E+lin.length*fS*1.4):0)+hueco);
+  var out=document.createElement('canvas');
+  out.width=cv.width; out.height=cv.height+banda;
+  var c=out.getContext('2d');
+  c.fillStyle=bg||cssv('--panel','#fff'); c.fillRect(0,0,out.width,out.height);
+  c.textBaseline='top'; c.textAlign='left';
+  var y=padT;
+  c.fillStyle=cssv('--ink','#111'); c.font='800 '+fTr+'px '+F; c.fillText(tit,padX,y); y+=fTr*1.16;
+  if(lin.length){ y+=8*E; c.fillStyle=cssv('--ink3','#888'); c.font='400 '+fS+'px '+F;
+    lin.forEach(function(l){ c.fillText(l,padX,y); y+=fS*1.4; }); }
+  c.drawImage(cv,0,banda);
+  return out.toDataURL('image/png');
+};
+
+/* la misma banda, pero sobre una imagen que ya viene en dataURL (lo que devuelve
+   Plotly.toImage). Asi las graficas y las capturas llevan EXACTAMENTE el mismo titulo. */
+window.__pngBandaUrl=function(url,tit,sub,bg){
+  if(!tit) return Promise.resolve(url);
+  return new Promise(function(res){
+    var im=new Image();
+    im.onload=function(){ try{
+        var cv=document.createElement('canvas'); cv.width=im.width; cv.height=im.height;
+        cv.getContext('2d').drawImage(im,0,0);
+        res(window.__pngBanda(cv,tit,sub,bg));
+      }catch(e){ console.warn('banda',e); res(url); } };
+    im.onerror=function(){ res(url); };
+    im.src=url;
+  });
+};
+
+/* texto seguro dentro de un atributo HTML */
+function esc1(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+  .replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* nombre de fichero a partir del titulo: "Productividad_FRESCOS_Tienda_2465.png" */
+function pngSlug(x){ var t=String(x||'');
+  try{ t=t.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }catch(e){}
+  return t.replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80); }
+
+/* Quien es quien, y NADA mas. Es la unica linea de contexto que se le pone a una grafica:
+   el rango de meses ya esta en el eje x, la unidad va en el titulo y el estilo de cada linea
+   lo dice la leyenda. En pantalla se usa el nombre corto (el selector esta justo encima) y en
+   la descarga el largo, que la imagen viaja sola. */
+function scnSub(){
+  if(!ST.analyzed) return '';
+  return ST.single ? (ST.nameA||'') : ((ST.nameA||'')+' frente a '+(ST.nameB||''));
+}
+function pngCtx(o){
+  o=o||{}; if(!ST.analyzed) return '';
+  if(o.soloA||ST.single) return scopeName('A');
+  return scopeName('A')+' frente a '+scopeName('B');
+}
+/* Graficas sin titulo propio en la tarjeta (las de caudal del resumen). El resto lo saca
+   pngTit() de la propia tarjeta, asi pantalla y descarga no pueden decir cosas distintas. */
+var PNG_TIT={
+  cCaudalDonut: function(){ return ['Composición del caudal real', pngCtx({soloA:true})]; },
+  cCaudal:      function(){ return ['Caudal (h/día)', pngCtx({soloA:true})]; }
+};
+/* El titulo de la descarga es EL MISMO que se ve en pantalla: se lee el .ctitle de la tarjeta
+   donde vive el boton. Un boton puede traerlo ya hecho en data-pngtitle / data-pngsub (lo
+   usan el detalle del faro y los roscos, donde el texto de pantalla es mas corto a proposito). */
+function pngTit(id,b){
+  if(b&&b.dataset&&b.dataset.pngtitle) return [b.dataset.pngtitle, b.dataset.pngsub||''];
+  var caja=(b&&b.closest)?(b.closest('.cbox-in')||b.closest('.cbox')):null;
+  var t=caja?caja.querySelector('.ctitle'):null;
+  if(t && t.textContent.trim() && t.textContent.trim()!=='—') return [t.textContent.trim(), pngCtx()];
+  var f=PNG_TIT[id]; if(!f) return ['',''];
+  try{ var r=f(); return [r[0]||'', r[1]||'']; }catch(e){ console.warn('titulo png',e); return ['','']; }
+}
+function pngName(tit,fallback){
+  if(!tit) return fallback;
+  var t=pngSlug(tit);
+  try{ if(curA&&curA.tienda) t+='_'+pngSlug(shortStore(curA.tienda)); }catch(e){}
+  return t||fallback;
+}
+
 document.addEventListener('click',function(e){
   const p=e.target.closest&&e.target.closest('[data-png]');
-  if(p){const id=p.dataset.png; const el=$(id); const fn=(p.dataset.pngname||id)+'.png';
+  if(p){const id=p.dataset.png; const el=$(id);
+    const TT=pngTit(id,p), tit=TT[0], sub=TT[1];
+    const fn=pngName(tit,(p.dataset.pngname||id))+'.png';
     if(el&&el.data){ const fin=btnBusy(p); if(!fin)return;
-      Plotly.toImage(el,{format:'png',width:1200,height:620,scale:2})
-        .then(function(url){ window.__deliver(fn,url,true); })
-        .catch(function(e){ console.warn('png',e); alert('No se pudo generar el PNG: '+(e&&e.message||e)); })
-        .then(fin,fin); }
+      window.__pngPlotly(el,tit,sub,fn).then(fin,fin); }
     /* No todas las "graficas" son de Plotly: la composicion del tiempo por area (#cReal) esta
        hecha con divs. Antes este boton no hacia NADA en silencio (comprobado: tampoco funcionaba
        antes de tocar nada). Si el div no es de Plotly se captura con html2canvas, igual que las
@@ -4309,7 +4681,7 @@ document.addEventListener('click',function(e){
     else if(el&&typeof html2canvas!=='undefined'){ const fin=btnBusy(p); if(!fin)return;
       const bg=cssv('--panel','#fff');
       html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,logging:false,imageTimeout:0,
-        ignoreElements:pngIgnore(el)}).then(function(cv){ window.__deliver(fn,cv.toDataURL('image/png'),true); })
+        ignoreElements:pngIgnore(el)}).then(function(cv){ window.__deliver(fn,window.__pngBanda(cv,tit,sub,bg),true); })
         .catch(function(err){ console.warn('png html',err); alert('No se pudo generar el PNG: '+(err&&err.message||err)); })
         .then(fin,fin); }
     return;}
@@ -4318,12 +4690,29 @@ document.addEventListener('click',function(e){
   if(pt){ const el=$(pt.dataset.pngtbl);
     if(typeof html2canvas==='undefined'){alert('No se pudo cargar la librería de captura (sin conexión).');return;}
     if(el){ const bg=cssv(pt.dataset.pngbg==='bg'?'--bg':'--panel')||'#fff'; const fin=btnBusy(pt); if(!fin)return;
-      /* Que se clona y que no: ver pngIgnore(), justo encima de este listener. */
-      html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,logging:false,imageTimeout:0,
-        ignoreElements:pngIgnore(el)}).then(cv=>{
-      window.__deliver((pt.dataset.pngname||pt.dataset.pngtbl)+'.png', cv.toDataURL('image/png'), true);
-    }).catch(err=>{console.error(err);alert('No se pudo generar el PNG: '+(err&&err.message||err));})
-      .then(fin,fin); }
+      const tit=pt.dataset.pngtitle||'', sub=pt.dataset.pngsub||'';
+      const fn=pngName(tit,(pt.dataset.pngname||pt.dataset.pngtbl))+'.png';
+      /* La tabla se baja ENTERA, no solo el trozo que se ve: html.pngshot le quita el recorte
+         a los contenedores con scroll. La escala se ajusta al ancho real para que una tabla
+         muy ancha no acabe en una imagen enorme (tope 2.800 px de lado). */
+      document.documentElement.classList.add('pngshot');
+      requestAnimationFrame(()=>{
+        const W=Math.max(el.scrollWidth,el.offsetWidth), H=Math.max(el.scrollHeight,el.offsetHeight);
+        const esc=Math.max(1,Math.min(2,2800/Math.max(W,H||1)));
+        const limpia=()=>document.documentElement.classList.remove('pngshot');
+        /* Que se clona y que no: ver pngIgnore(), justo encima de este listener. */
+        /* Solo windowWidth/windowHeight: se le dice a html2canvas que finja una ventana lo
+           bastante grande y que el mida el elemento. Pasandole tambien width/height recortaba
+           la ultima columna, porque el recorte no arranca justo en el borde del elemento. */
+        html2canvas(el,{backgroundColor:bg,scale:esc,useCORS:true,logging:false,imageTimeout:0,
+          windowWidth:Math.max(document.documentElement.clientWidth,W+200),
+          windowHeight:Math.max(document.documentElement.clientHeight,H+200),
+          ignoreElements:pngIgnore(el)}).then(cv=>{
+        limpia();
+        window.__deliver(fn, window.__pngBanda(cv,tit,sub,bg), true);
+      }).catch(err=>{limpia();console.error(err);alert('No se pudo generar el PNG: '+(err&&err.message||err));})
+        .then(fin,fin); });
+      }
     return; }
   const c=e.target.closest&&e.target.closest('[data-csv]');
   if(c){tableToCsv(c.dataset.csv,c.dataset.csvname);}
@@ -4606,8 +4995,7 @@ function loSaveObj(){
     lines.push(row.join(','));
   });
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob), a2=document.createElement('a');
-  a2.href=url; a2.download='Objetivos_Tiendas_Liebre.csv'; document.body.appendChild(a2); a2.click(); a2.remove(); URL.revokeObjectURL(url);
+  window.__deliver('Objetivos_Tiendas_Liebre.csv', blob, false);
 }
 function renderCalc(){
   const C=cols(ST.calcCorte), cs=activeCols(), merc=!!window.__MERC;
@@ -4776,8 +5164,8 @@ function barLine(lbl,real,efec,mx,strong,obj){
   const wr=isNaN(real)?0:real/mx*100, we=isNaN(efec)?0:efec/mx*100, wo=obj/mx*100, ok=real<=obj;
   return `<div class="lo-rkrow" style="cursor:default;grid-template-columns:90px 1fr 120px">
     <div class="lo-rkname" style="${strong?'font-weight:850':''}">${lbl}</div>
-    <div class="lo-rkbar" style="height:20px"><i style="width:${wr}%;background:${ok?'var(--down)':'var(--up)'};opacity:.85"></i><i style="width:${we}%;background:#4b5c72;opacity:.95"></i><span class="lo-mid" style="left:${wo}%"></span></div>
-    <div class="lo-rkval"><span style="color:${ok?'var(--down)':'var(--up)'}">${es(real,3)}</span><small style="color:#4b5c72">${es(efec,3)}</small></div></div>`;
+    <div class="lo-rkbar" style="height:20px"><i style="width:${wr}%;background:${ok?'var(--down)':'var(--up)'};opacity:.85"></i><i style="width:${we}%;background:var(--p-cont);opacity:.95"></i><span class="lo-mid" style="left:${wo}%"></span></div>
+    <div class="lo-rkval"><span style="color:${ok?'var(--down)':'var(--up)'}">${es(real,3)}</span><small style="color:var(--p-cont)">${es(efec,3)}</small></div></div>`;
 }
 
 /* ---------- RANKING ---------- */
@@ -5263,8 +5651,22 @@ function renderChart(agg){
     legend:{orientation:'h',y:1.15,x:0},hovermode:'x unified',dragmode:false};
   Plotly.react(box,traces,lay,{displayModeBar:false,responsive:true,scrollZoom:false,doubleClick:false});
 }
+/* La grafica se baja con su titulo: "Caudal" y debajo, solo el proceso. */
+/* Solo el PROCESO. Antes se volcaban todos los filtros activos (centros, meses, semanas...)
+   y salia un subtitulo interminable e ilegible en la imagen. Los centros no van: si el ambito
+   son cuarenta tiendas no cabe, y si es una sola ya se ve en la propia grafica. */
+function cdSubtitulo(){
+  const s=SEL['proceso'], todos=OPTS['proceso']||[];
+  const sel=(s&&s.size)?[...s]:todos;
+  const labs=[...new Set(sel.map(procLabel))];
+  return labs.length?labs.join(' y '):''; }
 function downloadChart(){ const box=$('cd_chart'); if(typeof Plotly==='undefined'||!box||!box.data)return;
-  try{ Plotly.downloadImage(box,{format:'png',filename:'caudal_grafica',width:1500,height:640,scale:2}); }catch(e){} }
+  const b=document.getElementById('cd_dlChart'), fin=(window.btnBusy?window.btnBusy(b):null);
+  if(window.btnBusy&&b&&!fin)return;
+  const tit='Caudal', sub=cdSubtitulo();
+  try{ window.__pngPlotly(box,tit,sub,'caudal_'+String(sub).replace(/[^A-Za-z0-9]+/g,'_').slice(0,60)+'.png')
+         .then(fin||function(){},fin||function(){}); }
+  catch(e){ if(fin)fin(); } }
 
 const MCOLS=[['Estimado','ancla'],['Planificado','horario'],['Óptimo','real'],['Real','rrv'],
   ['Planificado − Estimado','ancla_horario'],['Óptimo − Estimado','ancla_real'],['Óptimo − Planificado','horario_real'],
@@ -5311,7 +5713,7 @@ function downloadTable(){ if(!LOADED)return; const {arr,dcols,mcols,T}=buildTabl
   arr.forEach(g=>{ lines.push(dcols.map(c=>String(c.get(g)).replace(/;/g,',')).concat(mcols.map(c=>{const v=g[c.mkey];return v==null?'':String(v).replace('.',',');})).join(';')); });
   lines.push(['TOTAL'].concat(Array(dcols.length-1).fill('')).concat(mcols.map(c=>{const v=T[c.mkey];return v==null?'':String(v).replace('.',',');})).join(';'));
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_detalle.csv'; a.click(); URL.revokeObjectURL(u);
+  window.__deliver('caudal_detalle.csv', blob, false);
 }
 
 /* ---------- selector de columnas ---------- */
@@ -5377,7 +5779,7 @@ function downloadDev(){ if(!LOADED)return; const {arr}=devGroups(filtered()), dc
   const lines=[dcols.map(c=>c.lab).concat(cols.map(c=>c[0]+' (%)')).join(';')];
   arr.forEach(g=>{ lines.push(dcols.map(c=>String(c.get(g)).replace(/;/g,',')).concat(cols.map(c=>{const v=devCellPct(g,c[1]);return v==null?'':String(v.toFixed(1)).replace('.',',');})).join(';')); });
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_desvios.csv'; a.click(); URL.revokeObjectURL(u); }
+  window.__deliver('caudal_desvios.csv', blob, false); }
 function syncMediaOpts(){ const el=$('cd_media'); if(!el)return; const lim=MRANK[TIME];
   el.querySelectorAll('[data-v]').forEach(b=>{ const dis=MRANK[b.dataset.v]>lim; b.disabled=dis; });
   if(MRANK[MEDIA]>lim){ MEDIA=TIME; el.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('lo-on',b.dataset.v===MEDIA)); } }
@@ -5405,7 +5807,7 @@ function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by;
   const lines=[['#',RKBY_LAB[by]].concat(MCOLS.map(c=>c[0])).join(';')];
   arr.forEach((b,i)=>{ lines.push([i+1,String(rankLabel(by,b.key)).replace(/;/g,',')].concat(MCOLS.map(c=>{const v=b[c[1]];return v==null?'':String(v).replace('.',',');})).join(';')); });
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download='caudal_ranking.csv'; a.click(); URL.revokeObjectURL(u);
+  window.__deliver('caudal_ranking.csv', blob, false);
 }
 // Resize robusto del chart de Caudal: debounce + ResizeObserver del contenedor (evita que se quede "encogido" al agrandar/achicar la ventana)
 let _cdRT=null;
@@ -5693,6 +6095,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* lo llama el modulo de objetivos en cuanto tiene la lista de tiendas liebre */
   window.__faLiebreSync=function(){ try{ if(syncOtros()) render(); }catch(e){} };
   /* nombre corto para el titulo de la imagen: Veteranas / R08 / Z24 / 2004 · Nombre / NTC60 */
+  function faEsc(x){ return String(x==null?'':x).replace(/&(?!middot;)/g,'&amp;').replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function shortGroup(){ if(ST.dim==='Global') return ST.val===TODAS?'Todas':(ST.val==='Veterana'?'Veteranas':ST.val);
     if(ST.dim==='Otros') return ST.val;
     if(ST.dim==='Tienda') return valLabel('Tienda',ST.val);
@@ -5816,7 +6220,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     /* El boton captura el CONTENEDOR de los cuatro roscos de una vez (html2canvas), asi que
        la imagen sale con el rosco, el valor, el delta en pp y la referencia de cada uno,
        igual que en pantalla. Va en la cabecera, fuera de #fa_rings, para no salir en la foto. */
-    var h='<div class="fa-sec"><div class="fa-sech"><div class="t">Indicadores globales</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="fa_rings" data-pngbg="bg" data-pngname="roscos_farolas" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div><div class="fa-rings" id="fa_rings"></div></div>';
+    var h='<div class="fa-sec"><div class="fa-sech"><div class="t">Indicadores globales</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="fa_rings" data-pngbg="bg" data-pngname="roscos_farolas"'+
+      ' data-pngtitle="Farolas &middot; '+faEsc(groupName())+'"'+
+      ' data-pngsub="'+faEsc(cardSel().label+(same?'':' &middot; frente a '+refLabel()))+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div><div class="fa-rings" id="fa_rings"></div></div>';
     h+=GRUPOS.map(function(g){
       var cards=g.ms.map(function(m){ var v=dayIgual(rows,m.k), ref=same?null:dayIgual(rrows,m.k);
         var obj=(m.obj==null)?'':('objetivo '+(m.low?'≤ ':'')+fmtVal(m,m.obj));
@@ -5949,7 +6355,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
           font:{size:11,color:ink,family:FONT},bgcolor:panel,opacity:.95}); }
       var lay={margin:{l:56,r:14,t:10,b:(modo==='mes'?40:52)},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
         font:{family:FONT,color:ink,size:12},showlegend:false,shapes:shapes,annotations:anns,hovermode:'x unified',
-        hoverlabel:{bgcolor:panel,bordercolor:line,font:{color:inkS,size:13,family:FONT}},
+        /* la etiqueta de hover la pone igual para todas el envoltorio de Plotly del head */
         xaxis:{gridcolor:grid,automargin:true,tickfont:{size:11.5}},
         yaxis:{gridcolor:grid,zeroline:false,automargin:true,hoverformat:hf,tickfont:{size:11.5}}};
       if(modo!=='mes'){ lay.xaxis.type='date'; lay.xaxis.tickmode='array'; lay.xaxis.tickvals=tickvals; lay.xaxis.ticktext=ticktext; lay.xaxis.tickfont={size:11}; }
@@ -5966,7 +6372,12 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       /* newPlot (no react): con react las etiquetas de texto no se pintaban hasta un resize */
       try{ Plotly.newPlot(box,data,lay,{displayModeBar:false,responsive:true}); }catch(e){}
       var bt=document.querySelector('[data-fapng="fa_ch_'+m.k+'"]');
-      if(bt){ bt.setAttribute('data-fatitle', m.label+' — '+shortGroup());
+      if(bt){ var _sm=sameSet();
+        bt.setAttribute('data-fatitle', m.label+' · '+groupName());
+        bt.setAttribute('data-fasub', [ (PERS[ST.per]?PERS[ST.per].lab:''),
+            (ST.scope==='vet'?'solo veteranas':'todas las tiendas'),
+            (_sm?'sin comparación':'frente a '+refLabel()),
+            (m.unit?('en '+m.unit):'') ].filter(Boolean).join(' · '));
         bt.setAttribute('data-faname','farolas_'+m.k+'_'+String(shortGroup()).replace(/[^A-Za-z0-9]+/g,'_')+'_'+ST.per); }
     }); }
 
@@ -5976,7 +6387,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     e.stopPropagation(); var id=b.getAttribute('data-fapng'), src=$(id); if(!src||!src.data||!window.Plotly)return;
     /* mismo aviso "Generando…" que el resto de PNG: la imagen es de 1800x1020 y tarda */
     var fin=(window.btnBusy?window.btnBusy(b):null); if(window.btnBusy&&!fin)return;
-    var W=1800,H=1020, tit=b.getAttribute('data-fatitle')||'';
+    var W=1800,H=1020, tit=b.getAttribute('data-fatitle')||'', sub=b.getAttribute('data-fasub')||'';
     var tmp=document.createElement('div');
     tmp.style.cssText='position:fixed;left:-10000px;top:0;width:'+W+'px;height:'+H+'px;pointer-events:none';
     document.body.appendChild(tmp);
@@ -5987,8 +6398,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       });
     /* la leyenda se muestra SIEMPRE (aunque haya una sola serie) y va en el margen superior */
     lay.showlegend=true;
-    lay.legend={orientation:'h',xref:'paper',yref:'paper',x:0,xanchor:'left',y:1,yanchor:'bottom',
-      font:{size:30,family:FONT,color:cvar('--ink')},bgcolor:'rgba(0,0,0,0)',borderwidth:0,itemsizing:'constant',tracegroupgap:0};
+    lay.legend={orientation:'h',xref:'paper',yref:'paper',x:0,xanchor:'left',y:1.02,yanchor:'bottom',
+      font:{size:26,family:FONT,color:cvar('--ink')},bgcolor:'rgba(0,0,0,0)',borderwidth:0,tracegroupgap:0,itemwidth:46};
     lay.font={family:FONT,color:cvar('--ink2'),size:28};
     lay.paper_bgcolor=cvar('--panel'); lay.plot_bgcolor=cvar('--panel');
     if(lay.xaxis){ lay.xaxis.tickfont={size:27,family:FONT}; lay.xaxis.automargin=true;
@@ -5999,17 +6410,18 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(lay.yaxis){ lay.yaxis.tickfont={size:27,family:FONT}; lay.yaxis.automargin=true; }
     if(lay.annotations&&lay.annotations.length) lay.annotations.forEach(function(a){ a.font=a.font||{}; a.font.size=26; });
     if(lay.shapes) lay.shapes.forEach(function(s){ if(s.line)s.line.width=2; });
-    /* espacio arriba: titulo (si hay) + banda de la leyenda */
-    var tH = tit?86:0, lH = 66;
+    /* espacio arriba: solo la banda de la leyenda (el titulo va fuera de la grafica) */
+    var tH = 0, lH = 66;
     var nxx=(data[0]&&data[0].x)?data[0].x.length:0, rot=(lay.xaxis&&lay.xaxis.type!=='date'&&nxx>=10);
     lay.margin={l:132,r:110,t:(tH+lH+26),b:(rot?168:104)};
-    if(tit) lay.title={text:tit,x:0,xanchor:'left',yref:'container',y:1,yanchor:'top',pad:{t:26,l:6},
-      font:{size:42,family:FONT,color:cvar('--ink')}};
-    else lay.title=undefined;
+    /* el titulo se dibuja DESPUES sobre la imagen (window.__pngBandaUrl), igual que en el
+       resto de descargas: pedirselo a Plotly lo sube y lo corta por arriba. */
+    lay.title=undefined;
     lay.width=W; lay.height=H;
     var fname=(b.getAttribute('data-faname')||id)+'.png';
     Plotly.newPlot(tmp,data,lay,{displayModeBar:false,staticPlot:true})
       .then(function(){ return Plotly.toImage(tmp,{format:'png',width:W,height:H,scale:2}); })
+      .then(function(url){ return window.__pngBandaUrl?window.__pngBandaUrl(url,tit,sub,cvar('--panel')):url; })
       .then(function(url){
         window.__deliver(fname,url,true);
         try{Plotly.purge(tmp);}catch(_){} tmp.remove(); if(fin)fin(); })
@@ -6211,12 +6623,17 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     try{ list=document.querySelectorAll('.js-plotly-plot'); }catch(e){ return; }
     for(var i=0;i<list.length;i++){
       var gd=list[i];
-      if(!gd.offsetParent) continue;                 // pestana oculta: se repinta al mostrarla
+      /* Una grafica pintada mientras su seccion estaba oculta sale con el tamano por defecto
+         de Plotly (700x450) y al mostrarla se queda asi: se veia el titulo y el subtitulo pero
+         no la grafica, y solo se arreglaba al mover la ventana. Se marca mientras esta oculta
+         y en cuanto se ve se fuerza el redimensionado sin esperar la guarda de 400 ms. */
+      if(!gd.offsetParent){ gd.__oculta=1; continue; }
       if(!gd.data) continue;
       var cw=gd.clientWidth, ch=gd.clientHeight;
       if(cw<10||ch<10) continue;
       var fl=gd._fullLayout;
-      if(fl && Math.abs((fl.width|0)-cw)<2 && Math.abs((fl.height|0)-ch)<2){ gd.__rsKey=null; continue; }
+      if(gd.__oculta){ gd.__oculta=0; gd.__rsKey=null; gd.__rsAt=0; }
+      else if(fl && Math.abs((fl.width|0)-cw)<2 && Math.abs((fl.height|0)-ch)<2){ gd.__rsKey=null; continue; }
       var key=cw+'x'+ch;
       /* que se salga por la derecha es lo peor que puede pasar (corta los ultimos meses):
          en ese caso se reintenta ya, sin esperar la guarda de 400 ms. */
@@ -6477,6 +6894,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* selector de escenarios: campos comodos de tocar sin engordar el diseno */
   .pick .combo-in{min-height:44px}
   .pick select{min-height:40px}
+  /* botones de cerrar (30x30 y 26x26 por diseno): se amplia solo la zona sensible */
+  .fd-close,#cfgPanel .cfg-x{position:relative}
+  .fd-close::after,.lo-detClose::after,#cfgPanel .cfg-x::after{content:"";position:absolute;
+    top:-8px;right:-8px;bottom:-8px;left:-8px;border-radius:11px}
+  /* filas de los desplegables de Caudal y Farolas: 28 y 32 px medidos -> 44 */
+  .cd-opt{min-height:44px}
+  .fa-it{padding-top:13px;padding-bottom:13px}
   /* el circulo de intercambio se queda en 34 px por diseno: se amplia solo la zona sensible */
   .pk-swap{position:relative}
   .pk-swap::after{content:"";position:absolute;top:-6px;right:-6px;bottom:-6px;left:-6px;border-radius:50%}
@@ -6489,7 +6913,17 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     <div style="font-size:16px;font-weight:800;color:var(--ink)">Cargando datos…</div>
   </div>
 </div>
-<style>@keyframes bootSpin{to{transform:rotate(360deg)}}</style>
+<style>@keyframes bootSpin{to{transform:rotate(360deg)}}
+/* ===== Modo captura =====
+   Mientras se genera un PNG se le quita el recorte a los contenedores con scroll y se
+   desactiva el position:sticky. Si no, la imagen salia con SOLO el trozo de tabla que se
+   estaba viendo (y en el movil eso es media tabla), y las cabeceras fijas se duplicaban. */
+html.pngshot .ptable-wrap,html.pngshot .lo-tbl-wrap,html.pngshot .tbl-scroll,
+html.pngshot #cd_tblWrap,html.pngshot #cd_devWrap,html.pngshot .matrix,
+html.pngshot .mxgrid,html.pngshot .flow-track{overflow:visible!important;max-height:none!important}
+html.pngshot table th,html.pngshot table td{position:static!important}
+html.pngshot .clog{height:auto!important;max-height:none!important}
+</style>
 <script>
 /* El HTML no se puede usar hasta que TODOS los datos esten cargados (desglose + farolas). */
 (function(){
@@ -6498,11 +6932,177 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   try{ document.documentElement.style.overflow='hidden'; document.body.style.overflow='hidden'; }catch(e){}
   function hide(){ var o=document.getElementById('bootOv'); if(o){ o.style.opacity='0'; o.style.transition='opacity .25s'; setTimeout(function(){ o.style.display='none'; },260); }
     try{ document.documentElement.style.overflow=''; document.body.style.overflow=''; }catch(e){}
-    try{ if(window.__faResize) window.__faResize(); }catch(e){} }
+    try{ if(window.__faResize) window.__faResize(); }catch(e){}
+    /* al quitar el velo vuelve la barra de scroll y TODAS las tarjetas cambian de ancho:
+       hay que remedir todas las graficas, no solo las de Farolas */
+    try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}
+    [400,1000,2200].forEach(function(ms){ setTimeout(function(){
+      try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){} },ms); }); }
   window.__bootStep=function(k,txt){ need[k]=true;
     if(need.main&&need.far) hide(); };
   /* red de seguridad: pase lo que pase, a los 40 s se libera */
   setTimeout(function(){ var o=document.getElementById('bootOv'); if(o&&o.style.display!=='none'){ hide(); } },40000);
+})();
+</script>
+<!-- =========================================================================================
+     TOOLTIPS — uno solo para todo el dashboard
+     Plotly no deja redondear sus etiquetas de hover: el fondo de la etiqueta de un punto es un
+     <path> con pico y esquinas en angulo recto, y el desglose de la columna (hovermode
+     'x unified') es un <rect> pegado al texto con borde duro. Lo que se hace aqui es esconder
+     ese fondo y poner detras del texto un <rect rx>, que ya es un rectangulo redondeado de
+     verdad y se puede pintar por CSS igual que las tarjetas de la pagina.
+     Los dos tooltips propios (#lo_tip del faro y #segTip del comparador) usan la misma piel,
+     asi que los tres se ven iguales en Mac, iPad y iPhone, en claro y en oscuro.
+     ========================================================================================= -->
+<style>
+:root{--tip-bg:#1b2537;--tip-bd:#31405e;--r-tip:12px;--tip-sh:0 10px 26px rgba(0,0,0,.42)}
+html.light{--tip-bg:#ffffff;--tip-bd:#cfdcee;--tip-sh:0 10px 24px rgba(20,40,70,.15)}
+
+/* el rectangulo redondeado que pinta el modulo de abajo */
+.js-plotly-plot .hoverlayer rect.jv-tipbg{fill:var(--tip-bg);stroke:var(--tip-bd);stroke-width:1px;
+  shape-rendering:geometricPrecision;filter:drop-shadow(0 8px 18px rgba(0,0,0,.30))}
+html.light .js-plotly-plot .hoverlayer rect.jv-tipbg{filter:drop-shadow(0 8px 16px rgba(20,40,70,.13))}
+/* la vertical del desglose: una guia fina y discreta, no el trazo blanco grueso de Plotly */
+.js-plotly-plot .hoverlayer line.spikeline{stroke:var(--ink3)!important;stroke-width:1px!important;
+  stroke-dasharray:3 4!important;opacity:.6}
+.js-plotly-plot .hoverlayer{pointer-events:none}
+
+/* tooltips propios: misma piel que los de las graficas */
+#lo_tip,#segTip{position:fixed;z-index:9999;pointer-events:none;background:var(--tip-bg);
+  color:var(--ink);border:1px solid var(--tip-bd);border-radius:var(--r-tip);padding:9px 13px;
+  font-size:12px;line-height:1.45;box-shadow:var(--tip-sh);white-space:nowrap}
+#lo_tip{opacity:0;transition:opacity .12s ease}
+#lo_tip.lo-on{opacity:1}
+#lo_tip b,#segTip b{font-family:ui-monospace,'SF Mono',Menlo,monospace}
+</style>
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg';
+  var PADX=4;   /* aire a los lados */
+  var PADY=3;   /* aire arriba y abajo */
+  var GAP=6;    /* hueco entre la etiqueta y el punto (lo que ocupaba el pico) */
+  var SEG=3;    /* margen minimo que se le deja SIEMPRE al texto */
+  var RMAX=12;  /* radio maximo */
+
+  function kid(host,name,cls){
+    var k=host.childNodes;
+    for(var i=0;i<k.length;i++){ var n=k[i];
+      if(n.nodeType===1 && n.nodeName===name && n.getAttribute('class')===cls) return n; }
+    return null;
+  }
+  function bgOf(host,before){
+    var bg=kid(host,'rect','jv-tipbg');
+    if(!bg){ bg=document.createElementNS(NS,'rect'); bg.setAttribute('class','jv-tipbg');
+             host.insertBefore(bg,before||host.firstChild); }
+    return bg;
+  }
+  function place(bg,l,t,w,h){
+    var r=Math.max(6,Math.min(RMAX,h/2.4));
+    bg.setAttribute('x',l.toFixed(1)); bg.setAttribute('y',t.toFixed(1));
+    bg.setAttribute('width',Math.max(1,w).toFixed(1)); bg.setAttribute('height',Math.max(1,h).toFixed(1));
+    bg.setAttribute('rx',r.toFixed(1)); bg.setAttribute('ry',r.toFixed(1));
+  }
+
+  /* etiqueta de UN punto: <path> con pico + los textos (+ un rect suelto para el nombre)
+
+     Ojo con como se esconde el fondo original: NO se puede usar display:none. Al insertar
+     nuestro rectangulo el observador se dispara otra vez, y en esa segunda pasada un
+     display:none devuelve un getBBox() de 0x0, asi que la caja se remedia solo con el texto
+     y se encoge los 6 px del pico -> las cifras se salian por un lado. Con fill/stroke a
+     'none' el elemento sigue estando ahi y midiendo, y la medida sale igual las veces que
+     haga falta. */
+  function onePoint(g){
+    var k=g.childNodes, i, n, b;
+    var x0=1/0, y0=1/0, x1=-1/0, y1=-1/0, any=false;   /* todo: formas + textos */
+    var tx0=1/0, ty0=1/0, tx1=-1/0, ty1=-1/0, hayTxt=false;   /* solo los textos */
+    var px0=null, px1=null;                                   /* el <path> con el pico */
+    for(i=0;i<k.length;i++){
+      n=k[i]; if(n.nodeType!==1) continue;
+      if(n.nodeName==='rect' && n.getAttribute('class')==='jv-tipbg') continue;
+      try{ b=n.getBBox(); }catch(e){ continue; }
+      if(!b || (b.width<=0 && b.height<=0)) continue;
+      any=true;
+      if(b.x<x0)x0=b.x; if(b.y<y0)y0=b.y;
+      if(b.x+b.width>x1)x1=b.x+b.width; if(b.y+b.height>y1)y1=b.y+b.height;
+      if(n.nodeName==='text'){ hayTxt=true;
+        if(b.x<tx0)tx0=b.x; if(b.y<ty0)ty0=b.y;
+        if(b.x+b.width>tx1)tx1=b.x+b.width; if(b.y+b.height>ty1)ty1=b.y+b.height;
+      } else {
+        if(n.nodeName==='path'){ px0=b.x; px1=b.x+b.width; }
+        n.style.fill='none'; n.style.stroke='none';
+      }
+    }
+    if(!any || x1<=x0) return;
+    /* Plotly ancla el pico en x=0: si la caja va a la derecha del punto, el pico es su borde
+       izquierdo, y si va a la izquierda, el derecho. Ese lado se recorta en vez de rellenarse
+       y queda un hueco limpio entre la barra y la etiqueta. */
+    var l,r;
+    if(px0===null){ l=x0-PADX; r=x1+PADX; }
+    else if(px0 > -0.5){ l=px0+GAP; r=x1+PADX; }   /* etiqueta a la derecha del punto */
+    else               { r=px1-GAP; l=x0-PADX; }   /* etiqueta a la izquierda */
+    var t=y0-PADY, bo=y1+PADY;
+    /* red de seguridad: pase lo que pase, ni una cifra fuera de la caja */
+    if(hayTxt){
+      if(tx0-SEG<l)l=tx0-SEG; if(tx1+SEG>r)r=tx1+SEG;
+      if(ty0-SEG<t)t=ty0-SEG; if(ty1+SEG>bo)bo=ty1+SEG;
+    }
+    place(bgOf(g), l, t, r-l, bo-t);
+  }
+
+  /* desglose de la columna ('x unified'): Plotly lo pinta como una leyenda con rect.bg */
+  function oneBox(lg){
+    var src=kid(lg,'rect','bg'); if(!src) return;
+    var w=+src.getAttribute('width'), h=+src.getAttribute('height');
+    if(!(w>0)||!(h>0)) return;
+    var x=+src.getAttribute('x')||0, y=+src.getAttribute('y')||0;
+    src.style.fill='none'; src.style.stroke='none';
+    /* red de seguridad: si el texto de la leyenda sobresaliera del rect que mide Plotly,
+       la caja se agranda hasta cubrirlo */
+    var l=x-9, t=y-7, r=x+w+9, bo=y+h+7, i, tb, tt=lg.querySelectorAll('text');
+    for(i=0;i<tt.length;i++){
+      try{ tb=tt[i].getBBox(); }catch(e){ continue; }
+      if(!tb || (tb.width<=0 && tb.height<=0)) continue;
+      var ox=0, oy=0, p=tt[i], m;                 /* los textos van dentro de grupos movidos */
+      while(p && p!==lg){ m=p.getAttribute&&p.getAttribute('transform');
+        if(m){ var q=/translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/.exec(m); if(q){ ox+=+q[1]; oy+=+q[2]; } }
+        p=p.parentNode; }
+      if(tb.x+ox-SEG<l)l=tb.x+ox-SEG;
+      if(tb.x+tb.width+ox+SEG>r)r=tb.x+tb.width+ox+SEG;
+      if(tb.y+oy-SEG<t)t=tb.y+oy-SEG;
+      if(tb.y+tb.height+oy+SEG>bo)bo=tb.y+tb.height+oy+SEG;
+    }
+    place(bgOf(lg,src), l, t, r-l, bo-t);
+  }
+
+  var hondo=0;
+  function pasada(){
+    if(hondo>2) return; hondo++;
+    try{
+      var L=document.querySelectorAll('.js-plotly-plot .hoverlayer'), i, j, a;
+      for(i=0;i<L.length;i++){
+        a=L[i].querySelectorAll('g.hovertext'); for(j=0;j<a.length;j++) onePoint(a[j]);
+        a=L[i].querySelectorAll('g.legend');    for(j=0;j<a.length;j++) oneBox(a[j]);
+      }
+    }catch(e){}
+    hondo--;
+  }
+
+  /* Se vigila la capa de hover en vez de escuchar 'plotly_hover': Plotly repinta la etiqueta
+     al mover el raton dentro del mismo punto y con el evento se quedaba a medias. */
+  function arrancar(){
+    try{
+      new MutationObserver(function(m){
+        for(var i=0;i<m.length;i++){
+          var t=m[i].target;
+          if(!t || t.nodeType!==1) continue;
+          if(t.ownerSVGElement===undefined) continue;        /* nodo HTML: no interesa */
+          if(t.closest && t.closest('.hoverlayer')){ pasada(); return; }
+        }
+      }).observe(document.body,{childList:true,subtree:true});
+    }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',arrancar);
+  else arrancar();
 })();
 </script>
 </body>
