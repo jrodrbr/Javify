@@ -1820,12 +1820,14 @@ body.simple #mObj{display:none!important}
       <div class="kpis" id="kpis" style="margin-top:16px"></div>
       <!-- Nota de metodo: cerrada por defecto, justo ANTES del caudal del centro (que es
            donde se ve la diferencia). La flecha se convierte en X al abrirla. -->
-      <details class="metodo no-print" id="metodoAviso">
-        <summary><span class="m-p"></span><span class="m-x">El caudal y la productividad oficiales están en <b>Farolas</b>. Aquí se calculan de otra forma.</span></summary>
+      <!-- Solo tiene sentido en unidades MO: en Mercadona ya se cuenta igual que Farolas y los
+           numeros cuadran, asi que explicar una diferencia que ya no existe despista. -->
+      <details class="metodo no-print" id="metodoAviso" hidden>
+        <summary><span class="m-p"></span><span class="m-x">Aquí se cuenta en unidades de <b>Mercadona Online</b>, no como <b>Farolas</b>.</span></summary>
         <div class="m-body">
           <dl class="m-cmp">
-            <div><dt>Aquí</dt><dd>Unidades de Mercadona Online · objetivo <b>0,315</b> min/ud</dd></div>
-            <div><dt>Farolas <span>oficial</span></dt><dd>Conteo de unidades de siempre · objetivo <b>0,34</b> min/ud</dd></div>
+            <div><dt>Aquí</dt><dd>Unidades de Mercadona Online · objetivo <b id="mNotaMO">—</b> min/ud</dd></div>
+            <div><dt>Farolas <span>oficial</span></dt><dd>Conteo de unidades de siempre · objetivo <b id="mNotaMC">—</b> min/ud</dd></div>
           </dl>
           <p>Diez manzanas a granel son <b>una</b> unidad en Farolas y <b>diez</b> aquí. Como las unidades
           dividen los min/ud, el mismo trabajo da una productividad distinta.</p>
@@ -2548,9 +2550,8 @@ body.simple #mObj{display:none!important}
   <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
   <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques o desglosadas. Afecta al faro, la composición, objetivos y tendencias.">Vista: Desglosado</button>
   <button class="tg" id="unitBtn" title="Unidad de la productividad. Mercadona es la oficial (una bolsa de plátanos cuenta como una unidad). MO cuenta cada pieza. Los tiempos y el caudal no cambian: lo que cambia es el denominador, y cada una viene calculada por separado del SQL.">Unidad: Mercadona</button>
-  <div class="cfg-fld"><label for="cfgObj">Objetivo de productividad</label>
-    <input class="cfg-in" id="cfgObj" inputmode="decimal" autocomplete="off">
-    <div class="cfg-hint" id="cfgObjHint"></div></div>
+  <!-- El objetivo NO se toca desde aqui: es el oficial del CSV. El campo de la calculadora de la
+       pestana de objetivos solo afecta a esa tabla y a su CSV. -->
   <button class="tg" id="themeBtn">Tema: Claro</button>
 </div>
 <button class="fab" id="fab" style="display:none"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor"/></svg></button>
@@ -2880,6 +2881,11 @@ function renderCompFarolas(){
   if(!ok&&!$('cfFaBody').innerHTML) host.innerHTML='';
 }
 window.__cfFarolas=function(){ try{ renderCompFarolas(); }catch(e){ console.warn('cfFarolas',e); } };
+window.__faSyncFromComp=function(){
+  if(!ST.analyzed||!window.__faSetScenario) return;
+  try{ window.__faSetScenario(faSelFromScenario(curA.tienda),
+                              ST.single?null:faSelFromScenario(curB.tienda), curA.mesKey); }catch(e){}
+};
 function barColor(diff,eps){if(diff==null)return cssv('--ref');eps=eps||0;if(Math.abs(diff)<=eps)return cssv('--ref');return diff>0?cssv('--bad'):cssv('--good');}
 
 /* ===== CARGA CSV ===== */
@@ -2918,6 +2924,22 @@ function buildFromRows(raw,fname){
   setStatus('CSV cargado','on');
   if($('src1s')){$('src1s').textContent=ST.rows.length.toLocaleString('es-ES')+' filas · '+ST.realStores.length+' tiendas · '+ST.meses.length+' meses';}
   if($('dot1'))$('dot1').classList.add('on');
+  /* ¿trae el CSV la productividad por area en unidades MERCADONA? Sin ella, la vista Mercadona del
+     desglose, las diferencias por area y la calculadora de objetivos se quedan sin nada que pintar.
+     En vez de dejarlo en n/d sin explicacion, se dice y se vuelve a MO. */
+  (function(){
+    const hay=ST.rows.some(r=>r.prod_total_min_ud_media_mcd!=null&&!isNaN(r.prod_total_min_ud_media_mcd));
+    window.__MCD_DET=hay;
+    if(!hay&&window.__MERC){
+      window.__MERC=false;
+      const n=$('errbox'); if(n){ n.classList.add('show');
+        n.innerHTML='<b>El CSV del desglose no trae las unidades Mercadona.</b><br>'+
+          'Faltan <code>prod_total_min_ud_media_mcd</code> y <code>prod_efectiva_min_ud_media_mcd</code>, '+
+          'que son las que alimentan la productividad por área, las diferencias frente a la referencia '+
+          'y la calculadora de objetivos. Se ha cambiado a <b>unidades MO</b> para que puedas seguir '+
+          'trabajando. Vuelve a generar el CSV con el <b>SQL v4</b> y súbelo.'; }
+    }
+  })();
   /* Si el CSV no trae la fila GLOBAL del desglose o los objetivos, se sigue funcionando con las
      estimaciones de antes, pero se dice. Nada de numeros de procedencia dudosa sin avisar. */
   (function(){ const faltan=[];
@@ -3205,7 +3227,12 @@ function loadCfg(){ try{ var s=localStorage.getItem('javify_cfg'); return s?JSON
 function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();saveCfg();
   // modo "ficha de una sola tienda": A y B idénticos (misma tienda, mes y turno) → no comparar, mostrar solo esa tienda
   ST.single=(curA.tienda===curB.tienda&&curA.mesKey===curB.mesKey&&curA.shift===curB.shift);
-  MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
+  MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();
+  /* Farolas se pone en el MISMO escenario: si aquí comparas Veteranas con Zona 2, allí también. */
+  try{ if(window.__faSetScenario)
+         window.__faSetScenario(faSelFromScenario(curA.tienda),
+                                ST.single?null:faSelFromScenario(curB.tienda),
+                                curA.mesKey); }catch(e){ console.warn('faSync',e); }if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
 
 /* ===== MODELO ===== */
 function rowFor(s,a){return mapCorte((((ST.index[s.tienda]||{})[s.mesKey]||{})[s.shift]||{})[a]||null);}
@@ -3489,7 +3516,10 @@ function renderSummary(){
        La OFICIAL (Control NTC) sale de Farolas, que cuenta las unidades DE SIEMPRE. Al lado de
        la unidad Mercadona son dos numeros parecidos medidos de forma distinta y se confunden,
        asi que con unidad Mercadona solo se muestra en Experto; en MO, en los dos modos. */
-    const verOf = !window.__MERC || !document.body.classList.contains('simple');
+    /* La tarjeta "Prod. Control NTC" se ha quitado: salia de Farolas con el conteo de siempre y,
+       desde que la productividad efectiva se calcula ya en unidades MERCADONA, es el mismo numero
+       medido por dos caminos. Dos tarjetas identicas al lado solo confunden. */
+    const verOf = false;
     /* Titulos ABREVIADOS: "Productividad efectiva (≤6')" se partia en dos lineas y las cuatro
        tarjetas dejaban de estar alineadas entre si. Con "Prod." cabe todo en una linea. */
     k.push(kpiCard("Prod. real (≤20')", gv(gA,'prod_conparadas_min_ud'), objAct(),udName(),true,3,0.003));
@@ -4155,6 +4185,9 @@ function renderDiffControls(){
 function renderDiff(){
   const metric=ST.diffMetric, isUds=metric==='uds';
   const rows=MODEL.filter(m=>m.disponible&&viewAreas().includes(m.area)).map(m=>({m,imp:impactoDe(m,metric)}));
+  /* OJO: en la vista "Por unidades" la columna de la derecha es una DIFERENCIA de unidades por mes
+     frente a la referencia, no el volumen del analizado. Puede salir negativa con toda normalidad:
+     significa que el analizado mueve menos unidades por lote. La etiqueta lo dice. */
   const nd=MODEL.filter(m=>!m.disponible&&viewAreas().includes(m.area));
   const fmtUds=n=>(n==null||isNaN(n))?'—':(n>0?'+':n<0?'−':'')+fmt(Math.abs(n),0)+' ud';
   let html=rows.map(({m,imp})=>{
@@ -4174,7 +4207,7 @@ function renderDiff(){
       '<div class="spark-wrap"><div style="flex:1;height:36px;min-width:0">'+svgSpark(sA,sB,130,36,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
       '<div class="dr-vals"><div class="dr-pair"><span class="k">Analizado</span><span class="v an">'+fmt(v.a,v.dec)+'</span></div><div class="dr-pair"><span class="k">Referencia</span><span class="v rf">'+fmt(v.b,v.dec)+'</span></div></div>'+
       '<div style="text-align:right">'+deltaHtml+'</div>'+
-      '<div class="dr-imp"><div class="k">'+(isUds?'Uds/mes':'Impacto/mes')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
+      '<div class="dr-imp"><div class="k">'+(isUds?'Dif. uds/mes':'Impacto/mes')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
       '</div>';
   }).join('');
   if(nd.length)html+='<div class="drow nd"><div class="dr-area">'+nd.map(m=>m.area).join(', ')+'<small>no está en uno de los escenarios</small></div><div></div><div class="dr-vals"></div><div></div><div class="dr-imp"></div></div>';
@@ -4846,14 +4879,11 @@ document.addEventListener('click',function(e){
 /* ===== UNIDAD GLOBAL Y OBJETIVO · el unico sitio donde se tocan =====
    El boton cambia de unidad y el campo fija el objetivo. Los dos mandan sobre TODO el dashboard:
    comparador, faro, ranking, matriz y la calculadora de objetivos de las tiendas liebre. */
+/* Al cambiar de unidad, el campo de la calculadora se repone al objetivo oficial de esa unidad.
+   Si lo estas editando, no se toca. */
 function syncObjUI(){
-  const inp=$('cfgObj'), h=$('cfgObjHint'); if(!inp)return;
-  if(document.activeElement!==inp) inp.value=objFmt(objAct(),3);
-  const tgt=$('lo_calcTarget'); if(tgt&&document.activeElement!==tgt) tgt.value=objFmt(objAct(),3);
-  if(h) h.innerHTML = 'equivale a <b>'+objFmt(objOther(),3)+'</b> '+udOther()
-    + (OBJ.user!=null?' · <a href="#" id="cfgObjReset" style="color:var(--brand)">volver al oficial</a>'
-                     :(OBJ.fromCsv?' · oficial del CSV':' · <b>valor de respaldo</b>, el CSV no trae el objetivo'));
-  const rs=$('cfgObjReset'); if(rs)rs.onclick=e=>{e.preventDefault();OBJ.user=null;applyUnit();};
+  const tgt=$('lo_calcTarget'); if(!tgt)return;
+  if(document.activeElement!==tgt){ tgt.value=objFmt(objAct(),3); window.__CALCOBJ=objAct(); }
 }
 let _auBusy=false,_auPend=false;
 function applyUnit(){
@@ -4867,6 +4897,12 @@ function applyUnit(){
   const merc=!!window.__MERC;
   $('unitBtn').textContent = merc?'Unidad: Mercadona':'Unidad: MO';
   syncObjUI();
+  /* la nota de metodo solo en MO, y con los objetivos del CSV en vez de cableados */
+  (function(){ const d=$('metodoAviso'); if(!d)return;
+    d.hidden = merc; if(merc) d.open=false;
+    const a=$('mNotaMO'), b=$('mNotaMC');
+    if(a) a.textContent=objFmt(objMO(),3);
+    if(b) b.textContent=objFmt(objMCD(),3); })();
   if(ST.analyzed){renderMatrix();renderSummary();renderReal();renderDiff();renderPickDespl();renderDesplTot();renderCont();renderTrend();renderFicha();}
   if(ST.mode==='rank')renderRank();
   if(window.loRerender){try{window.loRerender();}catch(e){}}
@@ -4874,14 +4910,7 @@ function applyUnit(){
 }
 window.__applyUnit=applyUnit;
 $('unitBtn').addEventListener('click',()=>{window.__MERC=!window.__MERC;applyUnit();});
-(function(){ const inp=$('cfgObj'); if(!inp)return;
-  const commit=()=>{ const v=objNum(inp.value);
-    // se guarda SIEMPRE en unidades Mercadona; el equivalente MO sale de la proporcion real medida
-    OBJ.user=(v>0&&!isNaN(v))?(window.__MERC?v:v/objRatio()):null;
-    applyUnit(); };
-  inp.addEventListener('change',commit);
-  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();inp.blur();} });
-})();
+// (el objetivo ya no se edita desde Ajustes)
 
 /* ===== VISTA GLOBAL AGRUPADO / DESGLOSADO ===== */
 function applyGroup(){
@@ -5125,10 +5154,13 @@ function build(data){
   var cf=document.getElementById('lo_critFoot');if(cf)cf.innerHTML='Resultado: '+ST.stores.length+' tiendas liebre cumplen ambas condiciones · '+ST.meses.length+' meses';
   wire(); renderAll();
   /* El campo de la pestana y el de Ajustes son EL MISMO objetivo. Se escriben el uno al otro. */
+  /* Este campo mueve SOLO la tabla de objetivos de las liebres y el CSV que se descarga. El
+     objetivo del resto del dashboard sigue siendo el oficial del CSV. __CALCOBJ guarda el valor
+     exacto tecleado: releerlo del texto redondeado metia un 0,14% de error en el factor. */
   (function(){ const tgt=document.getElementById('lo_calcTarget'); if(!tgt||tgt._wired)return; tgt._wired=1;
+    if(!tgt.value){ tgt.value=objFmt(objAct(),3); window.__CALCOBJ=objAct(); }
     const commit=()=>{ const v=objNum(tgt.value);
-      OBJ.user=(v>0&&!isNaN(v))?(window.__MERC?v:v/objRatio()):null;
-      if(window.__applyUnit)window.__applyUnit(); else renderAll(); };
+      window.__CALCOBJ=(v>0&&!isNaN(v))?v:objAct(); renderAll(); };
     tgt.addEventListener('change',commit);
     tgt.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();tgt.blur();} });
   })();
@@ -5168,7 +5200,7 @@ function loSaveObj(){
      releer el objetivo del texto del campo metia hasta un 0,14% de diferencia entre las dos
      unidades, cuando por construccion tiene que ser el MISMO factor. Los redondeos son solo para
      pintar. */
-  const baseX=calcBaseMO(), baseSel=round3(baseX), objSel=objAct();
+  const baseX=calcBaseMO(), baseSel=round3(baseX), objSel=(window.__CALCOBJ>0)?window.__CALCOBJ:objAct();
   const k=(baseX>0&&!isNaN(objSel))?objSel/baseX:NaN;
   if(isNaN(k)){alert('Pon una base y un objetivo válidos antes de guardar.');return;}
   // escalado por columna (mismo criterio que la tabla): tiempos y prod ×k, % igual, uph ÷k, contadores igual
@@ -5218,7 +5250,7 @@ function renderCalc(){
      pintar. */
   const baseX=calcBaseMO();              // base exacta, en la unidad activa
   const baseSel=round3(baseX);           // solo para mostrar
-  const objSel=objAct();                 // el objetivo vigente, no el texto del campo
+  const objSel=(window.__CALCOBJ>0)?window.__CALCOBJ:objAct();   // el de la calculadora, exacto
   const k=(baseX>0&&!isNaN(objSel))?objSel/baseX:NaN;
   // el equivalente en la OTRA unidad = su propia base medida x el mismo k
   const baseOtra=calcBaseU(!merc), objOtra=(baseOtra>0&&!isNaN(k))?baseOtra*k:NaN;
@@ -6356,8 +6388,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
          provocar con el dedo: abres Grupo y, sin elegir, tocas otra pestana de Ver. */
       var pv=$('fa_valPop'); if(pv) pv.classList.remove('open');
       syncScope(); render(); }); }); }
-  function syncScope(){ var sc=$('fa_scope'); if(!sc)return; var dis=(ST.dim==='Global');
-    sc.querySelectorAll('button').forEach(function(b){ b.disabled=dis; }); }
+  /* Con una sola tienda (dim='Tienda') el filtro Veteranas/Todas no puede hacer nada: la tienda es
+     la que es. Y con dim='Global' el propio "Grupo" ya ES ese filtro. En los dos casos se esconde
+     el control entero en vez de dejarlo puesto pero muerto. */
+  function syncScope(){ var sc=$('fa_scope'); if(!sc)return;
+    var inutil=(ST.dim==='Global'||ST.dim==='Tienda');
+    var caja=sc.parentNode; if(caja) caja.style.display = inutil?'none':'';
+    sc.querySelectorAll('button').forEach(function(b){ b.disabled=inutil; }); }
   function wireScope(){ var sc=$('fa_scope'); if(!sc||sc._w)return; sc._w=1;
     sc.querySelectorAll('[data-s]').forEach(function(b){ b.addEventListener('click',function(){ if(b.disabled)return; ST.scope=b.getAttribute('data-s');
       sc.querySelectorAll('[data-s]').forEach(function(x){x.classList.toggle('on',x===b);}); render(); }); }); }
@@ -6669,6 +6706,45 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* Al cambiar la unidad o el objetivo en Ajustes hay que repintar Farolas: su productividad es
      Mercadona nativa y su objetivo sale ahora de objAct(). */
   window.__faRerender=function(){ try{ if(LOADED) render(); }catch(e){ console.warn('faRerender',e); } };
+
+  /* ===== SINCRONIZACION CON "COMPARAR TIENDA" =====
+     Recibe los dos escenarios tal cual los construye faSelFromScenario() del comparador y deja los
+     selectores de arriba puestos en lo mismo: Ver / Grupo / Comparar con / mes. Asi las dos
+     pestañas hablan siempre del mismo conjunto de tiendas. */
+  function _faApply(sel){            // {kind,val} -> {dim,val} de esta pestaña
+    if(!sel) return null;
+    if(sel.kind==='all')    return {dim:'Global', val:TODAS};
+    if(sel.kind==='vet')    return {dim:'Global', val:'Veterana'};
+    if(sel.kind==='list')   return {dim:'Otros',  val:'Tiendas liebre'};
+    if(sel.kind==='Tienda') return {dim:'Tienda', val:String(sel.val)};
+    if(sel.kind==='Zona')   return {dim:'Zona',   val:sel.val};
+    if(sel.kind==='Region') return {dim:'Region', val:sel.val};
+    return null;
+  }
+  function _faRef(sel){              // {kind,val} -> {refKind,refVal}
+    if(!sel) return null;
+    if(sel.kind==='all')    return {refKind:'all',    refVal:null};
+    if(sel.kind==='vet')    return {refKind:'vet',    refVal:null};
+    if(sel.kind==='list')   return {refKind:'liebre', refVal:null};
+    if(sel.kind==='Tienda') return {refKind:'Tienda', refVal:String(sel.val)};
+    if(sel.kind==='Zona')   return {refKind:'Zona',   refVal:sel.val};
+    if(sel.kind==='Region') return {refKind:'Region', refVal:sel.val};
+    return null;
+  }
+  window.__faSetScenario=function(selA,selB,mesKey){
+    if(!LOADED) return false;
+    var a=_faApply(selA); if(!a) return false;      // el escenario "Objetivo" no tiene farolas
+    var arr=DIMV[a.dim]||[];
+    if(arr.indexOf(a.val)<0) return false;          // ese grupo no existe en el CSV de farolas
+    ST.dim=a.dim; ST.val=a.val;
+    var b=_faRef(selB);
+    if(b){ var ok=(b.refKind==='vet'||b.refKind==='all'||b.refKind==='liebre')
+                  || ((DIMV[b.refKind]||[]).indexOf(b.refVal)>=0);
+           if(ok){ ST.refKind=b.refKind; ST.refVal=b.refVal; } }
+    if(mesKey && MESES.indexOf(mesKey)>=0) ST.mes=mesKey;
+    try{ render(); }catch(e){ console.warn('faSetScenario',e); }
+    return true;
+  };
   function render(){ try{ saveFa(); }catch(e){}
     try{ render_(); }catch(e){ console.warn('farolas render',e);
       var st=$('fa_status'); if(st){ st.style.display='block'; st.innerHTML='<span style="color:var(--bad)">No se ha podido pintar Farolas: '+e.message+'</span>'; } } }
@@ -6682,6 +6758,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if($('fa_gsub')) $('fa_gsub').textContent=same?'':('frente a '+refLabel());
     var pe=$('fa_per'); if(pe) pe.querySelectorAll('[data-p]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-p')===ST.per); });
     var sc=$('fa_scope'); if(sc) sc.querySelectorAll('[data-s]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-s')===ST.scope); });
+    syncScope();
     var dm=$('fa_dim'); if(dm) dm.querySelectorAll('[data-d]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-d')===ST.dim); });
     renderBlocks(rows,rrows,same); renderCharts();
     requestAnimationFrame(faResize); setTimeout(faResize,240); }
@@ -6749,7 +6826,12 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var rrows=(rt&&!same)?ROWS.filter(function(r){ return r.mk===mk && rt(r); }):[];
     if(!rows.length){ host.innerHTML='<div style="font-size:12.5px;color:var(--ink3)">No hay farolas de '+selName(grp)+' en '+mesLab(mk)+'.</div>'; return false; }
     var hasRef=rrows.length>0;
-    var GR=GRUPOS.filter(function(g){ return g.t!=='Pedido eficiente'; });
+    /* "Pedido eficiente" (productividad y caudal) estaba excluido a proposito: con el conteo de
+       unidades antiguo no cuadraba con el resto del dashboard y enfrentarlos confundia. Desde que
+       la productividad se calcula en unidades MERCADONA los dos caminos dan lo mismo (contrastado
+       sobre 2.709 tienda-mes: mediana +0,0001 h en caudal y 0,0000 en productividad), asi que ya
+       tiene sentido enseñarlo. */
+    var GR=GRUPOS;
     var h='<div style="display:flex;flex-direction:column;gap:18px"><div class="fa-rings" id="cf_rings"></div>';
     h+=GR.map(function(g){
       var cards=g.ms.map(function(m){ var v=dayIgual(rows,m.k), rv=hasRef?dayIgual(rrows,m.k):null;
@@ -6813,6 +6895,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         try{ if(window.__bootStep) window.__bootStep('far'); }catch(e){}
         /* el resumen del comparador se pinta ANTES de que lleguen las farolas -> repintarlo ahora */
         try{ if(window.__cfFarolas) window.__cfFarolas(); }catch(e){}
+        /* Farolas puede terminar de cargar despues del comparador: en cuanto esta lista, se pone
+           en el escenario que ya estuviera analizado. */
+        try{ if(window.__faSyncFromComp) window.__faSyncFromComp(); }catch(e){}
         /* la tarjeta "Oficial (Control NTC)" del vistazo nace vacia: ahora ya tiene datos */
         try{ if(window.__kpiOficial) window.__kpiOficial(); }catch(e){}
         /* el ranking puede ordenar por indicadores de farolas: ahora ya se pueden ofrecer */
