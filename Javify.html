@@ -1637,6 +1637,12 @@ body.simple #mObj{display:none!important}
 #cfgPanel .cfg-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--ink3);margin-bottom:2px}
 #cfgPanel .cfg-x{width:26px;height:26px;border-radius:7px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);cursor:pointer;font-size:13px;line-height:1}
 #cfgPanel .tg{width:100%;justify-content:center;text-align:center;min-height:40px}
+#cfgPanel .cfg-fld{display:flex;flex-direction:column;gap:4px;padding-top:2px}
+#cfgPanel .cfg-fld label{font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--ink3)}
+#cfgPanel .cfg-in{width:100%;box-sizing:border-box;min-height:40px;font-size:16px;font-weight:700;text-align:center;
+  border-radius:9px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink);padding:6px 8px}
+#cfgPanel .cfg-in:focus{outline:2px solid var(--brand);outline-offset:1px}
+#cfgPanel .cfg-hint{font-size:10.5px;color:var(--ink3);line-height:1.35;text-align:center}
 @media(max-width:640px){
   #cfgPanel{right:12px;left:12px;width:auto;max-width:none;bottom:calc(76px + env(safe-area-inset-bottom))}
 }
@@ -2083,7 +2089,7 @@ body.simple #mObj{display:none!important}
         <div class="lo-ctrls">
           <div class="lo-fld"><label>Corte</label>
             <div class="lo-seg lo-sm" id="lo_calcCorteSeg"><button data-v="util" class="lo-on">Con paradas ≤20'</button><button data-v="efec">Efectivo ≤6'</button></div></div>
-          <div class="lo-fld"><label for="lo_calcTarget">Productividad objetivo</label><input class="lo-tin" id="lo_calcTarget" value="0,306" style="min-width:110px"></div>
+          <div class="lo-fld"><label for="lo_calcTarget">Productividad objetivo</label><input class="lo-tin" id="lo_calcTarget" inputmode="decimal" style="min-width:110px"><small style="display:block;font-size:10px;color:var(--ink3);margin-top:3px">también en Ajustes ⚙</small></div>
           <div class="lo-fld"><label>Ver tabla como</label>
             <div class="lo-seg lo-sm" id="lo_calcViewSeg"><button data-v="objof" class="lo-on">Objetivo oficial</button><button data-v="min">Min / lote</button><button data-v="prod">Prod (min/ud)</button></div></div>
           <div class="lo-fld"><label>Fijar como oficiales</label>
@@ -2541,7 +2547,10 @@ body.simple #mObj{display:none!important}
   <div class="cfg-h"><span>Ajustes</span><button class="cfg-x" id="cfgClose" aria-label="Cerrar">✕</button></div>
   <button class="tg" id="simpleBtn" title="Modo Simple (solo lo esencial) o Experto (todo el detalle y las tablas).">Modo: Simple</button>
   <button class="tg" id="groupBtn" title="Fases agrupadas en 4 bloques o desglosadas. Afecta al faro, la composición, objetivos y tendencias.">Vista: Desglosado</button>
-  <button class="tg" id="unitBtn" title="Unidad de la productividad: MO (Mercadona Online) o Mercadona (×1,08). Tiempos y caudal no cambian.">Unidad: MO</button>
+  <button class="tg" id="unitBtn" title="Unidad de la productividad. Mercadona es la oficial (una bolsa de plátanos cuenta como una unidad). MO cuenta cada pieza. Los tiempos y el caudal no cambian: lo que cambia es el denominador, y cada una viene calculada por separado del SQL.">Unidad: Mercadona</button>
+  <div class="cfg-fld"><label for="cfgObj">Objetivo de productividad</label>
+    <input class="cfg-in" id="cfgObj" inputmode="decimal" autocomplete="off">
+    <div class="cfg-hint" id="cfgObjHint"></div></div>
   <button class="tg" id="themeBtn">Tema: Claro</button>
 </div>
 <button class="fab" id="fab" style="display:none"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3c4.97 0 9 3.36 9 7.5S16.97 18 12 18c-1.02 0-2-.13-2.9-.37L4 19l1.2-3.3C4.16 14.4 3 12.6 3 10.5 3 6.36 7.03 3 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="10.5" r="1" fill="currentColor"/><circle cx="12" cy="10.5" r="1" fill="currentColor"/><circle cx="15.5" cy="10.5" r="1" fill="currentColor"/></svg></button>
@@ -2610,6 +2619,9 @@ const CSV_URL=window.__UNI_URL;   // se mantiene el nombre por compatibilidad co
 // CSV de VALORES GENERALES por tienda/mes (Fase general). Cruza con el desglose por tienda+mes.
 const GENERAL_URL=window.__UNI_URL;   // mismo fichero: el bloque dataset='general'
 const AREAS=['SECOS','REFRIGERADO','CONGELADO','FRESCOS','FYV','HORNO','PENDIENTES'];
+// El CSV trae ademas una fila area_batch='GLOBAL' por tienda/mes/turno, calculada en el SQL sumando
+// el dia entero. Se acepta al cargar, pero NO entra en las listas de areas de la interfaz.
+const AREAS_LOAD=AREAS.concat(['GLOBAL']);
 const AREAS_DESGLOSE=['SECOS','REFRIGERADO','CONGELADO','HORNO','PENDIENTES'];
 const tieneDesglose=a=>AREAS_DESGLOSE.includes(a);
 // En modo Simple PENDIENTES no se muestra ni se compara (no adherida a objetivo). En Experto, todo.
@@ -2634,15 +2646,62 @@ const SYNTH=['Tiendas Veteranas','Todas las tiendas'];
 const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const SHIFT_LABEL={global:'GLOBAL',morning:'Mañana',afternoon:'Tarde'},SHIFT_SORT={global:-1,morning:0,afternoon:1};
 const shiftLabel=s=>SHIFT_LABEL[s]||s;
-const OBJ_PROD=0.306; // objetivo global del comparador (0,306 MO). El umbral de SELECCIÓN de tiendas liebre sigue siendo 0,315 (Pedido de 10 + prod ≤ 0,315), ver criterios.
+/* OBJ_PROD ha desaparecido. Era un 0,306 escrito a mano que no cuadraba ni con el 0,34 oficial
+   (equivalente ~0,3170 en MO) ni con el 0,315 del criterio de liebres. Ahora el objetivo lo da
+   objAct(), que lee el CSV y respeta lo que se ponga en Ajustes. */
 // ===== Unidad global de productividad: MO (×1) o Mercadona (×1,08). Solo afecta a min/ud; tiempos y caudal NO. =====
-function MF(){return window.__MERC?1.08:1;}
-function mfv(x){return (x==null||typeof x!=='number'||isNaN(x))?x:x*MF();}  // escala min/ud respetando null/NaN
-function udName(){return window.__MERC?'min/ud Merca':'min/ud MO';}
+/* =================================================================================================
+   UNIDADES Y OBJETIVOS · fuente unica
+   -------------------------------------------------------------------------------------------------
+   La unidad activa NO multiplica: ELIGE COLUMNA. El CSV trae la productividad calculada en los dos
+   sistemas (mismo numerador, el tiempo; otro denominador, las unidades), asi que no hay ninguna
+   conversion. El antiguo x1,08 inventaba: en FYV se desviaba un 60%.
+
+   Los objetivos vienen del CSV. Se pueden sobreescribir desde Ajustes; en ese caso el equivalente en
+   la otra unidad sale de la base REAL de las tiendas liebre (prod_real_oficial y su gemela _mcd),
+   que es la unica proporcion medida que tenemos.
+   ================================================================================================= */
+const OBJ_FALLBACK={mcd:0.34, mo:0.315};   // SOLO si el CSV es anterior a la v4. Se avisa en pantalla.
+const OBJ={mcd:OBJ_FALLBACK.mcd, mo:OBJ_FALLBACK.mo, user:null, fromCsv:false};
+window.__OBJ=OBJ;
+// base_MO / base_MCD de las liebres. Lo rellena el bloque de objetivos al cargar el CSV.
+window.__OBJRATIO=null;
+function objRatio(){
+  if(window.__OBJRATIO>0) return window.__OBJRATIO;
+  // respaldo: el factor de la flota del ultimo mes (uds Mercadona / uds MO)
+  try{ const g=ST.gen&&ST.gen['Todas las tiendas'];
+       if(g){ const ks=Object.keys(g).sort(); for(let i=ks.length-1;i>=0;i--){ const f=g[ks[i]].factor_uds_mcd_mo; if(f>0)return f; } } }catch(e){}
+  return 0.9316;
+}
+function objMCD(){ return (OBJ.user!=null&&!isNaN(OBJ.user))?OBJ.user:OBJ.mcd; }
+function objMO(){  return (OBJ.user!=null&&!isNaN(OBJ.user))?OBJ.user*objRatio():OBJ.mo; }
+function objAct(){ return window.__MERC?objMCD():objMO(); }          // objetivo en la unidad activa
+function objOther(){ return window.__MERC?objMO():objMCD(); }        // el mismo, en la otra unidad
+/* Formateo propio: es() y numEU() viven dentro del IIFE del bloque de objetivos y no se ven aqui. */
+function objFmt(n,d){ return (n==null||isNaN(n))?'—':Number(n).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function objNum(v){ if(v==null)return NaN; let s=String(v).trim().replace(/\s/g,'').replace(/^"|"$/g,''); if(!s)return NaN;
+  if(s.indexOf(',')>=0) s=s.replace(/\./g,'').replace(',','.');   // formato ES: 1.234,56
+  const n=parseFloat(s); return isFinite(n)?n:NaN; }
+function udName(){ return window.__MERC?'min/ud Merca':'min/ud MO'; }
+function udOther(){ return window.__MERC?'min/ud MO':'min/ud Merca'; }
+/* columnas segun la unidad activa. mapCorte() aplica ENCIMA el corte (util / efectivo / paradas). */
+function PRODC(){ return window.__MERC?'prod_total_min_ud_media_mcd':'prod_total_min_ud_media'; }
+function UDSC(){  return window.__MERC?'uds_media_lote_mcd':'uds_media_lote'; }
+/* general (CSV 'general'): la MISMA metrica tiene dos columnas. Los TIEMPOS no cambian de unidad. */
+const GEN_MCD={
+  uds_dia_media:'uds_dia_media_mcd', uds_total_mes:'uds_total_mes_mcd',
+  prod_efectiva_min_ud:'prod_efectiva_min_ud_mcd', prod_conparadas_min_ud:'prod_conparadas_min_ud_mcd',
+  dif_prod_efectiva_vs_obj:'dif_prod_efectiva_vs_obj_mcd', dif_prod_conparadas_vs_obj:'dif_prod_conparadas_vs_obj_mcd',
+  caudal_optimo_h:'caudal_optimo_h_mcd', diferencia_caudal_h:'diferencia_caudal_h_mcd',
+  caudal_optimo_h_total:'caudal_optimo_h_total_mcd', diferencia_caudal_h_total:'diferencia_caudal_h_total_mcd'
+};
+function gk(k){ return (window.__MERC&&GEN_MCD[k])?GEN_MCD[k]:k; }   // nombre de columna en la unidad activa
+function gv(gr,k){ if(!gr)return null; const v=gr[gk(k)]; return (v==null||isNaN(v))?null:v; }
 const RGB={good:'38,176,121',bad:'232,105,123'};
 const METRICS={
-  prod:{label:'Productividad',unit:'min/ud',dec:3,col:'prod_total_min_ud_media',obj:OBJ_PROD},
-  uds:{label:'Unidades por lote',unit:'ud',dec:1,col:'uds_media_lote'},
+  // col dinamica: PRODC() elige MO o Mercadona. obj se lee en el momento de pintar.
+  prod:{label:'Productividad',unit:'min/ud',dec:3,col:'prod_total_min_ud_media',dyn:'prod',objf:objAct},
+  uds:{label:'Unidades por lote',unit:'ud',dec:1,col:'uds_media_lote',dyn:'uds'},
   tiempo:{label:'Tiempo por lote',unit:'min',dec:2,col:'total_min_util_medio'},
   prep:{label:'Preparación',unit:'min',dec:2,col:'prep_min_medio'},
   picking:{label:'Picking',unit:'min',dec:2,col:'p2_min_medio',deg:true},
@@ -2676,7 +2735,9 @@ const GEN_METRICS={
   gprodef:{label:'Productividad efectiva',unit:'min/ud',dec:3,prop:'prod_efectiva_min_ud',lower:true,isProd:true},
   gtreal:{label:'Tiempo total',unit:'h/mes',dec:1,prop:'caudal_real_h_total',lower:true},
   gtefec:{label:'Tiempo efectivo',unit:'h/mes',dec:1,prop:'caudal_efectivo_h_total',lower:true},
-  gtpar:{label:'Tiempo de parada',unit:'h/mes',dec:1,lower:true,calc:gr=>(gr.caudal_real_h_total!=null&&gr.caudal_efectivo_h_total!=null)?gr.caudal_real_h_total-gr.caudal_efectivo_h_total:null},
+  // horas_paradas_h_total viene calculada del CSV. Restar caudal_real - caudal_efectivo aqui daba
+  // hasta 0,01 h de error porque Metabase exporta con 2 decimales todo lo que vale mas de 1.
+  gtpar:{label:'Tiempo de parada',unit:'h/mes',dec:1,lower:true,prop:'horas_paradas_h_total'},
   ghoras:{label:'Horas de más / mes',unit:'h',dec:1,prop:'diferencia_caudal_h_total',lower:true},
   gdifd:{label:'Diferencia caudal / día',unit:'h',dec:2,prop:'diferencia_caudal_h',lower:true}
 };
@@ -2695,12 +2756,19 @@ const FK=['p1','p2','p3','p23','p4','p5','p6','p7','prep'];
 const EXTRA_COLS=[];
 FK.forEach(k=>EXTRA_COLS.push(k+'_ef_min_medio',k+'_ef_pct_medio',k+'_par_min_medio',k+'_par_pct_medio'));
 EXTRA_COLS.push('total_min_efec_medio','total_min_paradas_medio','prod_efectiva_min_ud_media','uph_efec_media');
+// unidades MERCADONA: calculadas en el SQL, no convertidas. Sin ellas la vista Mercadona del
+// desglose y del CSV de objetivos se quedaria vacia.
+EXTRA_COLS.push('uds_media_lote_mcd','prod_total_min_ud_media_mcd','prod_efectiva_min_ud_media_mcd');
 // mapa: nombre canónico (corte 20) -> nombre real del corte elegido
 function buildCorteMap(sfx){const m={};FK.forEach(k=>{m[k+'_min_medio']=k+'_'+sfx+'_min_medio';m[k+'_pct_medio']=k+'_'+sfx+'_pct_medio';});return m;}
 const CORTE_MAP={
   util:null,
-  efec:Object.assign(buildCorteMap('ef'),{total_min_util_medio:'total_min_efec_medio',prod_total_min_ud_media:'prod_efectiva_min_ud_media',uph_total_media:'uph_efec_media'}),
-  par :Object.assign(buildCorteMap('par'),{total_min_util_medio:'total_min_paradas_medio',prod_total_min_ud_media:null,uph_total_media:null})
+  efec:Object.assign(buildCorteMap('ef'),{total_min_util_medio:'total_min_efec_medio',
+        prod_total_min_ud_media:'prod_efectiva_min_ud_media',
+        prod_total_min_ud_media_mcd:'prod_efectiva_min_ud_media_mcd',   // la gemela en Mercadona
+        uph_total_media:'uph_efec_media'}),
+  par :Object.assign(buildCorteMap('par'),{total_min_util_medio:'total_min_paradas_medio',
+        prod_total_min_ud_media:null, prod_total_min_ud_media_mcd:null, uph_total_media:null})
 };
 const CORTE_LABEL={util:"Tiempo total",efec:"Tiempo efectivo",par:"Tiempo de parada"};
 // devuelve una copia de la fila con los campos canónicos sobreescritos por el corte activo
@@ -2741,7 +2809,10 @@ function xMeses(){
   });
 }
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
-function setStatus(t,s){var d=$('dotTxt');if(d)d.textContent=t;var o=$('dot');if(o)o.className='sdot'+(s?(' '+s):'');}
+/* #dotTxt y #dot no existen en el marcado desde hace varias versiones: los ids reales son
+   dot1/dot2/src1s/src2s, que ya se actualizan donde toca. Esto no informaba de nada. Se deja como
+   no-op para no tocar sus tres llamadas. */
+function setStatus(){}
 const LIEBRE_HIST='__LIEBRE_HIST__';   // media histórica de las tiendas liebre (se agrega en cliente)
 function sNorm(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
 function shortStore(t){
@@ -2829,7 +2900,7 @@ function buildFromRows(raw,fname){
   const miss=REQUIRED.filter(c=>!cols.includes(c));
   if(miss.length){showErr(['Faltan columnas: '+miss.map(c=>'<code>'+c+'</code>').join(', ')]);return;}
   $('errbox').classList.remove('show');
-  ST.rows=raw.map(r=>{const o={tienda:String(r.tienda).trim(),shift:String(r.shift||'').trim().toLowerCase(),area:normArea(r.area_batch),mesKey:mesKeyFromCell(r.mes),vet:(r.estado_veterana||'').trim()};NUMC.forEach(c=>o[c]=numv(r[c]));EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);});return o;}).filter(r=>r.tienda&&r.shift&&AREAS.includes(r.area)&&r.mesKey);
+  ST.rows=raw.map(r=>{const o={tienda:String(r.tienda).trim(),shift:String(r.shift||'').trim().toLowerCase(),area:normArea(r.area_batch),mesKey:mesKeyFromCell(r.mes),vet:(r.estado_veterana||'').trim()};NUMC.forEach(c=>o[c]=numv(r[c]));EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);});return o;}).filter(r=>r.tienda&&r.shift&&AREAS_LOAD.includes(r.area)&&r.mesKey);
   if(!ST.rows.length){showErr(['No hay filas válidas tras procesar (revisa áreas, turnos y mes).']);return;}
   ST.index={};const tS=new Set(),mS=new Set(),sS=new Set();
   ST.rows.forEach(r=>{tS.add(r.tienda);mS.add(r.mesKey);sS.add(r.shift);(((ST.index[r.tienda]=ST.index[r.tienda]||{})[r.mesKey]=ST.index[r.tienda][r.mesKey]||{})[r.shift]=ST.index[r.tienda][r.mesKey][r.shift]||{})[r.area]=r;});
@@ -2847,6 +2918,17 @@ function buildFromRows(raw,fname){
   setStatus('CSV cargado','on');
   if($('src1s')){$('src1s').textContent=ST.rows.length.toLocaleString('es-ES')+' filas · '+ST.realStores.length+' tiendas · '+ST.meses.length+' meses';}
   if($('dot1'))$('dot1').classList.add('on');
+  /* Si el CSV no trae la fila GLOBAL del desglose o los objetivos, se sigue funcionando con las
+     estimaciones de antes, pero se dice. Nada de numeros de procedencia dudosa sin avisar. */
+  (function(){ const faltan=[];
+    if(ST.globEstimado) faltan.push('la fila <code>GLOBAL</code> del desglose');
+    if(!OBJ.fromCsv)    faltan.push('los objetivos (<code>obj_mcd_min_ud</code> / <code>obj_mo_min_ud</code>)');
+    if(!faltan.length) return;
+    const n=$('errbox'); if(!n) return;
+    n.classList.add('show');
+    n.innerHTML='<b>El CSV es de una versión anterior.</b><br>Falta '+faltan.join(' y ')+
+      '. El dashboard funciona, pero esos valores son estimaciones. Vuelve a generar el CSV con el SQL v4.';
+  })();
   // (Fase 6) arranque directo: muestra ya el análisis con la referencia por defecto
   // (Veteranas · GLOBAL · último mes disponible). El usuario puede cambiar escenarios arriba.
   try{analyze(false);}catch(e){console.warn('auto-analyze',e);}  // sin scroll: se queda arriba en "Elige dos escenarios"
@@ -2875,7 +2957,7 @@ function buildAggregates(){
   ST.synthPresent=ST.synthPresent.filter(t=>t!==LIEBRE_HIST);
   ST.tiendas=ST.tiendas.filter(t=>t!==LIEBRE_HIST&&t.indexOf('ZONE::')!==0&&t.indexOf('REG::')!==0);
   ST.geoAgg=[];
-  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
+  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
   // Media de los datos GLOBALES del centro (CSV general) por mes → la usan el resumen ("Lo más importante"), la evolución 12 meses y la tendencia global (genRow/genSerie). Sin esto, los agregados no tenían histórico.
   const buildGen=(members,meta)=>{ const g={}; ST.meses.forEach(mk=>{ const rows=[]; members.forEach(m=>{const r=(ST.gen[m]||{})[mk]; if(r)rows.push(r);}); if(!rows.length)return; const o={center_name:meta.center_name,region:meta.region||'',zona:meta.zona||'',model:'',fase:'',estado:'Sintética: todas'}; GEN_NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});o[c]=n?s/n:null;}); g[mk]=o; }); return g; };
   if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
@@ -3127,16 +3209,25 @@ function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();saveCfg();
 
 /* ===== MODELO ===== */
 function rowFor(s,a){return mapCorte((((ST.index[s.tienda]||{})[s.mesKey]||{})[s.shift]||{})[a]||null);}
-function metricVal(r,area,mk){if(!r)return null;const M=METRICS[mk];if(M.deg&&!tieneDesglose(area))return null;if(M.perud){const u=r.uds_media_lote;if(u==null||u===0)return null;let base;if(M.sumk){let s=0,a=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;a=true;}});base=a?s:null;}else base=r[M.col];return base==null?null:base/u;}if(M.calc==='despltot')return (r.p1_min_medio||0)+(r.p3_min_medio||0)+(r.p5_min_medio||0)+(r.p7_min_medio||0);if(M.calc==='ratio')return r.p2_min_medio?r.p3_min_medio/r.p2_min_medio:null;if(M.sumk){let s=0,any=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;}return r[M.col];}
+function metricVal(r,area,mk){if(!r)return null;const M=METRICS[mk];if(M.deg&&!tieneDesglose(area))return null;
+  if(M.dyn==='prod')return r[PRODC()];
+  if(M.dyn==='uds') return r[UDSC()];
+  if(M.perud){const u=r[UDSC()];if(u==null||u===0)return null;let base;if(M.sumk){let s=0,a=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;a=true;}});base=a?s:null;}else base=r[M.col];return base==null?null:base/u;}if(M.calc==='despltot')return (r.p1_min_medio||0)+(r.p3_min_medio||0)+(r.p5_min_medio||0)+(r.p7_min_medio||0);if(M.calc==='ratio')return r.p2_min_medio?r.p3_min_medio/r.p2_min_medio:null;if(M.sumk){let s=0,any=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;}return r[M.col];}
 function buildModel(A,B){
   return AREAS.map(area=>{
     const ra=rowFor(A,area),rb=rowFor(B,area),compat=tieneDesglose(area);
     const m={area,ra,rb,compat,disponible:!!(ra&&rb)};
     const g=(r,k)=>r?r[k]:null,d=k=>(ra&&rb&&ra[k]!=null&&rb[k]!=null)?ra[k]-rb[k]:null;
     m.tiempoA=g(ra,'total_min_util_medio');m.tiempoB=g(rb,'total_min_util_medio');m.dTiempo=d('total_min_util_medio');
-    m.prodA=g(ra,'prod_total_min_ud_media');m.prodB=g(rb,'prod_total_min_ud_media');m.dProd=d('prod_total_min_ud_media');
+    // AQUI se elige la unidad, y solo aqui: todo lo que cuelga de m.prodA / m.udsA ya viene en la
+    // unidad activa, asi que aguas abajo no hay ni una multiplicacion.
+    const PC=PRODC(), UC=UDSC();
+    m.prodA=g(ra,PC);m.prodB=g(rb,PC);m.dProd=d(PC);
     m.uphA=g(ra,'uph_total_media');m.uphB=g(rb,'uph_total_media');m.dUph=d('uph_total_media');
-    m.udsA=g(ra,'uds_media_lote');m.udsB=g(rb,'uds_media_lote');m.dUds=d('uds_media_lote');
+    m.udsA=g(ra,UC);m.udsB=g(rb,UC);m.dUds=d(UC);
+    // las unidades MO se guardan aparte: el impacto en minutos/mes se calcula con ellas para que no
+    // dependa de la unidad elegida (los lotes y los minutos son los mismos en las dos).
+    m.udsMOa=g(ra,'uds_media_lote');m.udsMOb=g(rb,'uds_media_lote');
     m.prepA=g(ra,'prep_min_medio');m.prepB=g(rb,'prep_min_medio');m.dPrep=d('prep_min_medio');
     m.p2A=g(ra,'p2_min_medio');m.p3A=g(ra,'p3_min_medio');m.p23A=g(ra,'p23_min_medio');
     m.p2B=g(rb,'p2_min_medio');m.p3B=g(rb,'p3_min_medio');m.p23B=g(rb,'p23_min_medio');
@@ -3166,12 +3257,28 @@ function causaText(m){if(!m.disponible||m.faseTop==null)return 'Sin diferencia c
 // impactos (fórmulas explícitas)
 function impFase(m,key){const a=m.ra?m.ra[MINKEY[key]]:null,b=m.rb?m.rb[MINKEY[key]]:null;return (a!=null&&b!=null&&m.lotesA!=null)?(a-b)*m.lotesA:null;}
 
-/* ===== globales BIEN calculados ===== */
+/* ===== globales: los trae el CSV, ya no se suman a mano =====
+   La fila area_batch='GLOBAL' del desglose la calcula el SQL con las sumas crudas del dia
+   (Sum minutos / Sum lotes, Sum tiempo / Sum uds). Lo que habia aqui antes multiplicaba la media
+   dia-igual por el numero de lotes, y eso NO reconstruye el total del mes: era una aproximacion.
+   Si el CSV es antiguo y no trae la fila, se cae a la estimacion de siempre y se marca. */
+function globRow(t,mes,shift){ return (((ST.index[t]||{})[mes]||{})[shift]||{})['GLOBAL']||null; }
 function prodGlobal(rowsArr){let tt=0,ut=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tt+=r.total_min_util_medio*r.n_lotes;ut+=r.uds_media_lote*r.n_lotes;}});return ut>0?tt/ut:null;}
 function tiempoGlobal(rowsArr){let s=0,n=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.n_lotes!=null){s+=r.total_min_util_medio*r.n_lotes;n+=r.n_lotes;}});return n>0?s/n:null;}
-// productividad global (real ≤20 o efectiva ≤6) de una tienda desde el desglose. Sirve para Veteranas/Todas,
-// que no están en el CSV general: es el mismo valor global que muestra el resumen. which='real'|'efec'.
-function globProdOf(t,which,shift,mes){let tt=0,uu=0;AREAS.forEach(a=>{const r=(((ST.index[t]||{})[mes]||{})[shift]||{})[a];if(!r)return;const tm=which==='efec'?r.total_min_efec_medio:r.total_min_util_medio;if(tm!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tt+=tm*r.n_lotes;uu+=r.uds_media_lote*r.n_lotes;}});return uu>0?tt/uu:null;}
+// productividad global (real ≤20 o efectiva ≤6) de una tienda. which='real'|'efec'.
+function globProdOf(t,which,shift,mes){
+  const g=globRow(t,mes,shift);
+  if(g){ const k=window.__MERC
+            ? (which==='efec'?'prod_efectiva_min_ud_media_mcd':'prod_total_min_ud_media_mcd')
+            : (which==='efec'?'prod_efectiva_min_ud_media'    :'prod_total_min_ud_media');
+         const v=g[k]; if(v!=null&&!isNaN(v))return v; }
+  ST.globEstimado=true;   // CSV antiguo: no hay fila GLOBAL
+  let tt=0,uu=0;const UC=UDSC();
+  AREAS.forEach(a=>{const r=(((ST.index[t]||{})[mes]||{})[shift]||{})[a];if(!r)return;
+    const tm=which==='efec'?r.total_min_efec_medio:r.total_min_util_medio;
+    if(tm!=null&&r[UC]!=null&&r.n_lotes!=null){tt+=tm*r.n_lotes;uu+=r[UC]*r.n_lotes;}});
+  return uu>0?tt/uu:null;
+}
 
 /* ===== tendencias ===== */
 function slope(ys){const pts=ys.map((y,i)=>[i,y]).filter(p=>p[1]!=null);if(pts.length<2)return null;const n=pts.length;let sx=0,sy=0,sxx=0,sxy=0;pts.forEach(p=>{sx+=p[0];sy+=p[1];sxx+=p[0]*p[0];sxy+=p[0]*p[1];});const dd=n*sxx-sx*sx;if(Math.abs(dd)<1e-9)return null;return (n*sxy-sx*sy)/dd;}
@@ -3302,7 +3409,7 @@ function paretoData(){
   const out=[];
   MODEL.filter(m=>m.disponible).forEach(m=>{
     const peso=(m.udsA!=null&&m.lotesA!=null)?m.udsA*m.lotesA:null;
-    const ud=(a,b)=>(m.udsA>0&&m.udsB>0&&a!=null&&b!=null)?(a/m.udsA-b/m.udsB)*MF():null;
+    const ud=(a,b)=>(m.udsA>0&&m.udsB>0&&a!=null&&b!=null)?(a/m.udsA-b/m.udsB):null;
     if(window.__GROUP){ // agrupado: por bloque (Preparación, Pesaje, Consolidación, Entre lotes)
       FGRUPOS.forEach(g=>{ let a=0,b=0,any=false; g.keys.forEach(k=>{const va=m.ra[MINKEY[k]],vb=m.rb[MINKEY[k]];if(va!=null&&vb!=null){a+=va;b+=vb;any=true;}}); if(!any||m.lotesA==null)return; const imp=(a-b)*m.lotesA; out.push({area:m.area,faseK:g.k,faseName:g.name,col:g.col,imp,dvUd:ud(a,b),pesoUds:peso}); });
     } else {
@@ -3385,12 +3492,15 @@ function renderSummary(){
     const verOf = !window.__MERC || !document.body.classList.contains('simple');
     /* Titulos ABREVIADOS: "Productividad efectiva (≤6')" se partia en dos lineas y las cuatro
        tarjetas dejaban de estar alineadas entre si. Con "Prod." cabe todo en una linea. */
-    k.push(kpiCard("Prod. real (≤20')", mfv(gA.prod_conparadas_min_ud), OBJ_PROD*MF(),udName(),true,3,0.003));
-    k.push(kpiCard("Prod. efectiva (≤6')", mfv(gA.prod_efectiva_min_ud), OBJ_PROD*MF(),udName(),true,3,0.003));
+    k.push(kpiCard("Prod. real (≤20')", gv(gA,'prod_conparadas_min_ud'), objAct(),udName(),true,3,0.003));
+    k.push(kpiCard("Prod. efectiva (≤6')", gv(gA,'prod_efectiva_min_ud'), objAct(),udName(),true,3,0.003));
     if(verOf) k.push('<div class="kpi '+kpiOfCls()+'" id="kpiOf">'+kpiOfIn()+'</div>');
     /* el mismo objetivo en la otra unidad, al lado: 0,306 MO es 0,33 contando como Mercadona */
-    const equiv = window.__MERC ? (fmt(OBJ_PROD,3)+' min/ud MO') : (fmt(OBJ_PROD*1.08,2)+' min/ud Merca');
-    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima</div><div class="kpi-v">'+fmt(OBJ_PROD*MF(),3)+' <small>'+udName()+'</small></div>'+
+    /* la equivalencia en la otra unidad NO se calcula con ningun factor fijo: o viene del CSV
+       (obj_mcd_min_ud / obj_mo_min_ud) o, si has puesto un objetivo a mano en Ajustes, sale de la
+       proporcion real medida entre las dos bases de las tiendas liebre. */
+    const equiv = fmt(objOther(),3)+' '+udOther();
+    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima</div><div class="kpi-v">'+fmt(objAct(),3)+' <small>'+udName()+'</small></div>'+
       '<div class="kpi-r"><span class="ref-v">Obj. de ref. = '+equiv+'</span></div></div>');
     $('kpis').className='kpis'+(k.length===3?' k3':'');
     $('kpis').innerHTML=k.join('');
@@ -3408,12 +3518,12 @@ function renderSummary(){
     $('caudalView').querySelectorAll('[data-cv]').forEach(b=>b.addEventListener('click',()=>{ST.caudalView=b.dataset.cv;$('caudalView').querySelectorAll('[data-cv]').forEach(x=>x.classList.toggle('on',x.dataset.cv===ST.caudalView));renderCaudal();}));
     renderCaudal();
     if($('kpiCalc'))$('kpiCalc').innerHTML=
-      '<div class="calc-c"><div class="ct"><i style="background:var(--brand)"></i>Productividades</div><div class="cf">min/ud frente al objetivo <b>'+fmt(OBJ_PROD,3)+'</b>. <b>Efectiva</b> quita huecos &gt; 6 min; <b>real</b> quita solo paradas largas (&gt; 20 min).</div></div>'+
-      '<div class="calc-c"><div class="ct"><i style="background:var(--f-traslado)"></i>Caudal (horas)</div><div class="cf"><b>Óptimo</b> = uds × '+fmt(OBJ_PROD,3)+' ÷ 60. <b>Real</b> = efectivo + tiempo de paradas. <b>Diferencia</b> = real − óptimo.</div></div>'+
+      '<div class="calc-c"><div class="ct"><i style="background:var(--brand)"></i>Productividades</div><div class="cf">min/ud frente al objetivo <b>'+fmt(objAct(),3)+' '+udName()+'</b>. <b>Efectiva</b> quita huecos &gt; 6 min; <b>real</b> quita solo paradas largas (&gt; 20 min).</div></div>'+
+      '<div class="calc-c"><div class="ct"><i style="background:var(--f-traslado)"></i>Caudal (horas)</div><div class="cf"><b>Óptimo</b> = uds × '+fmt(objAct(),3)+' ÷ 60, con las unidades y el objetivo de la unidad activa. <b>Real</b> = efectivo + tiempo de paradas. <b>Diferencia</b> = real − óptimo, y viene calculada del CSV, no se resta aquí.</div></div>'+
       '<div class="calc-c"><div class="ct"><i style="background:var(--ink3)"></i>Diario vs mensual</div><div class="cf">Diario = media de los días (cada día pesa igual). Mensual = suma de todos los días del mes.</div></div>';
   } else {
     k.push(kpiCard('Tiempo medio por lote',tgA,ST.single?null:tgB,'min',true,2,0.05));
-    k.push(kpiCard('Productividad global',mfv(pgA),ST.single?null:mfv(pgB),udName(),true,3,0.003));
+    k.push(kpiCard('Productividad global',(pgA),ST.single?null:(pgB),udName(),true,3,0.003));
     if(!ST.single){
       k.push('<div class="kpi '+(impTot>30?'up':impTot<-30?'down':'')+'"><div class="kpi-l">Impacto estimado / mes</div><div class="kpi-v">'+fmtImpact(impTot)+'</div><div class="kpi-r">'+(impTot>0?'tiempo de más vs referencia':impTot<0?'tiempo ahorrado vs referencia':'sin impacto neto')+'</div></div>');
       k.push('<div class="kpi '+(nrev>2?'up':nrev>0?'':'down')+'"><div class="kpi-l">Áreas a revisar</div><div class="kpi-v">'+nrev+' <small>de '+av.length+'</small></div><div class="kpi-r">'+(nrev?'marcadas en rojo abajo':'todas en línea o mejor')+'</div></div>');
@@ -3438,9 +3548,11 @@ function renderCaudal(){
   const mes=ST.caudalView==='mes', dec=mes?1:2, ud=mes?'h/mes':'h/día';
   const efc='#22b37f',pac='#e08a3c',realC='#4f8fe0',optC=cssv('--ink3');
   const efcS='rgba(34,179,127,.16)',pacS='rgba(224,138,60,.16)';
+  // los tiempos NO cambian de unidad; el optimo si (depende del objetivo y de las unidades)
   const real=mes?g.caudal_real_h_total:g.caudal_real_h;
   const efec=mes?g.caudal_efectivo_h_total:g.caudal_efectivo_h;
-  const par=mes?((g.caudal_real_h_total!=null&&g.caudal_efectivo_h_total!=null)?g.caudal_real_h_total-g.caudal_efectivo_h_total:null):(g.tiempo_de_paradas_min!=null?g.tiempo_de_paradas_min/60:null);
+  // una sola fuente: el CSV la trae ya en horas, con su propia precision
+  const par=mes?(g.horas_paradas_h_total!=null?g.horas_paradas_h_total:null):(g.horas_paradas_h!=null?g.horas_paradas_h:null);
   const ink=cssv('--ink'),ink2=cssv('--ink2');
   // ---- DONUT composición del real ----
   Plotly.react('cCaudalDonut',[{
@@ -3463,8 +3575,7 @@ function renderCaudal(){
   const sOpt=genSerie(t,mes?'caudal_optimo_h_total':'caudal_optimo_h');
   const sReal=genSerie(t,mes?'caudal_real_h_total':'caudal_real_h');
   const sEf=genSerie(t,mes?'caudal_efectivo_h_total':'caudal_efectivo_h');
-  const sEfT=genSerie(t,'caudal_efectivo_h_total'),sReT=genSerie(t,'caudal_real_h_total');
-  const sPar=mes?sReT.map((v,i)=>(v!=null&&sEfT[i]!=null)?v-sEfT[i]:null):genSerie(t,'tiempo_de_paradas_min').map(v=>v==null?null:v/60);
+  const sPar=genSerie(t,mes?'horas_paradas_h_total':'horas_paradas_h');
   const lay=baseLayout({height:268,margin:{l:48,r:16,t:56,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.3,x:0,font:{size:10,color:ink2},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true,zeroline:false,autorange:true,title:{text:'horas',font:{size:10,color:cssv('--ink3')}}}});
   // líneas (sin apilar) y eje ajustado a los datos para ver dónde está cada una; Real por encima
   Plotly.react('cCaudal',[
@@ -3666,7 +3777,7 @@ function faroConv(min,k,uds){ if(min==null)return null;
   const perUd=(ST.faroUnit==='prod'||ST.faroUnit==='pct')||PERUD_K1.has(k);  // 'pct' usa min/ud en el detalle; en la matriz lo calcula cellOf
   if(!perUd)return min;                       // objof: consol/entre → min/lote
   if(!(uds>0))return null;
-  return min/uds*MF(); }                       // min/ud, en la unidad global (MO o Mercadona ×1,08)
+  return min/uds; }                       // min/ud, en la unidad global (MO o Mercadona ×1,08)
 function faroDec(k){ if(ST.faroUnit==='min')return 1; if(ST.faroUnit==='objof'&&!PERUD_K1.has(k))return 1; return 2; }
 function faroUnitLbl(){ return ST.faroUnit==='min'?'min':(ST.faroUnit==='pct'?'%':udName()); }
 function cellHTML(val,dv,imp,cv,ref,name,area,faseK,span,isTot,dec){
@@ -3720,7 +3831,7 @@ function renderMatrix(){
     const vb=faroConv(rawB,k,m.udsB);
     const dv=(val!=null&&vb!=null)?val-vb:null;
     const imp=(rawA!=null&&rawB!=null&&m.lotesA!=null)?(rawA-rawB)*m.lotesA:null;
-    const cD=(rawA!=null&&rawB!=null&&m.tiempoA>0&&m.tiempoB>0&&m.prodA!=null&&m.prodB!=null)?(m.prodA*(rawA/m.tiempoA)-m.prodB*(rawB/m.tiempoB))*MF():null; // lógica inversa: reparto de la productividad por % de tiempo de la fase → Σ fases = prodA-prodB
+    const cD=(rawA!=null&&rawB!=null&&m.tiempoA>0&&m.tiempoB>0&&m.prodA!=null&&m.prodB!=null)?(m.prodA*(rawA/m.tiempoA)-m.prodB*(rawB/m.tiempoB)):null; // lógica inversa: reparto de la productividad por % de tiempo de la fase → Σ fases = prodA-prodB
     return {val,dv,imp,cD,ref:vb,dec:faroDec(k)};
   }
   const areaCells=m=>grouped?FGRUPOS.map(g=>({c:cellOf(m,g.k,g.keys),name:g.name,k:g.k,span:1}))
@@ -3760,7 +3871,7 @@ function renderMatrix(){
       if(o.c.dv!=null&&o.c.ref!=null&&isFinite(o.c.ref)&&o.c.ref!==0){
         var rr=Math.abs(o.c.dv/o.c.ref); if(rr>_DVMAX)_DVMAX=rr; }
       window.__faroCell.cells[a+'|'+o.k]={dv:o.c.dv,val:o.c.val,ref:o.c.ref,dec:o.c.dec,name:o.name}; });
-    var tv=isMinV?m0.dTiempo:(isPctV?((m0.tiempoA!=null&&m0.lotesA!=null&&m0.tiempoB!=null&&m0.lotesB!=null&&_PCTTA>0&&_PCTTB>0)?(m0.tiempoA*m0.lotesA/_PCTTA-m0.tiempoB*m0.lotesB/_PCTTB)*100:null):((m0.prodA!=null&&m0.prodB!=null)?(m0.prodA-m0.prodB)*MF():null));
+    var tv=isMinV?m0.dTiempo:(isPctV?((m0.tiempoA!=null&&m0.lotesA!=null&&m0.tiempoB!=null&&m0.lotesB!=null&&_PCTTA>0&&_PCTTB>0)?(m0.tiempoA*m0.lotesA/_PCTTA-m0.tiempoB*m0.lotesB/_PCTTB)*100:null):((m0.prodA!=null&&m0.prodB!=null)?(m0.prodA-m0.prodB):null));
     if(tv!=null&&Math.abs(tv)>_FMP)_FMP=Math.abs(tv);
   });
   dispAreas.forEach(a=>{
@@ -3779,7 +3890,7 @@ function renderMatrix(){
       const aDv=(!ST.single&&aA!=null&&aB!=null)?aA-aB:null;
       h+=cellHTML(aA, aDv, ST.single?null:m.impacto, aDv, aB, 'Aporte al total del área', a, 'prodcol', 1, true, 1);
     } else {
-      const prA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA*MF():null, prB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB*MF():null;
+      const prA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA:null, prB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB:null;
       const prDv=(!ST.single&&prA!=null&&prB!=null)?prA-prB:null;
       h+=cellHTML(prA, prDv, ST.single?null:m.impacto, ST.single?null:prDv, prB, 'Productividad', a, 'prodcol', 1, true, 2);
     }
@@ -3808,9 +3919,9 @@ function renderFaroDetail(area,faseK){
   const faroDetSerie=(t,sh,keys,uk)=>ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let raw=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){raw+=v;any=true;}});if(!any)return null;return faroConv(raw,uk,r.uds_media_lote);});
   if(faseK==='prodcol'){ // columna de productividad del faro
     name='Productividad'; col=cssv('--brand'); dec=2;
-    valA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA*MF():null; valB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB*MF():null;
+    valA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA:null; valB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB:null;
     const pk=(ST.corte==='efec')?'prod_efectiva_min_ud_media':'prod_total_min_ud_media';
-    const ps=(t,sh)=>ST.meses.map(mkey=>{const r=(((ST.index[t]||{})[mkey]||{})[sh]||{})[area];const v=r?r[pk]:null;return (v!=null&&!isNaN(v))?v*MF():null;});
+    const ps=(t,sh)=>ST.meses.map(mkey=>{const r=(((ST.index[t]||{})[mkey]||{})[sh]||{})[area];const v=r?r[pk]:null;return (v!=null&&!isNaN(v))?v:null;});
     sA=ps(curA.tienda,curA.shift); sB=ps(curB.tienda,curB.shift);
     imp=(!ST.single)?m.impacto:null;
   } else {
@@ -3981,7 +4092,7 @@ function renderPickDespl(){
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ad.length){Plotly.purge('cPick');Plotly.purge('cDespl');$('ratioGrid').innerHTML='';$('pickNote').textContent='No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.';return;}
   // Picking = productividad (min/ud): escala con las unidades del lote. Desplazamiento = min/lote (depende del recorrido, no de las uds).
-  ad.forEach(a=>{const m=MODEL.find(x=>x.area===a); m._pickAud=(m.p2A!=null&&m.udsA)?m.p2A/m.udsA*MF():null; m._pickBud=(m.p2B!=null&&m.udsB)?m.p2B/m.udsB*MF():null;});
+  ad.forEach(a=>{const m=MODEL.find(x=>x.area===a); m._pickAud=(m.p2A!=null&&m.udsA)?m.p2A/m.udsA:null; m._pickBud=(m.p2B!=null&&m.udsB)?m.p2B/m.udsB:null;});
   barGroupSem('cPick','_pickAud','_pickBud',ad,3,H.pick,0.005);   // min/ud: umbral fino para que salga verde/rojo (0,1 era de min/lote)
   barGroupSem('cDespl','p3A','p3B',ad,2,H.pick,0.1);
   $('ratioGrid').innerHTML=ad.map(a=>{
@@ -4030,7 +4141,7 @@ function renderCont(){
 function valoresDe(m,metric){
   if(metric==='tiempo')return {a:m.tiempoA,b:m.tiempoB,d:m.dTiempo,dec:2,unit:'min',eps:0.05};
   if(metric==='uds')return {a:m.udsA,b:m.udsB,d:m.dUds,dec:1,unit:'ud',eps:0.5};
-  return {a:mfv(m.prodA),b:mfv(m.prodB),d:mfv(m.dProd),dec:2,unit:udName(),eps:0.005};
+  return {a:(m.prodA),b:(m.prodB),d:(m.dProd),dec:2,unit:udName(),eps:0.005};
 }
 function impactoDe(m,metric){
   if(metric==='tiempo')return (m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null;
@@ -4092,8 +4203,9 @@ function renderTrendGen(mk,x){
   const lbl=(arr,d)=>arr.map((v,i)=>(v==null||(estr&&i%2===1))?'':fmt(v,d));
   let traces=[],title='',sub='';
   if(mk==='gprod'){
-    const efA=genSerie(tA,'prod_efectiva_min_ud').map(mfv),cpA=genSerie(tA,'prod_conparadas_min_ud').map(mfv);
-    const efB=genSerie(tB,'prod_efectiva_min_ud').map(mfv),cpB=genSerie(tB,'prod_conparadas_min_ud').map(mfv);
+    // genSerie ya devuelve la columna de la unidad activa: nada que escalar
+    const efA=genSerie(tA,'prod_efectiva_min_ud'),cpA=genSerie(tA,'prod_conparadas_min_ud');
+    const efB=genSerie(tB,'prod_efectiva_min_ud'),cpB=genSerie(tB,'prod_conparadas_min_ud');
     traces=[];
     if(!ST.single){
       /* Nombres CORTOS: quien es la referencia ya lo dice el subtitulo ("frente a X"), y el
@@ -4107,7 +4219,8 @@ function renderTrendGen(mk,x){
     traces.push({x,y:efA,name:'Efectiva',legendrank:1,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}});
     /* el valor del objetivo ya va escrito sobre la propia linea ("obj 0,306"): en la leyenda
        basta la palabra, si no se repite dos veces lo mismo. */
-    traces.push({x,y:x.map(()=>OBJ_PROD*MF()),name:'Objetivo',legendrank:5,type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(OBJ_PROD*MF(),3):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
+    const _obj=objAct();
+    traces.push({x,y:x.map(()=>_obj),name:'Objetivo',legendrank:5,type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(_obj,3):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
     title='Productividad efectiva y con paradas ('+udName()+')';sub=scnSub();
   }else if(mk==='gcaudal'){
     const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h');
@@ -4129,8 +4242,8 @@ function renderTrend(){
   if(area==='__global'&&ST.genReady){refreshTrMetricOptions();const gmk=$('trMetric').value;renderTrendGen(GTREND[gmk]?gmk:'gprod',x);return;}
   const mk=$('trMetric').value,M=METRICS[mk];
   const noDeg=M.deg&&!tieneDesglose(area);
-  const tf=(mk==='prod')?MF():1;  // solo la productividad cambia de unidad; los tiempos (min/lote) no
-  const sA=(noDeg?[]:serie(curA.tienda,curA.shift,area,mk)).map(v=>v==null?v:v*tf),sB=(noDeg?[]:serie(curB.tienda,curB.shift,area,mk)).map(v=>v==null?v:v*tf);
+  // sin escala: serie() ya devuelve el valor en la unidad activa (elige columna, no multiplica)
+  const sA=(noDeg?[]:serie(curA.tienda,curA.shift,area,mk)),sB=(noDeg?[]:serie(curB.tienda,curB.shift,area,mk));
   const lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
   if(noDeg){
     Plotly.react('cTrend',[],baseLayout({height:H.trend,annotations:[{text:'Esta métrica no se puede separar en '+area+' (la preparación no abre picking/desplazamiento).',showarrow:false,font:{color:cssv('--ink2'),size:13},x:0.5,y:0.5,xref:'paper',yref:'paper'}],xaxis:{visible:false},yaxis:{visible:false}}),PCFG);
@@ -4203,9 +4316,10 @@ function renderFevo(){
 }
 function lecturaArea(m){
   const p=[],peor=m.dProd!=null&&m.dProd>UMBRAL.prod,mejor=m.dProd!=null&&m.dProd<-UMBRAL.prod;
-  if(peor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce a '+fmt(m.prodA,3)+' min/ud frente a '+fmt(m.prodB,3)+' de '+ST.nameB+' (peor por '+fmt(Math.abs(m.dProd),3)+').');
-  else if(mejor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce mejor: '+fmt(m.prodA,3)+' min/ud frente a '+fmt(m.prodB,3)+' de '+ST.nameB+'.');
-  else p.push('En <b>'+m.area+'</b>, '+ST.nameA+' produce casi como '+ST.nameB+' ('+fmt(m.prodA,3)+' vs '+fmt(m.prodB,3)+' min/ud).');
+  const _u=udName();
+  if(peor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce a '+fmt(m.prodA,3)+' '+_u+' frente a '+fmt(m.prodB,3)+' de '+ST.nameB+' (peor por '+fmt(Math.abs(m.dProd),3)+').');
+  else if(mejor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce mejor: '+fmt(m.prodA,3)+' '+_u+' frente a '+fmt(m.prodB,3)+' de '+ST.nameB+'.');
+  else p.push('En <b>'+m.area+'</b>, '+ST.nameA+' produce casi como '+ST.nameB+' ('+fmt(m.prodA,3)+' vs '+fmt(m.prodB,3)+' '+_u+').');
   if(m.tiempoA!=null)p.push('Cada lote tarda <b>'+fmt(m.tiempoA,1)+' min</b> (referencia '+fmt(m.tiempoB,1)+').');
   if(m.compat&&m.ratioA!=null)p.push('De cada minuto de picking hay <b>'+fmt(m.ratioA,2)+'</b> de desplazamiento (referencia '+fmt(m.ratioB,2)+')'+(m.dRatio!=null&&m.dRatio>0.1?': hay margen en el recorrido':'')+'.');
   if(m.impacto!=null&&Math.abs(m.impacto)>=1)p.push('Impacto: <b>'+fmtImpact(m.impacto)+'/mes</b> '+(m.impacto>0?'de más':'ahorrados')+' frente a la referencia.');
@@ -4219,6 +4333,10 @@ function rowTMSA(t,mes,shift,area){return mapCorte((((ST.index[t]||{})[mes]||{})
 function valorTienda(t,mk,area,shift,mes){
   const M=METRICS[mk];
   if(area==='__global'){
+    const gR=globRow(t,mes,shift);
+    if(gR){ if(mk==='prod')return gR[PRODC()];
+            if(mk==='tiempo')return gR.total_min_util_medio;
+            if(mk==='uds')return gR[UDSC()]; }
     const rows=AREAS.map(a=>rowTMSA(t,mes,shift,a)).filter(Boolean);if(!rows.length)return null;
     if(mk==='prod')return prodGlobal(rows);if(mk==='tiempo')return tiempoGlobal(rows);
     let s=0,w=0;AREAS.forEach(a=>{const r=rowTMSA(t,mes,shift,a),v=metricVal(r,a,mk);if(v!=null&&r&&r.n_lotes!=null){s+=v*r.n_lotes;w+=r.n_lotes;}});return w>0?s/w:null;
@@ -4237,7 +4355,8 @@ function fillRankAttrs(){
   const MORD=['NTC15','NTC30','NTC60','NTC90','NTC120','NTC150'],ord=v=>{const i=MORD.indexOf(v);return i<0?99:i;};
   const el=$('rkModel');if(el){const cur=el.value||'__all';const arr=[...mod].sort((a,b)=>ord(a)-ord(b)||String(a).localeCompare(b));el.innerHTML='<option value="__all">Todos</option>'+arr.map(v=>opt(v,v,v===cur)).join('');}
 }
-function genSerie(t,prop){return ST.meses.map(k=>{const r=genRow(t,k);return r?(typeof prop==='function'?prop(r):r[prop]):null;});}
+// gv() traduce el nombre de columna a la unidad activa. Los TIEMPOS no tienen gemela y pasan tal cual.
+function genSerie(t,prop){return ST.meses.map(k=>{const r=genRow(t,k);return r?(typeof prop==='function'?prop(r):gv(r,prop)):null;});}
 function fmtUds(u){if(u==null)return '—';return u>=1000?fmt(u/1000,1)+'k uds':fmt(u,0)+' uds';}
 /* ===== LAS TRES FASES: APRENDIZ / ROLL OUT / VETERANA =====
    Antes aqui solo se veia un binario del mes (columna estado_veterana: "Veterana" / "No
@@ -4317,12 +4436,12 @@ function renderRank(){
   const faSigno=isFa?(FA.low?1:-1):1;      // +1 = "peor" es mas alto; -1 = "peor" es mas bajo
   const isGen=(!isFa)&&GEN_METRICS.hasOwnProperty(mk),G=GEN_METRICS[mk],M=isFa?null:METRICS[mk];
   const isProdMetric=(!isFa)&&((isGen&&G.isProd)||mk==='prod'||(M&&M.perud));
-  const rf=isProdMetric?MF():1;  // productividad → unidad global (MO/Mercadona)
+  const rf=1;  // sin escala: el valor ya viene en la unidad activa
   let items=ST.realStores.map(t=>{
     const gr=genRow(t,mes);
     let val;
     if(isFa){val=window.__faStoreVal?window.__faStoreVal(t,mes,FA.k):null;}
-    else if(isGen){val=gr?(G.calc?G.calc(gr):gr[G.prop]):null;}
+    else if(isGen){val=gr?(G.calc?G.calc(gr):gv(gr,G.prop)):null;}
     else if(mk==='__imp'){const v=impTienda(t,ref,area,shift,mes);val=v==null?null:v/60;}
     else if(mk==='__worsen'||mk==='__improve'){val=slopeBrecha(t,ref,area,shift);}
     else{val=valorTienda(t,mk,area,shift,mes);}
@@ -4356,10 +4475,10 @@ function renderRank(){
   // (exactamente el valor del resumen: prod_conparadas real ≤20 / prod_efectiva ≤6); horas/caudal = 0
   let vRef;
   if(isGen){
-    if(G.isProd){ vRef=(ref===OBJ_NAME)?OBJ_PROD:(function(){const grR=genRow(ref,mes);return (grR&&grR[G.prop]!=null)?grR[G.prop]:null;})(); }
+    if(G.isProd){ vRef=(ref===OBJ_NAME)?objAct():(function(){const grR=genRow(ref,mes);return gv(grR,G.prop);})(); }
     else if(ref===OBJ_NAME){ vRef=null; }
     else { // métricas absolutas (tiempo/caudal): MEDIA de la métrica sobre las tiendas del grupo de referencia
-      const pool=ST.realStores.map(function(t){const gr=genRow(t,mes); if(!gr||gr.model==='CIERRE')return null; if(ref==='Tiendas Veteranas'&&(gr.estado||estadoVet(t,mes,shift,area))!=='Veterana')return null; const v=G.calc?G.calc(gr):gr[G.prop]; return (v==null)?null:v;}).filter(function(v){return v!=null;});
+      const pool=ST.realStores.map(function(t){const gr=genRow(t,mes); if(!gr||gr.model==='CIERRE')return null; if(ref==='Tiendas Veteranas'&&(gr.estado||estadoVet(t,mes,shift,area))!=='Veterana')return null; const v=G.calc?G.calc(gr):gv(gr,G.prop); return (v==null)?null:v;}).filter(function(v){return v!=null;});
       vRef=pool.length?pool.reduce(function(s,v){return s+v;},0)/pool.length:null;
     }
   }
@@ -4416,7 +4535,13 @@ function renderRank(){
 
 /* ===== ASISTENTE FLOTANTE ===== */
 const QUICK=['¿Por dónde empiezo?','Resume la comparación','¿Cómo va la productividad?','¿Cuál es la más rápida?','¿Cuál es la más lenta?','¿Qué área va mejor?','¿Qué área va peor?','Mejores y peores áreas','¿Qué lote tarda más?','¿Cuántas unidades por lote?','¿Ratio despl/picking peor?','¿Desplazamiento total?','¿Tiempo entre lotes?','¿Impacto total?','¿Es puntual o tendencia?','Ayuda'];
+/* El asistente esta oculto por CSS desde hace tiempo (#fab,#assistant{display:none!important}).
+   initChat() se seguia llamando en CADA renderAll(). Se deja la funcion por si vuelve, pero ya no
+   se llama sola. */
 function initChat(){
+  // guarda: el asistente esta oculto por CSS. Sin esto se re-armaba entero en cada renderAll().
+  const _a=document.getElementById('assistant');
+  if(!_a || getComputedStyle(_a).display==='none') return;
   $('asScope').textContent=ST.nameA+' vs '+ST.nameB;$('clog').innerHTML='';chatPush('ai',chatIntro());
   if(ST._chatInit)return;ST._chatInit=true;
   $('qq').innerHTML=QUICK.map(q=>'<button class="qqb">'+q+'</button>').join('');
@@ -4438,17 +4563,17 @@ function answer(q){
   if(has('hola','buenas','ayuda','qué puedes','que puedes','cómo funciona','como funciona','qué sabes','que sabes','ejemplos'))
     return 'Puedo responderte con tus datos sobre: <b>por dónde empezar</b>, una <b>área</b> (Secos, Refrigerado, Congelado, Frescos, FYV…), la <b>productividad y el objetivo</b>, los <b>tiempos por lote</b>, el <b>ratio desplazamiento/picking</b>, el <b>desplazamiento total</b>, el <b>tiempo entre lotes</b>, las <b>unidades</b> y el <b>impacto al mes</b>. Escríbeme en lenguaje normal.';
   if(has('resum','cómo voy','como voy','qué tal','que tal','visión','vision','en general','balance')){
-    const t=byImp()[0],obj=OBJ_PROD*MF(),nMal=av.filter(m=>m.prodA!=null&&mfv(m.prodA)>obj+0.003).length;
+    const t=byImp()[0],obj=objAct(),nMal=av.filter(m=>m.prodA!=null&&m.prodA>obj+0.003).length;
     return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>: '+(t?'donde más margen hay es <b>'+t.area+'</b> ('+fmtImpact(t.impacto)+'/mes de más; lo explica '+causaText(t)+'). ':'no hay un área que destaque por perder tiempo. ')+(nMal>0?('<b>'+nMal+' de '+av.length+'</b> áreas están por encima del objetivo de productividad ('+fmt(obj,3)+' '+udName()+').'):'La productividad va en objetivo en casi todas las áreas.');
   }
   if(has('productividad','min/ud','min ud','objetivo','cumpl','meta')){
     const bs=[...av].filter(x=>x.prodA!=null); if(!bs.length)return 'Sin datos de productividad en estos escenarios.';
-    const best=[...bs].sort((a,b)=>mfv(a.prodA)-mfv(b.prodA))[0],worst=[...bs].sort((a,b)=>mfv(b.prodA)-mfv(a.prodA))[0],obj=OBJ_PROD*MF(),ok=bs.filter(m=>mfv(m.prodA)<=obj+0.003).length;
-    return 'Objetivo: <b>'+fmt(obj,3)+' '+udName()+'</b>. En '+ST.nameA+', la más rápida es <b>'+best.area+'</b> ('+fmt(mfv(best.prodA),3)+') y la más lenta <b>'+worst.area+'</b> ('+fmt(mfv(worst.prodA),3)+'). Cumplen el objetivo <b>'+ok+' de '+bs.length+'</b> áreas.';
+    const best=[...bs].sort((a,b)=>a.prodA-b.prodA)[0],worst=[...bs].sort((a,b)=>b.prodA-a.prodA)[0],obj=objAct(),ok=bs.filter(m=>m.prodA<=obj+0.003).length;
+    return 'Objetivo: <b>'+fmt(obj,3)+' '+udName()+'</b>. En '+ST.nameA+', la más rápida es <b>'+best.area+'</b> ('+fmt((best.prodA),3)+') y la más lenta <b>'+worst.area+'</b> ('+fmt((worst.prodA),3)+'). Cumplen el objetivo <b>'+ok+' de '+bs.length+'</b> áreas.';
   }
-  if(has('mejores y peores','clasifica','clasificación','clasificacion','ranking de áreas','ranking de areas','ordena las áreas','ordena las areas','mejores áreas','peores áreas','mejores y peores áreas')){const bs=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(a.prodA)-mfv(b.prodA));if(bs.length<2)return 'Sin datos suficientes de productividad.';const top=bs.slice(0,3).map(m=>m.area+' ('+fmt(mfv(m.prodA),3)+')').join(', ');const bot=bs.slice(-3).reverse().map(m=>m.area+' ('+fmt(mfv(m.prodA),3)+')').join(', ');return 'Por productividad en '+ST.nameA+' — <b>mejores</b>: '+top+'. <b>Peores</b>: '+bot+'.';}
-  if(has('más rápida','mas rapida','más rápido','mas rapido','la más veloz','cuál es la más rápida')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(a.prodA)-mfv(b.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más rápida de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(mfv(m.prodA),3)+' '+udName()+').';}
-  if(has('más lenta','mas lenta','más lento','mas lento')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>mfv(b.prodA)-mfv(a.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más lenta de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(mfv(m.prodA),3)+' '+udName()+').';}
+  if(has('mejores y peores','clasifica','clasificación','clasificacion','ranking de áreas','ranking de areas','ordena las áreas','ordena las areas','mejores áreas','peores áreas','mejores y peores áreas')){const bs=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(a.prodA)-(b.prodA));if(bs.length<2)return 'Sin datos suficientes de productividad.';const top=bs.slice(0,3).map(m=>m.area+' ('+fmt((m.prodA),3)+')').join(', ');const bot=bs.slice(-3).reverse().map(m=>m.area+' ('+fmt((m.prodA),3)+')').join(', ');return 'Por productividad en '+ST.nameA+' — <b>mejores</b>: '+top+'. <b>Peores</b>: '+bot+'.';}
+  if(has('más rápida','mas rapida','más rápido','mas rapido','la más veloz','cuál es la más rápida')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(a.prodA)-(b.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más rápida de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt((m.prodA),3)+' '+udName()+').';}
+  if(has('más lenta','mas lenta','más lento','mas lento')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(b.prodA)-(a.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más lenta de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt((m.prodA),3)+' '+udName()+').';}
   if(has('unidad','uds','pedidos','volumen')){const m=[...av].filter(x=>x.udsA!=null).sort((a,b)=>b.udsA-a.udsA)[0];if(!m)return 'Sin datos de unidades por lote.';return 'El lote con más unidades en '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(m.udsA,0)+' uds/lote).';}
   if(has('impacto total','en total','suma','cuánto pierdo','cuanto pierdo','tiempo total de más','total de más')){const r=byImp();if(!r.length)return 'No hay tiempo de más destacable frente a '+ST.nameB+'.';const tot=r.reduce((sm,m)=>sm+(m.impacto||0),0);return 'En total, frente a '+ST.nameB+' hay <b>'+fmtImpact(tot)+'/mes</b> de más, repartidos en '+r.length+' áreas; la que más pesa es <b>'+r[0].area+'</b>.';}
   if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+'/mes de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
@@ -4718,15 +4843,45 @@ document.addEventListener('click',function(e){
   if(c){tableToCsv(c.dataset.csv,c.dataset.csvname);}
 });
 
-/* ===== UNIDAD GLOBAL (MO / Mercadona ×1,08) ===== */
+/* ===== UNIDAD GLOBAL Y OBJETIVO · el unico sitio donde se tocan =====
+   El boton cambia de unidad y el campo fija el objetivo. Los dos mandan sobre TODO el dashboard:
+   comparador, faro, ranking, matriz y la calculadora de objetivos de las tiendas liebre. */
+function syncObjUI(){
+  const inp=$('cfgObj'), h=$('cfgObjHint'); if(!inp)return;
+  if(document.activeElement!==inp) inp.value=objFmt(objAct(),3);
+  const tgt=$('lo_calcTarget'); if(tgt&&document.activeElement!==tgt) tgt.value=objFmt(objAct(),3);
+  if(h) h.innerHTML = 'equivale a <b>'+objFmt(objOther(),3)+'</b> '+udOther()
+    + (OBJ.user!=null?' · <a href="#" id="cfgObjReset" style="color:var(--brand)">volver al oficial</a>'
+                     :(OBJ.fromCsv?' · oficial del CSV':' · <b>valor de respaldo</b>, el CSV no trae el objetivo'));
+  const rs=$('cfgObjReset'); if(rs)rs.onclick=e=>{e.preventDefault();OBJ.user=null;applyUnit();};
+}
+let _auBusy=false,_auPend=false;
 function applyUnit(){
+  /* Plotly lanza "_redrawFromAutoMarginCount" si se le pide repintar mientras aun esta midiendo
+     margenes del repintado anterior. Con dos cambios seguidos (unidad + objetivo) pasaba.
+     El guardia NO descarta la segunda llamada: la deja pendiente y la ejecuta despues, para que
+     nunca se pierda un cambio de estado. */
+  if(_auBusy){ _auPend=true; return; }
+  _auBusy=true;
+  setTimeout(()=>{ _auBusy=false; if(_auPend){ _auPend=false; applyUnit(); } },0);
   const merc=!!window.__MERC;
   $('unitBtn').textContent = merc?'Unidad: Mercadona':'Unidad: MO';
+  syncObjUI();
   if(ST.analyzed){renderMatrix();renderSummary();renderReal();renderDiff();renderPickDespl();renderDesplTot();renderCont();renderTrend();renderFicha();}
   if(ST.mode==='rank')renderRank();
   if(window.loRerender){try{window.loRerender();}catch(e){}}
+  try{if(window.__faRerender)window.__faRerender();}catch(e){}
 }
+window.__applyUnit=applyUnit;
 $('unitBtn').addEventListener('click',()=>{window.__MERC=!window.__MERC;applyUnit();});
+(function(){ const inp=$('cfgObj'); if(!inp)return;
+  const commit=()=>{ const v=objNum(inp.value);
+    // se guarda SIEMPRE en unidades Mercadona; el equivalente MO sale de la proporcion real medida
+    OBJ.user=(v>0&&!isNaN(v))?(window.__MERC?v:v/objRatio()):null;
+    applyUnit(); };
+  inp.addEventListener('change',commit);
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();inp.blur();} });
+})();
 
 /* ===== VISTA GLOBAL AGRUPADO / DESGLOSADO ===== */
 function applyGroup(){
@@ -4738,8 +4893,12 @@ function applyGroup(){
 }
 $('groupBtn').addEventListener('click',()=>{window.__GROUP=!window.__GROUP;applyGroup();});
 // Predeterminado: vista Agrupado + unidad MO (Mercadona ×1,08 se activa en Ajustes)
-window.__MERC=false; window.__GROUP=true;   // unidad por defecto: MO (Mercadona Online). Mercadona (×1,08) se activa en Ajustes.
-$('unitBtn').textContent='Unidad: MO';
+// Unidad por defecto: MERCADONA, que es la oficial y la que ve el coordinador en la app de control.
+// MO sigue disponible en Ajustes como analisis secundario.
+window.__MERC=true; window.__GROUP=true;
+$('unitBtn').textContent='Unidad: Mercadona';
+// deja el campo de objetivo y su equivalencia pintados desde el primer momento
+setTimeout(function(){ try{ syncObjUI(); }catch(e){} },0);
 $('groupBtn').textContent='Vista: Agrupado';
 (function(){var fd=$('flowDes'),fa=$('flowAgr'); if(fd)fd.style.display='none'; if(fa)fa.style.display='';})();
 
@@ -4761,7 +4920,16 @@ $('themeBtn').addEventListener('click',()=>{
 });
 
 /* ===== VALORES GENERALES (Fase general) — índice por tienda+mes ===== */
-const GEN_NUMC=['n_dias','uds_dia_media','uds_total_mes','tiempo_efectivo_min','tiempo_con_paradas_min','tiempo_de_paradas_min','prod_efectiva_min_ud','prod_conparadas_min_ud','dif_prod_efectiva_vs_obj','dif_prod_conparadas_vs_obj','caudal_optimo_h','caudal_efectivo_h','caudal_real_h','diferencia_caudal_h','caudal_optimo_h_total','caudal_efectivo_h_total','caudal_real_h_total','diferencia_caudal_h_total'];
+const GEN_NUMC=['n_dias','uds_dia_media','uds_total_mes','tiempo_efectivo_min','tiempo_con_paradas_min','tiempo_de_paradas_min','prod_efectiva_min_ud','prod_conparadas_min_ud','dif_prod_efectiva_vs_obj','dif_prod_conparadas_vs_obj','caudal_optimo_h','caudal_efectivo_h','caudal_real_h','diferencia_caudal_h','caudal_optimo_h_total','caudal_efectivo_h_total','caudal_real_h_total','diferencia_caudal_h_total',
+  // horas de parada ya en horas, una sola definicion
+  'horas_paradas_h','horas_paradas_h_total',
+  // unidades MERCADONA: las mismas metricas, calculadas con el otro denominador
+  'uds_dia_media_mcd','uds_total_mes_mcd','factor_uds_mcd_mo',
+  'prod_efectiva_min_ud_mcd','prod_conparadas_min_ud_mcd',
+  'dif_prod_efectiva_vs_obj_mcd','dif_prod_conparadas_vs_obj_mcd',
+  'caudal_optimo_h_mcd','diferencia_caudal_h_mcd','caudal_optimo_h_total_mcd','diferencia_caudal_h_total_mcd',
+  // los dos objetivos, como dato
+  'obj_mcd_min_ud','obj_mo_min_ud','obj_mo_equiv_min_ud'];
 function genRow(t,mk){return (ST.gen[t]||{})[mk]||null;}
 function loadGeneral(){
   if(!GENERAL_URL)return;
@@ -4779,6 +4947,10 @@ function loadGeneral(){
           GEN_NUMC.forEach(c=>o[c]=numv(r[c]));
           (idx[t]=idx[t]||{})[mk]=o;
         });
+        /* Los objetivos viajan en el CSV (constantes del SQL). Si el fichero es anterior a la v4
+           no estaran, y se queda el respaldo avisando en pantalla. */
+        (function(){ for(const t in idx){ for(const mk in idx[t]){ const o=idx[t][mk];
+            if(o.obj_mcd_min_ud>0&&o.obj_mo_min_ud>0){ OBJ.mcd=o.obj_mcd_min_ud; OBJ.mo=o.obj_mo_min_ud; OBJ.fromCsv=true; return; } } } })();
         ST.gen=idx;ST.genReady=true;
         try{ if(window.__cdStoreNames) window.__cdStoreNames(); }catch(e){}   // Caudal ya puede poner el nombre largo del centro
         try{if(window.__buildAgg)window.__buildAgg();}catch(e){}  // ya hay zona/región: (re)construye agregadas geográficas
@@ -4846,10 +5018,10 @@ const AREAS=['SECOS','REFRIGERADO','CONGELADO','FRESCOS','FYV','HORNO','PENDIENT
 // En modo Simple PENDIENTES no se muestra (no está adherida a un objetivo). En Experto se ve todo.
 function viewAreas(){ return document.body.classList.contains('simple') ? AREAS.filter(a=>a!=='PENDIENTES') : AREAS; }
 const ACOL={SECOS:'#d6a64f',REFRIGERADO:'#4f8fe0',CONGELADO:'#5ec8d6',FRESCOS:'#26b079',FYV:'#7bc043',HORNO:'#e08a4f',PENDIENTES:'#9b8fd6'};
-const OBJ_PROD=0.306; const OBJ_MERC=0.306*1.08; // objetivo 0,306 MO (→0,33 Merca). Selección liebres sigue ≤0,315 (SQL + criterios)
-function MF(){return window.__MERC?1.08:1;}  // unidad global: MO=1, Mercadona=1,08 (solo min/ud)
-function mfv(x){return (x==null||typeof x!=='number'||isNaN(x))?x:x*MF();}
-function udName(){return window.__MERC?'min/ud Merca':'min/ud MO';}
+/* OBJ_PROD y OBJ_MERC fuera: el objetivo lo da objAct(). OBJ_MERC ademas ya no lo leia nadie. */
+/* Este bloque vive en otro <script>, asi que reexpone lo que necesita del nucleo.
+   Nada de multiplicar: aqui tambien se elige columna. */
+const OBJ=window.__OBJ;
 const MACROS=[
   {k:'prep',name:'Preparación',sub:'P1+P2+P3',col:'#16b87f'},
   {k:'pes', name:'Pesaje',     sub:'P4',      col:'#e6b15e'},
@@ -4860,9 +5032,12 @@ const MACROS=[
 const MCOLS=[{k:'prep',s:'Preparación',name:'P1+P2+P3'},{k:'pes',s:'Pesaje',name:'P4'},{k:'cons',s:'Consolidación',name:'P5+P6'},{k:'ent',s:'Entre lotes',name:'P7'}];
 const DCOLS=[{k:'p1',s:'Arranque',name:'P1'},{k:'pd',s:'Picking+Despl',name:'P2+P3'},{k:'p4',s:'Pesaje',name:'P4'},{k:'p5',s:'Traslado',name:'P5'},{k:'p6',s:'Consolidación',name:'P6'},{k:'p7',s:'Entre lotes',name:'P7'}];
 function activeCols(){ return window.__GROUP?MCOLS:DCOLS; }
-function cols(c){ if(c==='efec')return{tot:'total_min_efec_medio',prod:'prod_efectiva_min_ud_media',pre:'ef_'};
+/* prod depende del CORTE y de la UNIDAD. El sufijo _mcd lo pone la unidad activa; el CSV trae las
+   dos familias calculadas, no convertidas. */
+function cols(c){ const m=window.__MERC?'_mcd':'';
+  if(c==='efec')return{tot:'total_min_efec_medio',prod:'prod_efectiva_min_ud_media'+m,pre:'ef_'};
   if(c==='par')return{tot:'total_min_paradas_medio',prod:null,pre:'par_'};
-  return{tot:'total_min_util_medio',prod:'prod_total_min_ud_media',pre:''}; }
+  return{tot:'total_min_util_medio',prod:'prod_total_min_ud_media'+m,pre:''}; }
 function mmin(r,C,k){ if(!r)return NaN; const p=C.pre;
   if(k==='pd')  return r[`prep_${p}min_medio`];
   if(k==='prep')return (r[`p1_${p}min_medio`]||0)+(r[`prep_${p}min_medio`]||0);
@@ -4875,7 +5050,7 @@ function mpct(r,C,k){ const t=r&&r[C.tot]; const v=mmin(r,C,k); return (t&&t>0)?
 // Objetivo oficial: por unidad = picking+desplazamiento (pd/p2/p3) y pesaje (p4), y el bloque agrupado Preparación (prep).
 // Arranque (p1) es tiempo fijo (min/lote) al desglosar; traslado/consolidación/entre lotes también.
 const PERUD_KEYS=new Set(['prep','pes','pd','p2','p3','p23','p4']);
-function udsOf(r){ return (r&&r.uds_media_lote>0)?r.uds_media_lote:NaN; }
+function udsOf(r){ const u=r&&r[UDSC()]; return (u>0)?u:NaN; }
 function cvVal(r,C,k){ // valor a mostrar de una fase según ST.mode / ST.uunit
   if(ST.mode==='pct') return mpct(r,C,k);
   const raw=mmin(r,C,k); if(isNaN(raw)) return NaN;
@@ -4883,12 +5058,12 @@ function cvVal(r,C,k){ // valor a mostrar de una fase según ST.mode / ST.uunit
   const perUd=(ST.mode==='prod')||PERUD_KEYS.has(k); // objof: solo prep/pesaje por unidad
   if(!perUd) return raw;                              // objof: consol/entre → min/lote
   const u=udsOf(r); if(isNaN(u)) return NaN;
-  return raw/u*MF();                                  // min/ud en la unidad global
+  return raw/u;                                  // min/ud en la unidad global
 }
 function cvDec(k){ if(ST.mode==='pct')return 1; if(ST.mode==='min')return 2; if(ST.mode==='objof'&&!PERUD_KEYS.has(k))return 2; return 3; } // min/lote 2 dec; productividad (min/ud) 3 dec
 function cvTot(r,C){ if(ST.mode==='pct')return 100; const raw=r&&r[C.tot]; if(raw==null||isNaN(raw))return NaN;
   if(ST.mode!=='prod')return raw; // min y objof → total en min/lote; prod → min/ud
-  const u=udsOf(r); if(isNaN(u))return NaN; return raw/u*MF(); }
+  const u=udsOf(r); if(isNaN(u))return NaN; return raw/u; }
 function udLbl(){ return udName(); }
 function cvColUnit(k){ if(ST.mode==='pct')return '%'; if(ST.mode==='min')return 'min/lote'; if(ST.mode==='prod')return udLbl(); return PERUD_KEYS.has(k)?udLbl():'min/lote'; }
 function cellInner2(v,isPct,mx,dec){ if(v==null||isNaN(v))return'<span class="lo-na">·</span>';
@@ -4923,6 +5098,11 @@ function build(data){
     else if(r.nivel==='tienda_trim'){(ST.stTrim[r.tienda]=ST.stTrim[r.tienda]||{})[r.area]=r;}
     else if(r.nivel==='tienda_mes'){(ST.stMes[r.tienda]=ST.stMes[r.tienda]||{});(ST.stMes[r.tienda][r.mes]=ST.stMes[r.tienda][r.mes]||{})[r.area]=r;}
   }
+  /* Proporcion REAL entre las dos unidades, medida sobre las mismas tiendas liebre y los mismos
+     dias: base MO / base Mercadona. Es lo que permite que, si pones un objetivo a mano, el
+     equivalente en la otra unidad salga proporcional y correcto sin inventarse ningun factor. */
+  (function(){ const g=ST.glob.trimGen;
+    if(g&&g.prod_real_oficial>0&&g.prod_real_oficial_mcd>0) window.__OBJRATIO=g.prod_real_oficial/g.prod_real_oficial_mcd; })();
   ST.meses=Object.keys(ST.objMes).sort((a,b)=>mesDate(a)-mesDate(b));
   ST.stores=Object.keys(ST.stTrim).sort((a,b)=>(+a||0)-(+b||0));
   try{ window.__liebreSet=new Set(ST.stores.map(String)); if(window.__buildAgg)window.__buildAgg(); if(window.__rerenderComp)window.__rerenderComp(); if(window.__faLiebreSync)window.__faLiebreSync(); }catch(e){}   // lista de tiendas liebre para el resumen del comparador y para el "Otros" de Farolas
@@ -4944,32 +5124,62 @@ function build(data){
 
   var cf=document.getElementById('lo_critFoot');if(cf)cf.innerHTML='Resultado: '+ST.stores.length+' tiendas liebre cumplen ambas condiciones · '+ST.meses.length+' meses';
   wire(); renderAll();
+  /* El campo de la pestana y el de Ajustes son EL MISMO objetivo. Se escriben el uno al otro. */
+  (function(){ const tgt=document.getElementById('lo_calcTarget'); if(!tgt||tgt._wired)return; tgt._wired=1;
+    const commit=()=>{ const v=objNum(tgt.value);
+      OBJ.user=(v>0&&!isNaN(v))?(window.__MERC?v:v/objRatio()):null;
+      if(window.__applyUnit)window.__applyUnit(); else renderAll(); };
+    tgt.addEventListener('change',commit);
+    tgt.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();tgt.blur();} });
+  })();
+  try{ syncObjUI(); }catch(e){ console.warn('syncObjUI',e); }
 }
 
 function subActiva(){ return (ST.per==='mes'&&ST.mes&&ST.objMes[ST.mes])?ST.objMes[ST.mes]:ST.objTrim; }
-function globReal(){ return ST.glob.trimGen?ST.glob.trimGen.prod_real_oficial:NaN; }
-function globEfec(){ return ST.glob.trimGen?ST.glob.trimGen.prod_efec_oficial:NaN; }
+/* La productividad OFICIAL del conjunto de liebres, en la unidad activa. Las dos vienen calculadas
+   del SQL sobre los mismos dias: mismo tiempo, distinto denominador. */
+function OFK(which){ const m=window.__MERC?'_mcd':'';
+  return (which==='efec'?'prod_efec_oficial':'prod_real_oficial')+m; }
+function globReal(){ const g=ST.glob.trimGen; return g?g[OFK('real')]:NaN; }
+function globEfec(){ const g=ST.glob.trimGen; return g?g[OFK('efec')]:NaN; }
 function estGlobalProd(src,key){ let su=0,sm=0; AREAS.forEach(a=>{const r=src[a];if(!r)return;const u=r.uds_total||0,p=r[key];if(!isNaN(p)){su+=u;sm+=p*u;}}); return su?sm/su:NaN; }
 function renderAll(){ renderHero(); renderContrib(); renderMatrix(); renderCalc(); renderMonthly(); renderRanking(); renderStores(); if(ST.sel)renderDet(); renderFoot(); }
 window.loRerender=function(){ if(window._loInit){try{renderAll();}catch(e){}} };  // re-pinta la vista objetivos al cambiar la unidad global
 
-/* ---------- CALCULADORA DE OBJETIVOS ---------- */
-function calcBaseMO(){ // base = productividad global de la tarjeta para el corte elegido (min/ud, MO)
-  if(ST.calcCorte==='efec') return isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'):globEfec();
-  return isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'):globReal();
+/* ---------- CALCULADORA DE OBJETIVOS ----------
+   La calculadora escala los TIEMPOS de las tiendas liebre por un factor k, y los tiempos son los
+   mismos en las dos unidades. Por eso k NO depende de la unidad:
+       k = objetivo_Mercadona / base_Mercadona = objetivo_MO / base_MO
+   siempre que el objetivo de una unidad sea el equivalente real del de la otra. Las dos bases vienen
+   MEDIDAS del CSV (prod_real_oficial y prod_real_oficial_mcd, mismos dias, mismas tiendas), asi que
+   el equivalente sale solo: base_otra x k. Ni un factor inventado en todo el camino.
+   Antes esto hacia base_MO x 1,08, y el 1,08 se cancelaba al dividir: funcionaba de milagro. */
+function calcBaseU(merc){ const g=ST.glob.trimGen; if(!g)return NaN;
+  const k=(ST.calcCorte==='efec'?'prod_efec_oficial':'prod_real_oficial')+(merc?'_mcd':'');
+  const v=g[k]; return (v!=null&&!isNaN(v))?v:NaN; }
+function calcBaseMO(){ // base para el corte elegido, EN LA UNIDAD ACTIVA
+  const mm=window.__MERC?'_mcd':'';
+  if(ST.calcCorte==='efec') return isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'+mm):globEfec();
+  return isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'+mm):globReal();
 }
 function round3(x){return Math.round(x*1000)/1000;}
 function loSaveObj(){
-  const merc=!!window.__MERC, baseMO=calcBaseMO(), baseSel=round3(merc?baseMO*1.08:baseMO);
-  const objSel=numEU(document.getElementById('lo_calcTarget').value);
-  const k=(baseSel>0&&!isNaN(objSel))?objSel/baseSel:NaN;
+  /* k se calcula con los valores EXACTOS, no con los que se ven. Redondear la base a 3 decimales y
+     releer el objetivo del texto del campo metia hasta un 0,14% de diferencia entre las dos
+     unidades, cuando por construccion tiene que ser el MISMO factor. Los redondeos son solo para
+     pintar. */
+  const baseX=calcBaseMO(), baseSel=round3(baseX), objSel=objAct();
+  const k=(baseX>0&&!isNaN(objSel))?objSel/baseX:NaN;
   if(isNaN(k)){alert('Pon una base y un objetivo válidos antes de guardar.');return;}
   // escalado por columna (mismo criterio que la tabla): tiempos y prod ×k, % igual, uph ÷k, contadores igual
+  /* k escala TIEMPOS. Los contadores (lotes, unidades por lote en cualquiera de las dos unidades)
+     no se tocan, los porcentajes tampoco, y las uds/hora van al reves. Las productividades escalan
+     en las DOS unidades, porque el tiempo es el mismo numerador para las dos. */
   function sc(key,v){ if(typeof v!=='number'||isNaN(v))return v;
     if(/_pct_medio$/.test(key))return v;
     if(/^uph_/.test(key))return k?v/k:v;
-    if(key==='n_lotes'||key==='uds_media_lote')return v;
-    if(/_medio$/.test(key)||/min_ud_media$/.test(key))return v*k;
+    if(key==='n_lotes'||key==='uds_media_lote'||key==='uds_media_lote_mcd')return v;
+    if(/_medio$/.test(key)||/min_ud_media(_mcd)?$/.test(key))return v*k;
     return v; }
   // columnas que entiende el dashboard (mismas que el desglose)
   const FK=['p1','p2','p3','p23','p4','p5','p6','p7','prep'];
@@ -4978,6 +5188,9 @@ function loSaveObj(){
     FK.map(f=>f+'_pct_medio'),['prod_total_min_ud_media','uph_total_media']);
   FK.forEach(f=>metricCols.push(f+'_ef_min_medio',f+'_ef_pct_medio',f+'_par_min_medio',f+'_par_pct_medio'));
   metricCols.push('total_min_efec_medio','total_min_paradas_medio','prod_efectiva_min_ud_media','uph_efec_media');
+  // las dos familias de unidades, cada una escalada por el MISMO k. Sin esto, el CSV de objetivos
+  // solo servia para la vista MO y la de Mercadona se quedaba en blanco.
+  metricCols.push('uds_media_lote_mcd','prod_total_min_ud_media_mcd','prod_efectiva_min_ud_media_mcd');
   const header=['tienda','mes','shift','area_batch','estado_veterana'].concat(metricCols);
   // Formato europeo entre comillas (coma decimal), igual que el resto de CSVs del proyecto.
   // Evita que el parser numv del comparador lea "1.155" u "8.415" como miles (1155 / 8415).
@@ -4999,15 +5212,21 @@ function loSaveObj(){
 }
 function renderCalc(){
   const C=cols(ST.calcCorte), cs=activeCols(), merc=!!window.__MERC;
-  const baseMO=calcBaseMO();
-  // base en el formato elegido, redondeada como se ve en la tarjeta
-  const baseSel=round3(merc?baseMO*1.08:baseMO);
-  const objSel=numEU(document.getElementById('lo_calcTarget').value);   // objetivo en el MISMO formato
-  const k=(baseSel>0&&!isNaN(objSel))?objSel/baseSel:NaN;
-  const fmt=merc?'Mercadona':'MO', cName=ST.calcCorte==='efec'?'Efectiva ≤6\'':'Real ≤20\'';
+  /* k se calcula con los valores EXACTOS, no con los que se ven. Redondear la base a 3 decimales y
+     releer el objetivo del texto del campo metia hasta un 0,14% de diferencia entre las dos
+     unidades, cuando por construccion tiene que ser el MISMO factor. Los redondeos son solo para
+     pintar. */
+  const baseX=calcBaseMO();              // base exacta, en la unidad activa
+  const baseSel=round3(baseX);           // solo para mostrar
+  const objSel=objAct();                 // el objetivo vigente, no el texto del campo
+  const k=(baseX>0&&!isNaN(objSel))?objSel/baseX:NaN;
+  // el equivalente en la OTRA unidad = su propia base medida x el mismo k
+  const baseOtra=calcBaseU(!merc), objOtra=(baseOtra>0&&!isNaN(k))?baseOtra*k:NaN;
+  const fmt=merc?'Mercadona':'MO', fmtO=merc?'MO':'Mercadona', cName=ST.calcCorte==='efec'?'Efectiva ≤6\'':'Real ≤20\'';
   document.getElementById('lo_calcSum').innerHTML=
     `<div class="lo-cs"><div class="lo-cs-l">Base · ${cName} · ${fmt}</div><div class="lo-cs-v">${es(baseSel,3)}<small> min/ud ${fmt}</small></div></div>
      <div class="lo-cs lo-hot"><div class="lo-cs-l">Objetivo · ${fmt}</div><div class="lo-cs-v">${es(objSel,3)}<small> min/ud ${fmt}</small></div></div>
+     <div class="lo-cs"><div class="lo-cs-l">Equivale a · ${fmtO}</div><div class="lo-cs-v">${isNaN(objOtra)?'·':es(objOtra,3)}<small> min/ud ${fmtO}</small></div></div>
      <div class="lo-cs"><div class="lo-cs-l">Factor (multiplica todo por)</div><div class="lo-cs-v">×${es(k,4)}<small> = ${es(k*100,2)}%</small></div></div>`;
   const perUdC=d=>(ST.calcView==='prod')||(ST.calcView==='objof'&&PERUD_KEYS.has(d));
   const colUC=d=>ST.calcView==='min'?'min/lote':(perUdC(d)?(merc?'min/ud Merca':'min/ud MO'):'min/lote');
@@ -5019,11 +5238,11 @@ function renderCalc(){
     body+=`<tr><td class="lo-area"><span class="lo-adot" style="background:${ACOL[a]}"></span>${aName(a)}</td>`;
     cs.forEach(d=>{ const raw=mmin(r,C,d.k); if(isNaN(raw)){body+=`<td class="lo-cell"><span>·</span></td>`;return;}
       let val=raw*k, dec=2;
-      if(perUdC(d.k)){const u=udsOf(r); if(!isNaN(u)){val=val/u*(merc?1.08:1); dec=3;}}
+      if(perUdC(d.k)){const u=udsOf(r); if(!isNaN(u)){val=val/u; dec=3;}}   // udsOf ya da la unidad activa
       body+=`<td class="lo-cell"><span>${es(val,dec)}</span></td>`; });
     if(ST.calcView==='min'){const tot=(r[C.tot]||0)*k; body+=`<td class="lo-cell lo-tot lo-colgrp">${es(tot,2)}</td>`;}
-    const prMO=(r[C.prod])*k;
-    body+=`<td class="lo-cell lo-prod lo-colgrp"><span>${es(prMO*MF(),3)}</span></td></tr>`;
+    const prObj=(r[C.prod])*k;   // C.prod ya apunta a la columna de la unidad activa
+    body+=`<td class="lo-cell lo-prod lo-colgrp"><span>${es(prObj,3)}</span></td></tr>`;
   });
   document.getElementById('lo_calcTbl').innerHTML=head+body+'</tbody>';
 }
@@ -5031,7 +5250,7 @@ function renderCalc(){
 /* ---------- CONTRIBUCIÓN AL OBJETIVO (de dónde sale la productividad) ---------- */
 function renderContrib(){
   const el=document.getElementById('lo_contribTbl'); if(!el)return;
-  const C=cols(ST.corte), src=ST.objTrim, cs=activeCols(), AR=viewAreas(), pct=(ST.contribView!=='prod'), mf=MF();
+  const C=cols(ST.corte), src=ST.objTrim, cs=activeCols(), AR=viewAreas(), pct=(ST.contribView!=='prod'), mf=1;
   let totMin=0,totUds=0;
   AR.forEach(a=>{const r=src[a]; if(!r)return; const nl=r.n_lotes||0; totMin+=(r[C.tot]||0)*nl; totUds+=(r.uds_media_lote||0)*nl;});
   const glob=totUds>0?totMin/totUds:NaN;
@@ -5070,15 +5289,20 @@ function renderHero(){
      tiene interiorizado que 0,315 MO y 0,34 Merca son el mismo ritmo, y en una explicacion
      como esta merece la pena decirlo aunque ocupe una linea mas. */
   {const cp=document.getElementById('lo_critProd');
-   if(cp)cp.innerHTML=es(0.315*MF(),3)+' '+udName()+
-     '<span style="font-weight:600;color:var(--ink3)"> = '+(window.__MERC?(es(0.315,3)+' min/ud MO'):(es(0.34,2)+' min/ud Merca'))+'</span>';}
+   /* El umbral de SELECCION de liebres es una constante del SQL (0,315 en unidades MO) y no cambia
+      aunque se toque el objetivo en Ajustes: si cambiase, cambiaria la lista de tiendas liebre y ya
+      no serian las que generaron el CSV. Se muestra en las dos unidades con la proporcion real. */
+   if(cp)cp.innerHTML=es(window.__MERC?0.315/objRatio():0.315,3)+' '+udName()+
+     '<span style="font-weight:600;color:var(--ink3)"> = '+es(window.__MERC?0.315:0.315/objRatio(),3)+' '+udOther()+'</span>';}
   const C=cols(ST.corte), src=subActiva();
   let real=globReal(), efec=globEfec(), fallback=false;
-  if(isNaN(real)){ fallback=true; real=estGlobalProd(src,'prod_total_min_ud_media'); efec=estGlobalProd(src,'prod_efectiva_min_ud_media'); }
-  const okR=real<=OBJ_PROD;
-  const fillPct=Math.max(0,Math.min(100,(real/(OBJ_PROD*1.4))*100));
-  const objPct=Math.min(100,(OBJ_PROD/(OBJ_PROD*1.4))*100);
-  const realD=real*MF(), efecD=efec*MF(), objD=OBJ_PROD*MF();
+  if(isNaN(real)){ const mm=window.__MERC?'_mcd':''; fallback=true;
+    real=estGlobalProd(src,'prod_total_min_ud_media'+mm); efec=estGlobalProd(src,'prod_efectiva_min_ud_media'+mm); }
+  const _o=objAct();
+  const okR=real<=_o;
+  const fillPct=Math.max(0,Math.min(100,(real/(_o*1.4))*100));
+  const objPct=Math.min(100,(_o/(_o*1.4))*100);
+  const realD=real, efecD=efec, objD=_o;
   document.getElementById('lo_gauge').innerHTML=
     `<h3>Productividad${fallback?' · estim.':' · oficial'} · ${udName()}</h3>
      <div class="lo-big">${es(realD,3)} <small>${udName()} · real ≤20'</small></div>
@@ -5098,11 +5322,11 @@ function renderHero(){
     let segs=''; SEG.forEach(mc=>{ const v=mmin(r,C,mc.k)||0; const w=tot>0?v/tot*100:0;
       segs+=`<div class="lo-fseg" data-nm="${mc.name}" data-min="${es(v,2)}" data-pct="${es(w,0)}" style="width:${w}%;background:${mc.col}">${w>12?es(v,1):''}</div>`; });
     const barW=maxTot>0?Math.max(8,tot/maxTot*100):0;
-    const prA=(C.prod&&r[C.prod]!=null&&!isNaN(r[C.prod]))?r[C.prod]*MF():NaN;
+    const prA=(C.prod&&r[C.prod]!=null&&!isNaN(r[C.prod]))?r[C.prod]:NaN;
     h+=`<div class="lo-frow"><div class="lo-fname"><span class="lo-adot" style="background:${ACOL[a]}"></span>${aName(a)}</div>
         <div class="lo-fbar" style="width:${barW}%">${segs}</div>
         <div class="lo-ftot" data-nm="${aName(a)} · total" data-min="${es(tot,2)}" data-pct="100">${es(tot,2)}<small>min/lote</small></div>
-        <div class="lo-ftot" style="color:${isNaN(prA)?'var(--ink3)':(prA<=OBJ_PROD*MF()?'var(--down)':'var(--up)')}">${isNaN(prA)?'—':es(prA,3)}<small>${udName()}</small></div></div>`;
+        <div class="lo-ftot" style="color:${isNaN(prA)?'var(--ink3)':(prA<=objAct()?'var(--down)':'var(--up)')}">${isNaN(prA)?'—':es(prA,3)}<small>${udName()}</small></div></div>`;
   });
   document.getElementById('lo_faro').innerHTML=h;
   document.getElementById('lo_faroLeg').innerHTML=SEG.map(m=>`<span class="lo-fl"><i style="background:${m.col}"></i>${m.name} <span style="color:var(--ink3)">(${m.sub})</span></span>`).join('');
@@ -5125,7 +5349,7 @@ function renderMatrix(){
     cs.forEach(d=>{ const v=cvVal(r,C,d.k); body+=`<td class="lo-cell">${cellInner2(v,isPct,maxByK[d.k],cvDec(d.k))}</td>`; });
     if(showTot){const tv=cvTot(r,C); body+=`<td class="lo-cell lo-tot lo-colgrp">${isPct?'100%':es(tv,2)}</td>`;}
     const pr=C.prod?r[C.prod]:NaN;
-    body+= C.prod? `<td class="lo-cell lo-prod ${pr<=OBJ_PROD?'lo-ok':'lo-bad'} lo-colgrp"><span>${es(pr*MF(),3)}</span></td>`   // matriz: verde=cumple objetivo, rojo=no
+    body+= C.prod? `<td class="lo-cell lo-prod ${pr<=objAct()?'lo-ok':'lo-bad'} lo-colgrp"><span>${es(pr,3)}</span></td>`   // matriz: verde=cumple objetivo, rojo=no
                  : `<td class="lo-cell lo-na lo-colgrp"><span>—</span></td>`;
     body+='</tr>';
   });
@@ -5140,16 +5364,16 @@ function renderMonthly(){
   let series, trim, lbl;
   if(area==='GLOBAL'){
     if(!ST.hasOf||!ST.glob.trimGen){ box.innerHTML='<div class="lo-det-ph">Disponible al re-ejecutar el SQL (filas GLOBAL oficiales).</div>'; return; }
-    series=ST.meses.map(m=>{const g=ST.glob.mesGen[m];return{m,real:g?g.prod_real_oficial:NaN,efec:g?g.prod_efec_oficial:NaN};});
-    trim={real:ST.glob.trimGen.prod_real_oficial,efec:ST.glob.trimGen.prod_efec_oficial};
+    series=ST.meses.map(m=>{const g=ST.glob.mesGen[m];return{m,real:g?g[OFK('real')]:NaN,efec:g?g[OFK('efec')]:NaN};});
+    trim={real:ST.glob.trimGen[OFK('real')],efec:ST.glob.trimGen[OFK('efec')]};
     lbl='oficial';
   }else{
     series=ST.meses.map(m=>{const r=ST.objMes[m]&&ST.objMes[m][area];return{m,real:r?r.prod_total_min_ud_media:NaN,efec:r?r.prod_efectiva_min_ud_media:NaN};});
     const rt=ST.objTrim[area]; trim={real:rt?rt.prod_total_min_ud_media:NaN,efec:rt?rt.prod_efectiva_min_ud_media:NaN};
     lbl='desglose';
   }
-  const mf=MF(), objL=OBJ_PROD*mf;
-  series=series.map(s=>({m:s.m,real:s.real*mf,efec:s.efec*mf})); trim={real:trim.real*mf,efec:trim.efec*mf};
+  const objL=objAct();
+  // series y trim ya vienen en la unidad activa (OFK elige columna)
   const allv=series.flatMap(s=>[s.real,s.efec]).concat([trim.real,objL]).filter(x=>!isNaN(x));
   const mx=Math.max(...allv,0.0001)*1.12;
   let h='<div class="lo-rkrow" style="cursor:default;grid-template-columns:90px 1fr 120px;color:var(--ink2);font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px"><div>Periodo</div><div style="text-align:center">objetivo '+es(objL,3)+'</div><div style="text-align:right">real ≤20\' · <span style="color:#4b5c72">efec ≤6\'</span></div></div>';
@@ -5160,7 +5384,7 @@ function renderMonthly(){
   box.innerHTML=h;
 }
 function barLine(lbl,real,efec,mx,strong,obj){
-  obj=(obj==null)?OBJ_PROD*MF():obj;
+  obj=(obj==null)?objAct():obj;
   const wr=isNaN(real)?0:real/mx*100, we=isNaN(efec)?0:efec/mx*100, wo=obj/mx*100, ok=real<=obj;
   return `<div class="lo-rkrow" style="cursor:default;grid-template-columns:90px 1fr 120px">
     <div class="lo-rkname" style="${strong?'font-weight:850':''}">${lbl}</div>
@@ -5170,16 +5394,17 @@ function barLine(lbl,real,efec,mx,strong,obj){
 
 /* ---------- RANKING ---------- */
 // productividad global de tienda (oficial si existe, si no estimación desglose). which: 'real'|'efec'
-function storeOf(t,which){ const g=ST.glob.trimStore[t]; if(g){const v=which==='efec'?g.prod_efec_oficial:g.prod_real_oficial; if(!isNaN(v))return v;}
-  const m=ST.stTrim[t]; if(!m)return NaN; const key=which==='efec'?'prod_efectiva_min_ud_media':'prod_total_min_ud_media';
+function storeOf(t,which){ const g=ST.glob.trimStore[t]; if(g){const v=g[OFK(which)]; if(v!=null&&!isNaN(v))return v;}
+  const m=ST.stTrim[t]; if(!m)return NaN; const mm=window.__MERC?'_mcd':'';
+  const key=(which==='efec'?'prod_efectiva_min_ud_media':'prod_total_min_ud_media')+mm;
   let su=0,sm=0; for(const a in m){const u=m[a].uds_total||0,p=m[a][key];if(!isNaN(p)){su+=u;sm+=p*u;}} return su?sm/su:NaN; }
 function storeReal(t){ return storeOf(t,'real'); }
 function storeDias(t){ const g=ST.glob.trimStore[t]; if(g&&!isNaN(g.n_dias))return g.n_dias; const m=ST.stTrim[t];let d=0;for(const a in m)d=Math.max(d,m[a].n_dias||0);return d; }
 // catálogo de métricas del ranking
 function rkMetrics(){
   const L=[
-    {k:'g_real',lbl:'Productividad global · real (≤20)',get:t=>storeOf(t,'real'),sec:t=>storeOf(t,'efec'),obj:()=>isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'):globReal(),unit:'min/ud',dec:3},
-    {k:'g_efec',lbl:'Productividad global · efectiva (≤6)',get:t=>storeOf(t,'efec'),sec:t=>storeOf(t,'real'),obj:()=>isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'):globEfec(),unit:'min/ud',dec:3},
+    {k:'g_real',lbl:'Productividad global · real (≤20)',get:t=>storeOf(t,'real'),sec:t=>storeOf(t,'efec'),obj:()=>isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'+(window.__MERC?'_mcd':'')):globReal(),unit:'min/ud',dec:3},
+    {k:'g_efec',lbl:'Productividad global · efectiva (≤6)',get:t=>storeOf(t,'efec'),sec:t=>storeOf(t,'real'),obj:()=>isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'+(window.__MERC?'_mcd':'')):globEfec(),unit:'min/ud',dec:3},
   ];
   viewAreas().filter(a=>ST.objTrim[a]).forEach(a=>L.push({k:'pa_'+a,grp:'Productividad por área',lbl:aName(a),
     get:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r.prod_total_min_ud_media:NaN;},
@@ -5193,7 +5418,7 @@ function rkMetrics(){
 }
 function renderRanking(){
   const M=rkMetrics().find(x=>x.k===ST.rkMetric)||rkMetrics()[0];
-  const isUd=!!(M.unit&&M.unit.indexOf('ud')>=0), rf=isUd?MF():1, dd=isUd?3:M.dec, uLbl=isUd?udName():M.unit;
+  const isUd=!!(M.unit&&M.unit.indexOf('ud')>=0), rf=1, dd=isUd?3:M.dec, uLbl=isUd?udName():M.unit;
   const obj=M.obj()*rf;
   let arr=ST.stores.map(t=>({t,v:M.get(t)*rf,s:M.sec(t)*rf})).filter(x=>!isNaN(x.v)).map(x=>({...x,d:x.v-obj}));
   arr.sort((a,b)=> ST.rkOrder==='worst' ? b.d-a.d : a.d-b.d);
@@ -5221,8 +5446,9 @@ function stCorteVal(r){ if(!r)return NaN; if(ST.stCorte==='util')return r.prod_t
   const a=r.prod_total_min_ud_media,b=r.prod_efectiva_min_ud_media; return (isNaN(a)||isNaN(b))?NaN:a-b; }
 function storeGlobCorte(t){ if(ST.stCorte==='util')return storeOf(t,'real'); if(ST.stCorte==='efec')return storeOf(t,'efec');
   const a=storeOf(t,'real'),b=storeOf(t,'efec'); return (isNaN(a)||isNaN(b))?NaN:a-b; }
-function globObjCorte(){ const a=isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'):globReal(),
-  b=isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'):globEfec();
+function globObjCorte(){ const mm=window.__MERC?'_mcd':'';
+  const a=isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'+mm):globReal(),
+  b=isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'+mm):globEfec();
   if(ST.stCorte==='util')return a; if(ST.stCorte==='efec')return b; return a-b; }
 function renderStores(){
   let list=ST.stores.slice();
@@ -5241,8 +5467,8 @@ function renderStores(){
     h+=`<tr class="lo-clk ${ST.sel===t?'lo-sel':''}" onclick="loSelStore('${t}')"><td class="lo-area">${window.stName(t)||('Tienda '+t)}</td>`;
     viewAreas().forEach(a=>{ const r=m[a]; if(!r){h+='<td class="lo-cell lo-na"><span>·</span></td>';return;}
       const v=stCorteVal(r),o=stCorteVal(ST.objTrim[a]),d=v-o;
-      h+=`<td class="lo-cell lo-prod ${isNaN(d)?'':(d<=0?'lo-ok':'lo-bad')}"><span>${es(v*MF(),3)}</span></td>`; });   // liebre: verde=más rápida que el objetivo, rojo=más lenta
-    const pg=storeGlobCorte(t),dg=pg-og; h+=`<td class="lo-cell lo-prod ${isNaN(dg)?'':(dg<=0?'lo-ok':'lo-bad')} lo-tot lo-colgrp"><span>${es(pg*MF(),3)}</span></td></tr>`;
+      h+=`<td class="lo-cell lo-prod ${isNaN(d)?'':(d<=0?'lo-ok':'lo-bad')}"><span>${es(v,3)}</span></td>`; });   // liebre: verde=más rápida que el objetivo, rojo=más lenta
+    const pg=storeGlobCorte(t),dg=pg-og; h+=`<td class="lo-cell lo-prod ${isNaN(dg)?'':(dg<=0?'lo-ok':'lo-bad')} lo-tot lo-colgrp"><span>${es(pg,3)}</span></td></tr>`;
     /* El desglose se abre AQUI, partiendo la tabla justo debajo de la tienda pulsada. Antes
        vivia encima de la tabla y al pulsar te subia; con 20 tiendas en pantalla perdias de
        vista por cual ibas. La celda va sticky a la izquierda para que, cuando la tabla
@@ -5277,11 +5503,11 @@ function renderDet(){
   const m=isTrim?(ST.stTrim[t]||{}):((ST.stMes[t]&&ST.stMes[t][per])||{});
   const objSrc=isTrim?ST.objTrim:(ST.objMes[per]||ST.objTrim);
   const gof=isTrim?ST.glob.trimStore[t]:((ST.glob.mesStore[t]&&ST.glob.mesStore[t][per])||null);
-  const gReal=gof?gof.prod_real_oficial:storeReal(t), gEfec=gof?gof.prod_efec_oficial:NaN, gDias=gof?gof.n_dias:storeDias(t);
+  const gReal=gof?gof[OFK('real')]:storeReal(t), gEfec=gof?gof[OFK('efec')]:NaN, gDias=gof?gof.n_dias:storeDias(t);
   // selector de periodo
   let pers=`<button class="${isTrim?'lo-on':''}" onclick="loSetDetPer('trim')">Trimestre</button>`;
   ST.meses.forEach(mm=>{ const has=ST.stMes[t]&&ST.stMes[t][mm]; pers+=`<button class="${per===mm?'lo-on':''}" ${has?'':'disabled style="opacity:.4"'} onclick="loSetDetPer('${mm}')">${fmtMes(mm)}</button>`; });
-  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">${window.stName(t)||('Tienda '+t)}<small>${esInt(gDias)} días · global ${es(gReal*MF(),3)}${!isNaN(gEfec)?' / '+es(gEfec*MF(),3)+' ef.':''} ${udName()}</small></div>
+  let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">${window.stName(t)||('Tienda '+t)}<small>${esInt(gDias)} días · global ${es(gReal,3)}${!isNaN(gEfec)?' / '+es(gEfec,3)+' ef.':''} ${udName()}</small></div>
     <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
   cs.forEach(d=>h+=`<th>${d.s}</th>`); h+=`<th class="lo-colgrp">Total</th><th>Prod</th><th>vs obj área</th></tr></thead><tbody>`;
@@ -5290,7 +5516,7 @@ function renderDet(){
     cs.forEach(d=>h+=`<td class="lo-cell"><span>${es(mmin(r,C,d.k),2)}</span></td>`);
     h+=`<td class="lo-cell lo-tot lo-colgrp">${es(r[C.tot],2)}</td>`;
     const v=C.prod?r[C.prod]:NaN, ov=o&&C.prod?o[C.prod]:NaN, dd=v-ov;
-    h+= C.prod? `<td class="lo-cell lo-prod ${v<=OBJ_PROD?'lo-ok':'lo-bad'}"><span>${es(v*MF(),3)}</span></td><td><span class="lo-delta ${isNaN(dd)?'lo-flat':(dd<=0?'lo-down':'lo-up')}">${dd<=0?'▼':'▲'} ${es(Math.abs(dd*MF()),3)}</span></td>`
+    h+= C.prod? `<td class="lo-cell lo-prod ${v<=objAct()?'lo-ok':'lo-bad'}"><span>${es(v,3)}</span></td><td><span class="lo-delta ${isNaN(dd)?'lo-flat':(dd<=0?'lo-down':'lo-up')}">${dd<=0?'▼':'▲'} ${es(Math.abs(dd),3)}</span></td>`
               : `<td class="lo-cell lo-na"><span>—</span></td><td class="lo-cell lo-na"><span>—</span></td>`;
     h+='</tr>';
   });
@@ -5851,6 +6077,8 @@ try{ if(window.ResizeObserver){ const _b=$('cd_chart'); if(_b)new ResizeObserver
 /* Precarga la vista Objetivos en segundo plano (oculta) tras cargar → deja lista la lista de tiendas liebre para el resumen del comparador, sin tener que abrir la pestaña */
 /* Info de unidades en el resumen: explica MO/Mercadona y lleva al botón de Unidad (Ajustes). Texto según la unidad activa. */
 (function(){
+  // #uinfo no existe en el marcado: este modulo nunca llegaba a ejecutarse. La explicacion de
+  // unidades vive ahora en el propio panel de Ajustes, debajo del objetivo.
   var btn=document.getElementById('uinfo'); if(!btn) return;
   var pop=document.createElement('div'); pop.className='uinfo-pop'; pop.hidden=true;
   pop.innerHTML='<div class="uinfo-tx"></div><button class="uinfo-go" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Abrir Ajustes</button>';
@@ -5915,7 +6143,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       {k:'Hora_Fin_TT_min',label:'Hora fin TT',unit:'',dec:0,obj:null,isMin:true}
     ]},
     {t:'Pedido eficiente', ms:[
-      {k:'Productividad_min_ud',label:'Productividad',l2:'Productividad',l3:'Prod.',unit:'min/ud',dec:3,obj:0.34,low:true},
+      /* mcd:true = este indicador viene en unidades MERCADONA desde su origen. El objetivo y la
+         conversion a MO los resuelve faObj()/dayIgual(), que leen lo que haya en Ajustes. */
+      {k:'Productividad_min_ud',label:'Productividad',l2:'Productividad',l3:'Prod.',unit:'min/ud',dec:3,mcd:true,get obj(){try{return objAct();}catch(e){return 0.34;}},low:true},
       {k:'Caudal',label:'Caudal',l2:'Caudal',l3:'Caudal',unit:'h/día',dec:2,obj:0,low:true},
       {k:'Ocupacion_pct',label:'Ocupación',unit:'%',dec:2,obj:null}
     ]}
@@ -6015,7 +6245,14 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     }
     faResize(); };
 
-  function dayIgual(rows,key){ var s=0,n=0; for(var i=0;i<rows.length;i++){ var v=rows[i][key]; if(v!=null&&!isNaN(v)){s+=v;n++;} } return n? s/n : null; }
+  /* Farolas mide la productividad en unidades MERCADONA. Si la vista activa es MO se convierte con
+     la proporcion REAL medida entre las dos bases (objRatio()), no con ningun factor inventado.
+     Es una aproximacion SOLO en la vista secundaria: usa la proporcion de la flota, no la de cada
+     tienda. La vista oficial (Mercadona) sale exacta, tal cual la mide la app de control. */
+  function dayIgual(rows,key){ var s=0,n=0; for(var i=0;i<rows.length;i++){ var v=rows[i][key]; if(v!=null&&!isNaN(v)){s+=v;n++;} }
+    if(!n) return null; var r=s/n;
+    if(key==='Productividad_min_ud' && !window.__MERC){ try{ r=r*objRatio(); }catch(e){} }
+    return r; }
   function scopeOk(r){ if(ST.dim==='Global')return true; return ST.scope==='all'?true:(r.Fase==='Veterana'); }
   function dimMatch(r){ if(ST.dim==='Otros'){ var g=OTROS.filter(function(x){ return x.name===ST.val; })[0]; return g?!!g.test(r):false; }
     if(ST.dim==='Global') return ST.val===TODAS ? true : (r.Fase===ST.val);
@@ -6429,6 +6666,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         if(fin)fin(); alert('No se pudo generar el PNG: '+(err&&err.message||err)); });
   },true);
 
+  /* Al cambiar la unidad o el objetivo en Ajustes hay que repintar Farolas: su productividad es
+     Mercadona nativa y su objetivo sale ahora de objAct(). */
+  window.__faRerender=function(){ try{ if(LOADED) render(); }catch(e){ console.warn('faRerender',e); } };
   function render(){ try{ saveFa(); }catch(e){}
     try{ render_(); }catch(e){ console.warn('farolas render',e);
       var st=$('fa_status'); if(st){ st.style.display='block'; st.innerHTML='<span style="color:var(--bad)">No se ha podido pintar Farolas: '+e.message+'</span>'; } } }
