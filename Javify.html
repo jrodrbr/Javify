@@ -176,10 +176,21 @@
     if(pendientes.indexOf(el)<0) pendientes.push(el);
     vigilar();
   }
+  /* Plotly sigue ajustando margenes DESPUES de devolver el control, en una promesa aparte. Si
+     entre medias se purga esa grafica para volver a pintarla, el ajuste se encuentra el div sin
+     layout y la promesa revienta con "_redrawFromAutoMarginCount". Es ruido: la grafica siguiente
+     se pinta bien. Se recoge ESE fallo y solo ese; cualquier otro se sigue viendo. */
+  function recoger(r){
+    try{ if(r&&r.catch) r.catch(function(e){
+      var m=(e&&e.message)||String(e||'');
+      if(m.indexOf('_redrawFromAutoMarginCount')<0) console.warn('gr\u00e1fica:',m);
+    }); }catch(e){}
+    return r;
+  }
   Plotly.newPlot=function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
-    var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); return r; };
+    var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
   Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
-    var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); return r; };
+    var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
 })();
 /* Sin zoom en la PAGINA: ni pellizco, ni doble toque, ni ctrl+rueda (se comporta como una app) */
 (function(){
@@ -2495,7 +2506,9 @@ body.simple #mObj{display:none!important}
     .fa-mini .fa-card .l{font-size:9.5px}
     .fa-mini .fa-card .o{font-size:9.5px;line-height:1.45}
     /* el salto frente a la referencia, en la misma linea que el valor */
-    .fa-vrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+    .fa-vrow{display:flex;align-items:baseline;justify-content:space-between;gap:4px 8px;flex-wrap:wrap}
+    .fa-vrow>.v{min-width:0}
+    .fa-dd{flex:0 0 auto}
     .fa-dd{font-size:11.5px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap}
     .fa-dd.fa-g-green{background:var(--good-soft,#e6f6ee);color:var(--good)}
     .fa-dd.fa-g-red{background:var(--bad-soft,#fdeaee);color:var(--bad)}
@@ -2716,9 +2729,13 @@ window.__uniLoad=function(cb){
   window.__uniLoading=true;
   var avisar=function(err,out){
     window.__uniLoading=false;
+    /* UNA sola linea en la consola: antes el mismo fallo lo contaban los tres consumidores
+       (comparador, valores generales y objetivos) y parecian tres problemas distintos. */
+    if(err) console.warn('Datos: '+err.message);
     var w=window.__uniWaiters; window.__uniWaiters=[];
     w.forEach(function(f){ try{ f(err,out); }catch(e){ console.warn('uni cb',e); } });
   };
+  var bajar=function(intento){
   Papa.parse(window.__UNI_URL,{download:true,header:true,skipEmptyLines:true,delimiter:'',
     transformHeader:function(h){ return h.trim(); },
     complete:function(res){
@@ -2735,8 +2752,20 @@ window.__uniLoad=function(cb){
       try{ if(window.__uniInfo) window.__uniInfo(out); }catch(e){}
       avisar(null,out);
     },
-    error:function(err){ window.__uniErr=err||new Error('sin datos'); avisar(window.__uniErr); }
+    error:function(err){
+      /* Una peticion cortada no distingue entre "no hay red", "la VPN se ha metido por medio" y
+         "el servidor ha colgado a mitad": las tres llegan igual. Se reintenta antes de rendirse. */
+      if(intento<3){ setTimeout(function(){ bajar(intento+1); }, 900*intento); return; }
+      var m=(err&&err.message)||'';
+      window.__uniErr=new Error(
+        (!m || m.indexOf('ProgressEvent')>=0)
+          ? 'la descarga se ha cortado tres veces seguidas. Suele ser la conexion o la VPN.'
+          : m);
+      avisar(window.__uniErr);
+    }
   });
+  };
+  bajar(1);
 };
 const CSV_URL=window.__UNI_URL;   // se mantiene el nombre por compatibilidad con el resto
 // CSV de VALORES GENERALES por tienda/mes (Fase general). Cruza con el desglose por tienda+mes.
@@ -2924,16 +2953,13 @@ function mesLabel(k){const m=k.match(/^(\d{4})-(\d{2})$/);if(m){const me=MESES_E
 /* Etiquetas del eje x de las series de 12 meses. En pantalla estrecha se abrevian
    ("Sep 25" en vez de "Septiembre 2025"): con el nombre entero y girado se comian media
    grafica en el iPhone y en el iPad en vertical. */
-function xMeses(){
-  const corto=(typeof window!=='undefined'&&window.innerWidth<=900);
-  return ST.meses.map(function(k){
-    if(!corto) return ST.mesLabel[k]||k;
-    const m=/^(\d{4})-(\d{2})$/.exec(k); if(!m) return ST.mesLabel[k]||k;
-    const me=MESES_ES[+m[2]-1]||m[2];
-    return me.charAt(0).toUpperCase()+me.slice(1,3)+' '+m[1].slice(2);
-  });
-}
+function xMeses(){ return ST.meses.map(mesAA); }
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
+/* "2026-08" -> "Ago 26". El formato de las graficas y de las descargas: el nombre entero del mes
+   ocupa media grafica y no dice nada mas. */
+function mesAA(k){ const m=/^(\d{4})-(\d{2})$/.exec(String(k)); if(!m) return String(k);
+  const me=MESES_ES[+m[2]-1]||m[2];
+  return me.charAt(0).toUpperCase()+me.slice(1,3)+' '+m[1].slice(2); }
 /* #dotTxt y #dot no existen en el marcado desde hace varias versiones: los ids reales son
    dot1/dot2/src1s/src2s, que ya se actualizan donde toca. Esto no informaba de nada. Se deja como
    no-op para no tocar sus tres llamadas. */
@@ -2999,12 +3025,47 @@ function renderCompFarolas(){
   var head='<div class="fa-sech" style="margin-bottom:12px"><div class="t">Farolas'+
     (ref&&window.__faSelName?(' · frente a '+window.__faSelName(ref)):'')+'</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="cf_rings" data-pngname="farolas_comparacion"'+
     ' data-pngtitle="Farolas generales"'+
-    ' data-pngsub="'+esc1((window.__faSelName?window.__faSelName(grp):'')+(ref&&window.__faSelName?(' frente a '+window.__faSelName(ref)):'')+' · '+(ST.mesLabel[curA.mesKey]||''))+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div>';
+    ' data-pngsub="'+esc1((window.__faSelName?window.__faSelName(grp):'')+(ref&&window.__faSelName?(' frente a '+window.__faSelName(ref)):'')+' · '+mesAA(curA.mesKey))+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div>';
   host.innerHTML=head+'<div id="cfFaBody"></div>';
   var ok=window.faSummary($('cfFaBody'),{group:grp, mesKey:curA.mesKey, ref:ref});
   if(!ok&&!$('cfFaBody').innerHTML) host.innerHTML='';
 }
 window.__cfFarolas=function(){ try{ renderCompFarolas(); }catch(e){ console.warn('cfFarolas',e); } };
+
+/* ===== FAROLAS -> COMPARADOR =====
+   El comparador ya empujaba su escenario a Farolas (faSetScenario). Este es el camino de vuelta:
+   al cambiar de grupo o de referencia en Farolas, el comparador se pone en lo mismo. El flag corta
+   el ida y vuelta: si no, cada uno avisaria al otro sin parar. */
+var _faSync=false;
+function faTiendaDe(dim,val){
+  if(val==null) return null;
+  if(dim==='Tienda') return String(val);
+  if(dim==='Zona')   return 'ZONE::Z'+('0'+String(val).replace(/\D/g,'')).slice(-2);
+  if(dim==='Region') return 'REG::R'+('0'+String(val).replace(/\D/g,'')).slice(-2);
+  if(dim==='Global') return (val==='Veterana')?'Tiendas Veteranas':'Todas las tiendas';
+  if(dim==='Otros')  return LIEBRE_HIST;
+  return null;
+}
+window.__compFromFa=function(dim,val,refKind,refVal){
+  if(_faSync) return;
+  try{
+    var tA=faTiendaDe(dim,val); if(!tA||ST.tiendas.indexOf(tA)<0) return;
+    var tB=null;
+    if(refKind==='vet')         tB='Tiendas Veteranas';
+    else if(refKind==='all')    tB='Todas las tiendas';
+    else if(refKind==='liebre') tB=LIEBRE_HIST;
+    else if(refKind&&refVal!=null) tB=faTiendaDe(refKind,refVal);
+    if(!tB||ST.tiendas.indexOf(tB)<0) tB=null;
+    var yaA=$('tA')&&$('tA').dataset.val, yaB=$('tB')&&$('tB').dataset.val;
+    if(String(yaA)===String(tA) && (!tB||String(yaB)===String(tB))) return;   // ya esta
+    _faSync=true;
+    setCombo('tA',tA); if(tB) setCombo('tB',tB);
+    try{ syncShift('A'); syncShift('B'); }catch(e){}
+    try{ preview(); }catch(e){}
+    if(ST.analyzed){ try{ analyze(false); }catch(e){} }
+    setTimeout(function(){ _faSync=false; },0);
+  }catch(e){ _faSync=false; console.warn('compFromFa',e); }
+};
 window.__faSyncFromComp=function(){
   if(!ST.analyzed||!window.__faSetScenario) return;
   try{ window.__faSetScenario(faSelFromScenario(curA.tienda),
@@ -3384,8 +3445,9 @@ function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();saveCfg();
   // modo "ficha de una sola tienda": A y B idénticos (misma tienda, mes y turno) → no comparar, mostrar solo esa tienda
   ST.single=(curA.tienda===curB.tienda&&curA.mesKey===curB.mesKey&&curA.shift===curB.shift);
   MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();
-  /* Farolas se pone en el MISMO escenario: si aquí comparas Veteranas con Zona 2, allí también. */
-  try{ if(window.__faSetScenario)
+  /* Farolas se pone en el MISMO escenario: si aquí comparas Veteranas con Zona 2, allí también.
+     Salvo que sea Farolas quien acaba de mover esto, claro: eso seria un ida y vuelta infinito. */
+  try{ if(!_faSync && window.__faSetScenario)
          window.__faSetScenario(faSelFromScenario(curA.tienda),
                                 ST.single?null:faSelFromScenario(curB.tienda),
                                 curA.mesKey); }catch(e){ console.warn('faSync',e); }if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
@@ -3686,7 +3748,7 @@ function renderSummary(){
                   return t?dato(t[1],t[2]):dato('',mo); })(),
                 (window.__liebreSet&&_liebreReal)?dato('Liebre', window.__liebreSet.has(String(curA.tienda))?'Sí':'No'):''])
         )+'</div></div>'+
-      '<div style="text-align:right"><div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px">'+(ST.mesLabel[curA.mesKey]||'')+'</div><div style="font-size:12px;color:var(--ink2);margin-top:2px">'+(gA.n_dias!=null?fmt(gA.n_dias,0)+' días con datos':'')+'</div></div>'+
+      '<div style="text-align:right"><div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px">'+mesAA(curA.mesKey)+'</div><div style="font-size:12px;color:var(--ink2);margin-top:2px">'+(gA.n_dias!=null?fmt(gA.n_dias,0)+' días con datos':'')+'</div></div>'+
       '</div>';
     /* ---- PRODUCTIVIDADES · orden: real · efectiva · oficial · óptima ----
        Primero lo que mide la tienda y al final la referencia, que es la que no se mueve.
@@ -4138,7 +4200,9 @@ function renderMatrix(){
     : '<div class="mx-scale"><span>mejor</span><div class="mx-grad" style="background:linear-gradient(90deg,'+
         MXRAMP[_esOscuro()?'dark':'light'].good.slice().reverse().join(',')+',var(--panel2),'+
         MXRAMP[_esOscuro()?'dark':'light'].bad.join(',')+')"></div><span>peor</span>'+
-      (_DVMAX>0?('<span style="color:var(--ink3);font-size:10px;margin-left:4px">el extremo del color es '+fmt(_DVMAX*100,0)+'% de desvio</span>'):'')+
+      /* Solo en Experto: en Simple es una nota de calibracion que no se usa para nada. La
+         descarga captura este mismo bloque, asi que tampoco aparece en la imagen. */
+      ((_DVMAX>0&&!_isSimple())?('<span style="color:var(--ink3);font-size:10px;margin-left:4px">el extremo del color es '+fmt(_DVMAX*100,0)+'% de desvio</span>'):'')+
       '</div>';
 }
 const FARO_MACRO={g_prep:{name:'Preparación',col:'--f-prep',keys:['p1','p2','p3','p23']},g_pes:{name:'Pesaje',col:'--f-pesaje',keys:['p4']},g_cons:{name:'Consolidación',col:'--f-consol',keys:['p5','p6']},g_entre:{name:'Entre lotes',col:'--f-entre',keys:['p7']}};
@@ -5101,7 +5165,9 @@ function pngTit(id,b){
 function pngName(tit,fallback){
   if(!tit) return fallback;
   var t=pngSlug(tit);
-  try{ if(curA&&curA.tienda) t+='_'+pngSlug(shortStore(curA.tienda)); }catch(e){}
+  /* fullStore y no shortStore: para una tienda, shortStore devuelve "Tienda 4522" y el fichero
+     salia sin el nombre del centro. */
+  try{ if(curA&&curA.tienda) t+='_'+pngSlug(String(fullStore(curA.tienda)).replace(/\s*\([^)]*\)\s*$/,'')); }catch(e){}
   return t||fallback;
 }
 
@@ -5278,8 +5344,8 @@ function genRow(t,mk){return (ST.gen[t]||{})[mk]||null;}
 function loadGeneral(){
   if(!GENERAL_URL)return;
   window.__uniLoad(function(err,uni){
-    if(err){ console.warn('No se pudo cargar el CSV unificado:',err&&err.message);
-      if($('src2s'))$('src2s').textContent='error'; if($('dot2'))$('dot2').classList.add('err'); return; }
+    if(err){ /* el aviso ya lo ha dado el cargador, una sola vez */
+      if($('src2s'))$('src2s').textContent='sin datos'; if($('dot2'))$('dot2').classList.add('err'); return; }
     var res={data:uni.general};
     (function(){
       try{
@@ -5329,7 +5395,9 @@ if(CSV_URL){
   $('empty').classList.add('loading');
   window.__uniLoad(function(err,uni){
     $('empty').classList.remove('loading');
-    if(err){ console.error('descarga',err); showErr(['No se han podido descargar los datos. Comprueba tu conexión y vuelve a cargar la página.']);
+    if(err){ showErr(['No se han podido descargar los datos. Comprueba la conexión y vuelve a intentarlo.'+
+        '<div style="margin-top:11px"><button type="button" class="btn btn-gh" id="btnReint">Reintentar</button></div>']);
+      try{ var _br=document.getElementById('btnReint'); if(_br) _br.addEventListener('click',function(){ location.reload(); }); }catch(e2){}
       try{if(window.__bootStep)window.__bootStep('main');}catch(e){} return; }
     try{ buildFromRows(uni.detalle,'GitHub · auto'); }
     catch(e){ showErr(['Error procesando el CSV: '+e.message]); }
@@ -5422,7 +5490,7 @@ window.loInit=function(){ if(window._loInit)return; window._loInit=1;
     if(err){ fail(err&&err.message); return; }
     try{ build(uni.objetivo); }catch(e){ fail(e.message); console.error(e); }
   }); };
-function fail(m){console.error('objetivos',m);var n=document.getElementById('lo_globNote');if(n)n.innerHTML='<div class="lo-note lo-warn"><span class="lo-ic">!</span>No se han podido cargar los objetivos. Vuelve a cargar la página.</div>';}
+function fail(m){var n=document.getElementById('lo_globNote');if(n)n.innerHTML='<div class="lo-note lo-warn"><span class="lo-ic">!</span>No se han podido cargar los objetivos. Comprueba la conexión y vuelve a intentarlo.</div>';}
 
 function build(data){
   const META=['nivel','tienda','mes','area_batch','estado_veterana','dataset','shift'];
@@ -6886,7 +6954,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         /* El VALOR de la referencia, siempre visible: es la mitad de la lectura. */
         var cmp=(same||ref==null||isNaN(ref))?'' : ('<div class="o">'+faEsc(refName||refLabel())+' <b style="color:var(--ink2)">'+fmtVal(m,ref)+'</b></div>');
         var dif=(v!=null&&ref!=null&&!isNaN(v)&&!isNaN(ref))?(v-ref):null;
-        var dtxt=(dif==null)?'' : ((dif>0?'+':dif<0?'\u2212':'')+fmtPt(m,Math.abs(dif))+(m.unit==='%'?' pp':''));
+        /* solo el numero: la unidad ya esta en el valor de arriba y en el objetivo de abajo, y
+           repetirla es lo que hacia que el chip no cupiera */
+        var dtxt=(dif==null)?'' : ((dif>0?'+':dif<0?'\u2212':'')+fmtPt(m,Math.abs(dif)));
         var chip=(dtxt&&!same)?('<span class="fa-dd '+cmpClass(m,v,ref)+'">'+dtxt+'</span>'):'';
         return '<div class="fa-card '+cardClass(m,v,ref)+'"'+(mini?(' data-k="'+m.k+'"'):'')+' title="'+faEsc(m.label)+'">'+
           '<div class="l">'+labHTML(m)+'</div>'+
@@ -7192,6 +7262,10 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     return true;
   };
   function render(){ try{ saveFa(); }catch(e){}
+    /* Que el comparador se ponga en el mismo escenario. Va aqui, en el unico sitio por el que
+       pasan TODOS los cambios de Farolas (grupo, dimension, referencia), en vez de engancharlo a
+       cada control por separado. */
+    try{ if(window.__compFromFa) window.__compFromFa(ST.dim, ST.val, ST.refKind, ST.refVal); }catch(e){}
     try{ render_(); }catch(e){ console.warn('farolas render',e);
       var st=$('fa_status'); if(st){ st.style.display='block'; st.innerHTML='<span style="color:var(--bad)">No se ha podido pintar Farolas: '+e.message+'</span>'; } } }
   function render_(){ syncOtros();               // por si la lista de liebres llego despues
