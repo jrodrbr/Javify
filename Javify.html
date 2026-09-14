@@ -447,6 +447,12 @@ h1,h2,h3,h4{letter-spacing:-.02em}
   color:var(--ink3);line-height:1.6;font-weight:600}
 .sthead-meta b{color:var(--ink2);font-weight:750;font-variant-numeric:tabular-nums}
 .sthead-meta .sep{opacity:.45;margin:0 .55em}
+/* segunda linea de ficha (apertura · veterana · cambio de modelo): mismo estilo, pegada a la
+   primera, para que se lean como un bloque y no como dos parrafos */
+.sthead-meta2{margin-top:2px;display:flex;flex-wrap:wrap;column-gap:1.15em;row-gap:1px}
+/* cada grupo entero o a la linea siguiente, nunca partido por la mitad de una fecha */
+.sthead-meta2 .sm-g{white-space:nowrap}
+@media(max-width:430px){ .sthead-meta2 .sm-g{font-size:.97em} }
 /* la unica pastilla: el estado */
 .stchip{display:inline-flex;align-items:center;border-radius:999px;
   border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);white-space:nowrap;
@@ -728,6 +734,17 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 #paretoTable{min-width:0;table-layout:fixed;width:100%}
 #paretoTable th,#paretoTable td{padding:7px 7px;font-size:11.5px;vertical-align:middle}
 #paretoTable th:first-child,#paretoTable td:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* "no hay nada que priorizar": un panel, no una tabla sin cabecera */
+#paretoTable td.pt-vacio{display:flex;gap:12px;align-items:flex-start;padding:4px 4px 8px;
+  width:auto!important;max-width:none;white-space:normal;overflow:visible;font-family:var(--ui);border:0}
+#paretoTable td.pt-vacio .pt-ok{width:30px;height:30px;flex:0 0 30px;border-radius:9px;
+  background:var(--down-soft);color:var(--good);display:flex;align-items:center;justify-content:center}
+#paretoTable td.pt-vacio .pt-ok svg{width:17px;height:17px}
+#paretoTable td.pt-vacio b{font-size:13.5px;color:var(--ink);font-weight:800}
+#paretoTable td.pt-vacio .pt-vsub{display:block;color:var(--ink3);font-size:12px;margin-top:3px;line-height:1.5}
+/* sin filas no hay nada que descargar, y el hueco del boton sobra */
+.cbox-in.pt-sinbtn{padding-top:14px!important}
+.cbox-in.pt-sinbtn>.csv{display:none}
 #paretoTable th:nth-child(2),#paretoTable td:nth-child(2){width:76px;padding-left:12px}
 #paretoTable th:nth-child(3),#paretoTable td:nth-child(3){width:38px}
 #paretoTable th:nth-child(4),#paretoTable td:nth-child(4){width:56px;color:var(--ink3)}
@@ -816,6 +833,8 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 @media(max-width:520px){.kpis,.kpis.k3,.fkpi{grid-template-columns:1fr}}
 /* ===== accesibilidad: foco visible al navegar con teclado ===== */
 button:focus-visible,summary:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+/* el mes de la tabla de caudal: largo en pantalla ancha, de tres letras en movil */
+.mes-sm{display:none}
 /* tabla de caudal del resumen (hover por CSS, sin JS inline) */
 .gen-tbl tbody tr{transition:.12s}
 .gen-tbl tbody tr:hover td{background:var(--panel2)}
@@ -1363,6 +1382,13 @@ a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,su
   .mx-foot{gap:10px}
   /* Tablas densas: scroll-x dentro de su propia caja (no rompe el layout) */
   .gen-tbl{min-width:520px}
+  /* "Agosto 2026" -> "Ago 26": la columna del mes se comia un tercio del ancho y la tabla salia
+     apretadisima. Y el boton de CSV flotaba justo encima de la cabecera pegajosa. */
+  #caudalMonthTbl{min-width:0}
+  #caudalMonthTbl td:first-child,#caudalMonthTbl th:first-child{white-space:nowrap}
+  #caudalMonthTbl .mes-lg{display:none}
+  #caudalMonthTbl .mes-sm{display:inline}
+  #caudalTable .csv{position:static!important;display:block;margin:8px 10px 2px auto}
   /* Composición del tiempo: filas más ajustadas */
   .comp-row{grid-template-columns:74px 1fr 50px;gap:9px}
   .comp-lab{font-size:10.5px}
@@ -1701,6 +1727,9 @@ body.simple #mObj{display:none!important}
 /* "Evolución 12 meses" del caudal (resumen): columna Mes fija a la izquierda y OPACA */
 #caudalMonthTbl td:first-child,#caudalMonthTbl th:first-child{position:sticky;left:0}
 #caudalMonthTbl td:first-child{background:var(--panel)!important;z-index:2}
+/* la primera columna va fija con fondo opaco: sin esto se quedaba apagada al pasar el cursor
+   por la fila, que es justo la columna que dice de que mes estas leyendo */
+#caudalMonthTbl tbody tr:hover td:first-child{background:var(--panel2)!important}
 #caudalMonthTbl th:first-child{background:var(--panel2)!important;z-index:4}
 @media(max-width:640px){
   /* "Elige dos escenarios" en iPhone. El selector nuevo ya nace compacto, aqui solo se
@@ -1857,8 +1886,8 @@ body.simple #mObj{display:none!important}
     <div class="sec" id="secFlow" style="margin-top:4px">
       <div class="sec-hd"><div>
         <div class="sec-n">El proceso</div>
-        <div class="sec-h">Cómo se prepara un lote, paso a paso</div>
-        <div class="sec-s">Un <b>lote</b> es un grupo de pedidos que se preparan juntos. Su tiempo se reparte en estas fases.</div>
+        <div class="sec-h">Cómo se prepara un lote</div>
+        <div class="sec-s">Un <b>lote</b> es un grupo de pedidos que se preparan juntos. Su tiempo se reparte en estos subprocesos.</div>
       </div></div>
       <div class="flow">
         <div class="flow-track" id="flowDes">
@@ -1937,7 +1966,7 @@ body.simple #mObj{display:none!important}
     <!-- SELECTOR DE CORTE para el detalle de abajo -->
     <div class="sec no-print" id="secCorte" style="margin-top:30px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-sm);padding:13px 18px">
-        <div><div style="font-size:13px;font-weight:800">Cómo ver el detalle de abajo</div><div style="font-size:11.5px;color:var(--ink2);margin-top:1px">El resumen de arriba es global. Elige con qué corte de tiempo quieres ver las áreas y fases.</div></div>
+        <div><div style="font-size:13px;font-weight:800">Cómo ver el detalle de abajo</div><div style="font-size:11.5px;color:var(--ink2);margin-top:1px">El resumen de arriba es global. Elige con qué corte de tiempo quieres ver las áreas y los subprocesos.</div></div>
         <div class="modeswitch" id="corteSw" style="margin-left:auto" role="group" title="Corte de tiempo para el detalle"><button class="on" data-corte="util" aria-pressed="true">Tiempo total <span style="opacity:.6;font-weight:600">≤20'</span></button><button data-corte="efec" aria-pressed="false">Tiempo efectivo <span style="opacity:.6;font-weight:600">≤6'</span></button><button data-corte="par" aria-pressed="false">Tiempo de parada <span style="opacity:.6;font-weight:600">6–20'</span></button></div>
       </div>
     </div>
@@ -1946,12 +1975,12 @@ body.simple #mObj{display:none!important}
     <div class="sec" id="secMatrix">
       <div class="sec-hd" style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap"><div style="flex:1 1 320px">
         <div class="sec-n">Visión global · el faro</div>
-        <div class="sec-h">Visión global por área y fase</div>
+        <div class="sec-h">Visión global por área y subproceso</div>
         <div class="sec-s">El <b>número</b> es el tiempo real (min/lote), el <b>color</b> la desviación frente a la referencia (rojo = peor, verde = mejor) y el <b>punto</b> marca impacto relevante al mes.</div>
       </div>
       <div class="no-print faro-ctrls">
         <div class="faro-ctrl"><span class="faro-ctrl-l">Unidad</span>
-          <div class="modeswitch" id="faroUnitSeg" role="group" title="Objetivo oficial (mixto), tiempo por lote, productividad por unidad, o % (de dónde sale la productividad: aporte de cada área y fase al total, con el desvío frente a la referencia)">
+          <div class="modeswitch" id="faroUnitSeg" role="group" title="Objetivo oficial (mixto), tiempo por lote, productividad por unidad, o % (de dónde sale la productividad: aporte de cada área y subproceso al total, con el desvío frente a la referencia)">
             <button data-v="objof" class="on" aria-pressed="true">Objetivo oficial</button><button data-v="min" aria-pressed="false">Tiempo</button><button data-v="prod" aria-pressed="false">Prod (min/ud)</button><button data-v="pct" aria-pressed="false">%</button></div></div>
         <button class="btn btn-gh" id="faroPng" type="button" style="padding:8px 14px;font-size:12px">⤓ Descargar PNG</button>
       </div></div>
@@ -1962,16 +1991,16 @@ body.simple #mObj{display:none!important}
     <!-- PARETO ÁREA + FASE (junto al mapa de calor) -->
     <div class="sec" id="secPareto">
       <div class="sec-hd"><div>
-        <div class="sec-n">Prioridad · área + fase</div>
+        <div class="sec-n">Prioridad · área + subproceso</div>
         <div class="sec-h">Qué revisar primero</div>
-        <div class="sec-s">Dónde se pierde de verdad la productividad: la desviación <b>por unidad</b> de cada área+fase, <b>ponderada por el volumen</b> que mueve esa área. Siempre en <b>min/ud</b>. Pulsa una fila para ver su detalle.</div>
+        <div class="sec-s">Dónde se pierde de verdad la productividad: la desviación <b>por unidad</b> de cada área+subproceso, <b>ponderada por el volumen</b> que mueve esa área. Siempre en <b>min/ud</b>. Pulsa una fila para ver su detalle.</div>
       </div>
       </div>
       <div class="grid" style="grid-template-columns:1.7fr 1fr;gap:16px;align-items:start">
-        <div class="cbox"><div class="cbox-in" style="padding-top:38px"><button class="csv" data-csv="paretoTable" data-csvname="prioridad_area_fase">⤓ CSV</button><div class="ptable-wrap" style="max-height:340px;overflow:auto"><table class="ptable" id="paretoTable"></table></div></div></div>
+        <div class="cbox"><div class="cbox-in" style="padding-top:38px"><button class="csv" data-csv="paretoTable" data-csvname="prioridad_area_subproceso">⤓ CSV</button><div class="ptable-wrap" style="max-height:340px;overflow:auto"><table class="ptable" id="paretoTable"></table></div></div></div>
         <div class="cbox"><div class="cbox-in"><button class="png" data-png="cParetoDonut" data-pngname="reparto_por_area">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Reparto por área</div><div class="csub">de más frente a la referencia</div></div></div><div class="chart" id="cParetoDonut" style="height:310px"></div></div></div>
       </div>
-      <div class="notice info" style="margin-top:14px"><span class="ic">i</span><span id="paretoNote">—</span></div>
+      <div class="notice info" id="paretoNoteBox" style="margin-top:14px"><span class="ic">i</span><span id="paretoNote">—</span></div>
     </div>
 
     <!-- DÓNDE ACTUAR -->
@@ -1996,7 +2025,7 @@ body.simple #mObj{display:none!important}
         <div>
           <div class="sec-n">Tiempos reales</div>
           <div class="sec-h">Cuánto tarda cada tipo de lote y en qué se va</div>
-          <div class="sec-s">Tiempo total por lote y su reparto por fases. En Frescos y FYV la preparación va en un único bloque.</div>
+          <div class="sec-s">Tiempo total por lote y su reparto por subprocesos. En Frescos y FYV la preparación va en un único bloque.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"><div class="modes" id="realWho"></div><div class="modes" id="realOrder"></div></div>
       </div>
@@ -2044,7 +2073,7 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Tendencia · 12 meses</div>
         <div class="sec-h">¿Mejora, empeora o está estable?</div>
-        <div class="sec-s">Evolución del analizado frente a la referencia. Objetivo de productividad: 0,306 min/ud.</div>
+        <div class="sec-s">Evolución del analizado frente a la referencia.</div>
       </div></div>
       <div class="trend-ctrl"><select id="trArea"></select><select id="trMetric"></select></div>
       <div class="cbox"><div class="cbox-in"><button class="png" data-png="cTrend">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="trendTitle">—</div><div class="csub" id="trendSub">—</div></div></div><div class="chart" id="cTrend"></div></div></div>
@@ -2077,7 +2106,7 @@ body.simple #mObj{display:none!important}
         <div class="rk-f"><label for="rkMes">Mes</label><select id="rkMes"></select></div>
         <div class="rk-f"><label for="rkArea">Área</label><select id="rkArea"></select></div>
         <div class="rk-f"><label for="rkShift">Turno</label><select id="rkShift"></select></div>
-        <div class="rk-f"><label for="rkVet">Fase</label><select id="rkVet"><option value="all">Todas</option><option value="vet">Solo veteranas</option><option value="roll">Solo roll out</option><option value="apr">Solo aprendices</option><option value="nov">Solo no veteranas</option></select></div>
+        <div class="rk-f"><label for="rkVet">Veteranía</label><select id="rkVet"><option value="all">Todas</option><option value="vet">Solo veteranas</option><option value="roll">Solo roll out</option><option value="apr">Solo aprendices</option><option value="nov">Solo no veteranas</option></select></div>
         <div class="rk-f"><label for="rkRef">Referencia</label><select id="rkRef"></select></div>
         <div class="rk-f"><label for="rkRegion">Región</label><input class="tin" id="rkRegion" list="rkRegionList" placeholder="Todas" autocomplete="off"><datalist id="rkRegionList"></datalist></div>
         <div class="rk-f"><label for="rkZona">Zona</label><input class="tin" id="rkZona" list="rkZonaList" placeholder="Todas" autocomplete="off"><datalist id="rkZonaList"></datalist></div>
@@ -2133,7 +2162,7 @@ body.simple #mObj{display:none!important}
       <div class="lo-card lo-pad">
         <div class="lo-sec-n">Objetivo principal</div>
         <div class="lo-sec-t">De dónde sale la productividad</div>
-        <p class="lo-sec-s">Cuánto aporta cada área y fase a la productividad global objetivo de las tiendas liebre, según el tiempo medio diario y el nº de lotes (ponderado por lotes). En <b>%</b> es la parte del total (suman 100%); en <b>productividad</b>, los min/ud que aporta cada parte (suman el global). Sigue el corte y el modo agrupado/desglosado. Ejemplo: qué % del global viene de la preparación de Frescos.</p>
+        <p class="lo-sec-s">Cuánto aporta cada área y subproceso a la productividad global objetivo de las tiendas liebre, según el tiempo medio diario y el nº de lotes (ponderado por lotes). En <b>%</b> es la parte del total (suman 100%); en <b>productividad</b>, los min/ud que aporta cada parte (suman el global). Sigue el corte y el modo agrupado/desglosado. Ejemplo: qué % del global viene de la preparación de Frescos.</p>
         <div class="lo-ctrls">
           <div class="lo-fld"><label>Ver como</label>
             <div class="lo-seg lo-sm" id="lo_contribViewSeg"><button data-v="pct" class="lo-on">% del total</button><button data-v="prod">Productividad (min/ud)</button></div></div>
@@ -2575,9 +2604,8 @@ body.simple #mObj{display:none!important}
         <div><div class="fa-lbl">Periodo de las gráficas</div><div class="fa-seg" id="fa_per">
           <button data-p="a2" class="on">2 años</button><button data-p="m12">12 meses</button><button data-p="m3">3 meses</button><button data-p="d30">30 días</button>
         </div></div>
-        <div><div class="fa-lbl">Vista</div><div class="fa-seg" id="fa_view">
-          <button data-v="tabla" class="on">Resumen</button><button data-v="cards">Completa</button>
-        </div></div>
+        <!-- El selector Resumen/Completa ya no esta: desde que el Resumen lleva los roscos, lo
+             unico que las separaba eran las 16 graficas. Se queda la vista completa. -->
       </div>
 
       <div class="fa-head"><div class="fa-title" id="fa_gname">—</div><div class="fa-sub" id="fa_gsub"></div></div>
@@ -2679,7 +2707,7 @@ body.simple #mObj{display:none!important}
   <div class="cfg-rows">
     <span class="cfg-k" title="Simple deja solo lo esencial. Experto añade el detalle, las tablas y el área de Pendientes.">Modo</span>
     <div class="cfg-seg" id="simpleBtn" role="group"><button type="button" data-v="a" class="on">Simple</button><button type="button" data-v="b">Experto</button></div>
-    <span class="cfg-k" title="Las fases en 4 bloques o una a una. Afecta al faro, la composición, los objetivos y las tendencias.">Fases</span>
+    <span class="cfg-k" title="Los subprocesos en 4 bloques o uno a uno. Afecta al faro, la composición, los objetivos y las tendencias.">Subprocesos</span>
     <div class="cfg-seg" id="groupBtn" role="group"><button type="button" data-v="a" class="on">Bloques</button><button type="button" data-v="b">Detalle</button></div>
     <span class="cfg-k" title="Mdona es la unidad oficial: una bolsa de plátanos cuenta como una unidad. MO cuenta cada pieza. Los tiempos y el caudal no cambian; cambia el denominador.">Unidad</span>
     <div class="cfg-seg" id="unitBtn" role="group"><button type="button" data-v="a" class="on">Mdona</button><button type="button" data-v="b">MO</button></div>
@@ -2826,8 +2854,148 @@ function objRatio(){
   return 0.9316;
 }
 function objMCD(){ return (OBJ.user!=null&&!isNaN(OBJ.user))?OBJ.user:OBJ.mcd; }
+window.__objMCDBase=function(){ try{ return objMCD(); }catch(e){ return 0.34; } };
 function objMO(){  return (OBJ.user!=null&&!isNaN(OBJ.user))?OBJ.user*objRatio():OBJ.mo; }
-function objAct(){ return window.__MERC?objMCD():objMO(); }          // objetivo en la unidad activa
+/* =================================================================================================
+   EL OBJETIVO NO ES FIJO
+   Una tienda recien abierta, o recien ampliada de modelo, no puede ir al 0,34: se le da margen.
+     · APERTURA, en bloques de 30 dias desde la implantacion:
+         0-59 -> x1,23   60-119 -> x1,15   120-179 -> x1,06   180+ -> sin margen
+       Los 180 dias son el mismo corte que la veterania: la rampa acaba cuando deja de ser aprendiz.
+     · AMPLIACION DE MODELO, en bloques de 7 dias desde el cambio:
+         0-13 -> x1,06   14-27 -> x1,03   28+ -> sin margen
+       Una REDUCCION de modelo no da margen.
+     · Si coinciden, se MULTIPLICAN: 0,34 x 1,15 x 1,06 = 0,4145.
+   El factor es por DIA. Para un mes se promedia sobre los dias que cuentan, asi que un mes donde
+   el escalon cambia a mitad sale con un factor intermedio (x1,0852, no x1,06 redondo).
+   ================================================================================================= */
+const RAMPA_AP=[[60,1.23],[120,1.15],[180,1.06]];
+const RAMPA_MO=[[14,1.06],[28,1.03]];
+function facAp(d){ if(d==null||d<0)return 1; for(var i=0;i<RAMPA_AP.length;i++){ if(d<RAMPA_AP[i][0])return RAMPA_AP[i][1]; } return 1; }
+function facMo(d){ if(d==null||d<0)return 1; for(var i=0;i<RAMPA_MO.length;i++){ if(d<RAMPA_MO[i][0])return RAMPA_MO[i][1]; } return 1; }
+const _DIA=86400000;
+/* ampliaciones de una tienda, ordenadas. Solo AMPLIACION: bajar de modelo no da margen. */
+var _ampCache={};
+function ampliacionesDe(t){
+  if(_ampCache[t]) return _ampCache[t];
+  var out=[];
+  try{ cambiosModelo(t).forEach(function(c){ if(c.dir==='REDUCCION')return; var f=fechaDe(c.fecha); if(f)out.push(f.getTime()); }); }catch(e){}
+  out.sort(function(a,b){return a-b;});
+  return (_ampCache[t]=out);
+}
+/* La apertura es un atributo del CENTRO, no del mes: si el mes que se mira no tiene fila (la
+   tienda aun no habia abierto, o ese mes no hubo lotes), se coge de cualquier mes que si la tenga.
+   Sin esto, un mes sin fila devolvia factor 1 y la rampa desaparecia justo donde hace falta. */
+var _apCache={};
+function aperturaDe(t){
+  if(_apCache[t]!==undefined) return _apCache[t];
+  var gg=ST.gen[t]||{}, f=null;
+  for(var k in gg){ if(gg[k]&&gg[k].apertura){ f=fechaDe(gg[k].apertura); if(f)break; } }
+  return (_apCache[t]=f);
+}
+/* factor de UN dia (ms) para una tienda */
+function facDiaMs(ms, apMs, amps){
+  var fa=facAp(apMs==null?null:Math.floor((ms-apMs)/_DIA));
+  var dm=null; for(var i=0;i<amps.length;i++){ if(amps[i]<=ms) dm=Math.floor((ms-amps[i])/_DIA); }
+  return fa*facMo(dm);
+}
+/* ultimo dia con dato de la ventana: para no promediar dias que aun no han pasado */
+var _ultDiaMs=null;
+function ultDiaMs(){
+  if(_ultDiaMs!=null) return _ultDiaMs;
+  var mk=ST.meses&&ST.meses.length?ST.meses[ST.meses.length-1]:null;
+  if(!mk) return (_ultDiaMs=Date.now());
+  var y=+mk.slice(0,4), m=+mk.slice(5,7);
+  return (_ultDiaMs=new Date(y, m, 0).getTime());      // ultimo dia de ese mes
+}
+/* FACTOR DE UN MES para una tienda. Si el CSV lo trae calculado (lo hace el SQL sobre los dias
+   con lotes de verdad), manda ese: es exacto. Si no, se promedia sobre los dias naturales del mes
+   acotados por la apertura y por el ultimo dia de la ventana, que en lo medido se desvia menos de
+   0,001 min/ud en 2.675 de 2.709 meses-tienda. */
+var _facCache={};
+function facMesTienda(t,mk){
+  var ck=t+'|'+mk+'|'+(window.__MERC?1:0);
+  if(_facCache[ck]!=null) return _facCache[ck];
+  var g=(ST.gen[t]||{})[mk];
+  if(g && g.factorObj!=null && isFinite(g.factorObj) && g.factorObj>0) return (_facCache[ck]=g.factorObj);
+  var ap=aperturaDe(t);
+  if(!ap) return (_facCache[ck]=1);
+  var amps=ampliacionesDe(t);
+  var y=+mk.slice(0,4), m=+mk.slice(5,7);
+  var ini=Math.max(new Date(y,m-1,1).getTime(), ap.getTime());
+  var fin=Math.min(new Date(y,m,0).getTime(), ultDiaMs());
+  if(fin<ini) return (_facCache[ck]=1);
+  var sum=0,n=0;
+  for(var d=ini; d<=fin; d+=_DIA){ sum+=facDiaMs(d, ap.getTime(), amps); n++; }
+  return (_facCache[ck]=(n?sum/n:1));
+}
+/* FACTOR DE UN ESCENARIO. Una tienda tiene el suyo; un conjunto (zona, region, veteranas, todas)
+   lleva la media de los suyos PONDERADA POR UNIDADES, que es como se agrega un min/ud. */
+function facEscenario(t,mk){
+  if(t==null||mk==null) return 1;
+  if(aperturaDe(t)) return facMesTienda(t,mk);             // es un CENTRO: lleva su coeficiente
+  /* Y cualquier otra cosa (zona, region, veteranas, todas, liebres, objetivo) es un CONJUNTO: no
+     abre ni amplia modelo, asi que su objetivo es el de flota y no se mueve de un mes a otro. */
+  return 1;
+}
+/* EL OBJETIVO DE UN ESCENARIO Y UN MES, en la unidad activa. Este es el numero contra el que se
+   juzga a una tienda; objAct() sigue siendo el oficial de flota y NO se toca. */
+/* ORDEN DE LAS REFERENCIAS: Veteranas, Todas, Liebre y el Objetivo al final. Las liebres y el
+   objetivo llegan en descargas distintas, asi que el orden no puede depender de quien gane. */
+function refRank(t){ return t==='Tiendas Veteranas'?0 : t==='Todas las tiendas'?1
+                          : t===LIEBRE_HIST?2 : t===OBJ_NAME?3 : 4; }
+function ordenaRefs(){
+  try{
+    ST.synthPresent=ST.synthPresent.slice().sort(function(a,b){ return refRank(a)-refRank(b); });
+    ST.tiendas=ST.synthPresent.concat(ST.tiendas.filter(function(t){ return ST.synthPresent.indexOf(t)<0; }));
+  }catch(e){}
+}
+function objEsc(t,mk){ return objAct()*facEscenario(t,mk); }
+/* Entre cuanto hay que dividir el n_lotes de una fila para que sea el de UNA tienda en UN mes.
+   Los dos conjuntos que vienen del CSV llegan sumados; los que se agregan aqui, en media. */
+function divLotes(t,mk){
+  if(t==null) return 1;
+  if(typeof aperturaDe==='function' && aperturaDe(t)) return 1;                 // un centro
+  if(t==='Todas las tiendas'||t==='Tiendas Veteranas') return nTiendasEsc(t,mk)||1;
+  return 1;                                                                     // zona, region, liebres
+}
+/* Cuantas tiendas hay detras del escenario. 1 para una tienda; el recuento para un conjunto. */
+var _nTCache={};
+function nTiendasEsc(t,mk){
+  if(t==null||mk==null) return 1;
+  if(typeof aperturaDe==='function' && aperturaDe(t)) return 1;      // es un centro
+  var ck=t+'|'+mk;
+  if(_nTCache[ck]!=null) return _nTCache[ck];
+  var mi=(ST.aggMeta&&ST.aggMeta[t])||null;
+  if(mi&&mi.nTiendas>0) return (_nTCache[ck]=mi.nTiendas);
+  var soloVet=(t==='Tiendas Veteranas'), todas=(t==='Todas las tiendas'), lie=(t===LIEBRE_HIST);
+  if(!soloVet&&!todas&&!lie) return (_nTCache[ck]=1);
+  var n=0;
+  for(var st in ST.gen){
+    var r=(ST.gen[st]||{})[mk]; if(!r) continue;
+    if(typeof aperturaDe==='function' && !aperturaDe(st)) continue;   // salta las filas sinteticas
+    if(soloVet && r.estado!=='Veterana') continue;
+    if(lie && !(window.__liebreSet&&window.__liebreSet.has(String(st)))) continue;
+    n++;
+  }
+  return (_nTCache[ck]=(n||1));
+}
+function nTiendasA(){ return curA?nTiendasEsc(curA.tienda,curA.mesKey):1; }
+/* El impacto se mide sobre el volumen del analizado, salvo con el Objetivo (que no tiene): ahi
+   el volumen lo pone la referencia, y es ella la que decide si la cifra es "por tienda". */
+function nTiendasImp(){ var s=(curA&&curA.tienda===OBJ_NAME)?curB:curA; return s?nTiendasEsc(s.tienda,s.mesKey):1; }
+function objEscA(){ return curA?objEsc(curA.tienda,curA.mesKey):objAct(); }
+/* ¿este escenario lleva rampa? (para avisarlo en pantalla) */
+function tieneRampa(t,mk){ var f=facEscenario(t,mk); return f>1.0005; }
+window.__objEsc=function(t,mk){ try{ return objEsc(t,mk); }catch(e){ return objAct(); } };
+window.__facDia=function(t,iso){                     // para Farolas, que va por dias
+  try{
+    var ap=aperturaDe(t); if(!ap) return 1;
+    var p=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||'')); if(!p) return 1;
+    return facDiaMs(new Date(+p[1],+p[2]-1,+p[3]).getTime(), ap.getTime(), ampliacionesDe(t));
+  }catch(e){ return 1; }
+};
+function objAct(){ return window.__MERC?objMCD():objMO(); }          // objetivo OFICIAL de flota
 function objOther(){ return window.__MERC?objMO():objMCD(); }        // el mismo, en la otra unidad
 /* Formateo propio: es() y numEU() viven dentro del IIFE del bloque de objetivos y no se ven aqui. */
 function objFmt(n,d){ return (n==null||isNaN(n))?'—':Number(n).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}); }
@@ -2991,13 +3159,19 @@ function applyObjetivos(){
   // Los objetivos solo tienen dato GLOBAL. Replicamos en todos los turnos para que el ranking
   // (que tiene su propio selector de turno) siempre encuentre la referencia; en el COMPARADOR el
   // selector de turno se limita a GLOBAL para esta tienda (ver availShifts/syncShift).
-  ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const b=OBJ_ROWS[a]; if(!b)return;
+  /* UN SOLO MES, el ultimo cerrado. El objetivo es una cifra, no una serie: repartirlo por los
+     doce meses pintaba una raya plana con pinta de dato medido y descuadraba el comparador al
+     cambiar de mes. Con un mes se comporta como una tienda recien abierta: un punto y ya. */
+  const mkObj=ST.meses[ST.meses.length-1];
+  ST.objMes=mkObj;
+  [mkObj].forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const b=OBJ_ROWS[a]; if(!b)return;
     const r=Object.assign({},b,{shift:sh,mesKey:mk});
     (((ST.index[OBJ_NAME][mk]=ST.index[OBJ_NAME][mk]||{})[sh]=ST.index[OBJ_NAME][mk][sh]||{}))[a]=r; })));
-  if(ST.synthPresent.indexOf(OBJ_NAME)<0)ST.synthPresent=[OBJ_NAME].concat(ST.synthPresent);
+  if(ST.synthPresent.indexOf(OBJ_NAME)<0)ST.synthPresent.push(OBJ_NAME);
+  ordenaRefs();
   if(ST.tiendas.indexOf(OBJ_NAME)<0)ST.tiendas=[OBJ_NAME].concat(ST.tiendas);
   const rk=$('rkRef'); if(rk){ const cur=rk.value,first=ST.realStores[0];
-    rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t===OBJ_NAME)).join('')||opt(first,'Tienda '+first,true);
+    rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
     if(cur)rk.value=cur; }
 }
 /* Farolas en el resumen del comparador: el escenario A frente al escenario B, en el mes de A.
@@ -3148,7 +3322,9 @@ function genName(t){const o=ST.gen[t];if(!o)return null;for(const mk in o){if(o[
 window.genName=genName;
 window.stName=function(t){ if(t==null)return ''; var n=window.genName&&window.genName(t); if(!n&&window.genName){ var d=String(t).replace(/\D/g,''); if(d&&d!==String(t)) n=window.genName(d); } if(!n) n=window.__CENTRONOM&&(window.__CENTRONOM[t]||window.__CENTRONOM[String(t).replace(/\D/g,'')]); if(n){ n=String(n).replace(/\s*\([^)]*\)\s*$/,'').trim(); } return n||''; };
 function comboItems(side){const it=[];
-  ST.synthPresent.forEach(t=>{ if(side==='A'&&t===OBJ_NAME)return; it.push({val:t,label:shortStore(t),group:'Referencias',tag:'ref'}); });
+  /* El objetivo tambien se puede ANALIZAR, no solo usar de referencia: es la unica forma de
+     bajarse su mapa de calor por area y fase. Antes estaba vetado en el lado A. */
+  ST.synthPresent.forEach(t=>{ it.push({val:t,label:shortStore(t),group:'Referencias',tag:'ref'}); });
   (ST.geoAgg||[]).forEach(k=>{ const m=(ST.aggMeta||{})[k]; if(m)it.push({val:k,label:m.label,group:'Zonas y regiones',search:m.search}); });
   ST.realStores.forEach(t=>{const nm=genName(t);it.push({val:t,label:nm||('Tienda '+t),group:'Tiendas'});});
   return it;}
@@ -3174,7 +3350,7 @@ function buildAggregates(){
   const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; AGGC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
   // Media de los datos GLOBALES del centro (CSV general) por mes → la usan el resumen ("Lo más importante"), la evolución 12 meses y la tendencia global (genRow/genSerie). Sin esto, los agregados no tenían histórico.
   const buildGen=(members,meta)=>{ const g={}; ST.meses.forEach(mk=>{ const rows=[]; members.forEach(m=>{const r=(ST.gen[m]||{})[mk]; if(r)rows.push(r);}); if(!rows.length)return; const o={center_name:meta.center_name,region:meta.region||'',zona:meta.zona||'',model:'',fase:'',estado:'Sintética: todas'}; GEN_NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});o[c]=n?s/n:null;}); g[mk]=o; }); return g; };
-  if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
+  if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); ordenaRefs(); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
   if(ST.genReady){ const zMem={},rMem={}; ST.realStores.forEach(t=>{ const o=ST.gen[t]; if(!o)return; let z=null,rg=null; for(const mk in o){ if(z==null&&o[mk].zona!=null&&o[mk].zona!=='')z=o[mk].zona; if(rg==null&&o[mk].region)rg=o[mk].region; } if(z!=null&&z!=='')(zMem[z]=zMem[z]||[]).push(t); if(rg)(rMem[rg]=rMem[rg]||[]).push(t); });
     /* de qué región es cada zona, y qué zonas tiene cada región: se sabe aquí, que es donde están
        los miembros. Luego la cabecera de la tienda analizada lo enseña en las pastillas. */
@@ -3188,7 +3364,7 @@ function buildAggregates(){
     Object.keys(rMem).sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})).forEach(rc=>{ const idx=build(rMem[rc]); if(!Object.keys(idx).length)return; const key='REG::'+rc; ST.index[key]=idx; ST.aggMeta[key]=regAggMeta(rc,{nTiendas:rMem[rc].length, nZonas:(rZon[rc]?rZon[rc].size:0), members:rMem[rc].slice()}); ST.geoAgg.push(key); ST.tiendas.push(key); var rn=String(rc).replace(/\D/g,''); const g=buildGen(rMem[rc],{center_name:regAggMeta(rc).label,region:rn?String(+rn):rc}); if(Object.keys(g).length)ST.gen[key]=g; });
   }
 }
-function refreshScenarioOptions(){ const rk=$('rkRef'); if(rk){ const cur=rk.value,first=ST.realStores[0]; rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t===OBJ_NAME)).join('')||opt(first,'Tienda '+first,true); if(cur&&ST.synthPresent.indexOf(cur)>=0)rk.value=cur; } }
+function refreshScenarioOptions(){ const rk=$('rkRef'); if(rk){ const cur=rk.value,first=ST.realStores[0]; rk.innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true); if(cur&&ST.synthPresent.indexOf(cur)>=0)rk.value=cur; } }
 window.__buildAgg=function(){ try{ buildAggregates(); refreshScenarioOptions(); }catch(e){console.warn('buildAgg',e);} };
 function setCombo(id,val){const inp=$(id);inp.dataset.val=val;inp.value=val?fullStore(val):'';}
 function makeCombo(id){
@@ -3250,11 +3426,20 @@ function fillSel(el,items,lf,sel){el.innerHTML=items.map(v=>opt(v,lf(v),v===sel)
 function availShifts(t){
   if(t===OBJ_NAME){const g=ST.shifts.filter(s=>s==='global');return g.length?g:ST.shifts.slice(0,1);}
   const idx=ST.index[t];if(!idx)return ST.shifts.slice();const set=new Set();for(const mk in idx){for(const sh in idx[mk])set.add(sh);}const r=ST.shifts.filter(s=>set.has(s));return r.length?r:ST.shifts.slice();}
+// meses que se ofrecen. El objetivo solo tiene el ultimo cerrado: ofrecer los doce daba a elegir
+// meses sin dato y dejaba la comparacion en blanco.
+function availMonths(t){
+  if(t===OBJ_NAME && ST.objMes) return [ST.objMes];
+  return ST.meses.slice();
+}
 // re-rellena el selector de turno del lado w ('A'/'B') según la tienda elegida; conserva el valor si sigue disponible
-function syncShift(w){const t=$('t'+w).dataset.val,sel=$('s'+w);if(!sel)return;const sh=availShifts(t),cur=sel.value;fillSel(sel,sh,shiftLabel,sh.includes(cur)?cur:sh[0]);}
+function syncShift(w){const t=$('t'+w).dataset.val,sel=$('s'+w);if(!sel)return;const sh=availShifts(t),cur=sel.value;fillSel(sel,sh,shiftLabel,sh.includes(cur)?cur:sh[0]);
+  const ms=availMonths(t),msel=$('m'+w);
+  if(msel){const cur2=msel.value;fillSel(msel,ms,k=>ST.mesLabel[k],ms.includes(cur2)?cur2:ms[ms.length-1]);}}
 function populate(){
   const last=ST.meses[ST.meses.length-1],first=ST.realStores[0];
-  const defB=ST.tiendas.find(t=>t===OBJ_NAME)||ST.tiendas.find(t=>t==='Tiendas Veteranas')||ST.tiendas.find(t=>t==='Todas las tiendas')||first,s0=ST.shifts[0];
+  /* Veteranas de salida: es la comparacion que mejor se sostiene. El objetivo, el ultimo. */
+  const defB=ST.tiendas.find(t=>t==='Tiendas Veteranas')||ST.tiendas.find(t=>t==='Todas las tiendas')||ST.tiendas.find(t=>t===LIEBRE_HIST)||ST.tiendas.find(t=>t===OBJ_NAME)||first,s0=ST.shifts[0];
   makeCombo('tA');makeCombo('tB');setCombo('tA',first);setCombo('tB',defB);
   fillSel($('mA'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sA'),ST.shifts,shiftLabel,s0);
   fillSel($('mB'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sB'),ST.shifts,shiftLabel,s0);
@@ -3265,7 +3450,7 @@ function populate(){
   $('rkArea').innerHTML=opt('__global','Todas (global)',true)+viewAreas().map(a=>opt(a,a)).join('');
   fillSel($('rkShift'),ST.shifts,shiftLabel,s0);
   fillSel($('rkMes'),ST.meses,k=>ST.mesLabel[k],last);
-  $('rkRef').innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t===OBJ_NAME)).join('')||opt(first,'Tienda '+first,true);
+  $('rkRef').innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
   ['mA','sA','mB','sB'].forEach(id=>$(id).addEventListener('change',preview));
   // restaurar lo ultimo que se estuvo mirando (si sigue existiendo en los datos)
   try{ var cf=loadCfg();
@@ -3400,7 +3585,7 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
   const foot=document.getElementById('matFoot'); const hideFoot=(foot&&ST.single); if(hideFoot)foot.style.display='none';
   /* La unidad va al SUBTITULO, no al titulo: el titulo dice QUE es, el subtitulo en que
      condiciones se midio. Mismo criterio en todas las descargas. */
-  const _TT=pngNorm('Visi\u00f3n global por \u00e1rea y fase', pngCtx(), 'matBody'), _t=_TT[0], _s=_TT[1];
+  const _TT=pngNorm('Visi\u00f3n global por \u00e1rea y subproceso', pngCtx(), 'matBody'), _t=_TT[0], _s=_TT[1];
   document.documentElement.classList.add('pngshot');
   const _lim=()=>document.documentElement.classList.remove('pngshot');
   html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,
@@ -3444,13 +3629,20 @@ function loadCfg(){ try{ var s=localStorage.getItem('javify_cfg'); return s?JSON
 function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();saveCfg();
   // modo "ficha de una sola tienda": A y B idénticos (misma tienda, mes y turno) → no comparar, mostrar solo esa tienda
   ST.single=(curA.tienda===curB.tienda&&curA.mesKey===curB.mesKey&&curA.shift===curB.shift);
-  MODEL=buildModel(curA,curB);ST.analyzed=true;$('empty').style.display='none';$('dash').style.display='block';$('fab').style.display='';renderAll();
+  MODEL=buildModel(curA,curB);ST.analyzed=true;
+  /* Quien enseña y esconde cada pestaña es setMode(). Aqui solo se enseña si la pestaña activa ES
+     la del comparador: si no, se calcula en silencio (al volver ya esta hecho) y la pantalla se
+     queda donde estabas. Sin esto, cambiar de grupo en Farolas pintaba el comparador por debajo. */
+  var _enComp=(ST.mode==='comp');
+  if(_enComp){ $('empty').style.display='none';$('dash').style.display='block';$('fab').style.display=''; }
+  renderAll();
   /* Farolas se pone en el MISMO escenario: si aquí comparas Veteranas con Zona 2, allí también.
      Salvo que sea Farolas quien acaba de mover esto, claro: eso seria un ida y vuelta infinito. */
   try{ if(!_faSync && window.__faSetScenario)
          window.__faSetScenario(faSelFromScenario(curA.tienda),
                                 ST.single?null:faSelFromScenario(curB.tienda),
-                                curA.mesKey); }catch(e){ console.warn('faSync',e); }if(scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
+                                curA.mesKey); }catch(e){ console.warn('faSync',e); }
+  if(_enComp && scroll!==false)$('dash').scrollIntoView({behavior:'smooth',block:'start'});}
 
 /* ===== MODELO ===== */
 function rowFor(s,a){return mapCorte((((ST.index[s.tienda]||{})[s.mesKey]||{})[s.shift]||{})[a]||null);}
@@ -3487,7 +3679,15 @@ function buildModel(A,B){
     m.ratioA=compat&&m.p2A?m.p3A/m.p2A:null;m.ratioB=compat&&m.p2B?m.p3B/m.p2B:null;
     m.dRatio=(m.ratioA!=null&&m.ratioB!=null)?m.ratioA-m.ratioB:null;
     m.pctPickA=(m.prepA&&m.p2A!=null)?m.p2A/m.prepA:null;m.pctDesplA=(m.prepA&&m.p3A!=null)?m.p3A/m.prepA:null;
-    m.impacto=(m.dProd!=null&&m.udsA!=null&&m.lotesA!=null)?m.dProd*m.udsA*m.lotesA:null;
+    /* BASE DE VOLUMEN: lotes y uds de UNA tienda en UN mes. Todo lo que se mide en horas/mes
+       cuelga de aqui, asi que se calcula una sola vez y en un solo sitio (ver divLotes). */
+    m.nT=(typeof nTiendasEsc==='function')?nTiendasEsc(A.tienda,A.mesKey):1;
+    const _objA=(A.tienda===OBJ_NAME);
+    const _lf=_objA?m.lotesB:m.lotesA;
+    const _ld=_objA?divLotes(B.tienda,B.mesKey):divLotes(A.tienda,A.mesKey);
+    m.lotesN=(_lf!=null&&!isNaN(_lf))?(_lf/(_ld||1)):null;
+    m.baseUds=_objA?m.udsB:m.udsA;
+    m.impacto=(m.dProd!=null&&m.baseUds!=null&&m.lotesN!=null)?(m.dProd*m.baseUds*m.lotesN):null;
     let ft=null,fv=0;FASES.forEach(f=>{const x=m.gaps[f.k];if(x!=null&&Math.abs(x)>Math.abs(fv)){fv=x;ft=f.k;}});
     m.faseTop=ft;m.faseTopVal=fv;m.estado=classify(m);
     return m;
@@ -3500,7 +3700,7 @@ function faseName(k){if(k==='p23')return 'Preparación';const f=FASES.find(x=>x.
 function macroOfFase(k){ if(k==='p1'||k==='p2'||k==='p3'||k==='p23')return 'Preparación'; if(k==='p4')return 'Pesaje'; if(k==='p5'||k==='p6')return 'Consolidación'; if(k==='p7')return 'Tiempo entre lotes'; return faseName(k); }
 function causaText(m){if(!m.disponible||m.faseTop==null)return 'Sin diferencia clara';return window.__GROUP?macroOfFase(m.faseTop):faseName(m.faseTop);}
 // impactos (fórmulas explícitas)
-function impFase(m,key){const a=m.ra?m.ra[MINKEY[key]]:null,b=m.rb?m.rb[MINKEY[key]]:null;return (a!=null&&b!=null&&m.lotesA!=null)?(a-b)*m.lotesA:null;}
+function impFase(m,key){const a=m.ra?m.ra[MINKEY[key]]:null,b=m.rb?m.rb[MINKEY[key]]:null;return (a!=null&&b!=null&&m.lotesN!=null)?(a-b)*m.lotesN:null;}
 
 /* ===== globales: los trae el CSV, ya no se suman a mano =====
    La fila area_batch='GLOBAL' del desglose la calcula el SQL con las sumas crudas del dia
@@ -3508,7 +3708,10 @@ function impFase(m,key){const a=m.ra?m.ra[MINKEY[key]]:null,b=m.rb?m.rb[MINKEY[k
    dia-igual por el numero de lotes, y eso NO reconstruye el total del mes: era una aproximacion.
    Si el CSV es antiguo y no trae la fila, se cae a la estimacion de siempre y se marca. */
 function globRow(t,mes,shift){ return (((ST.index[t]||{})[mes]||{})[shift]||{})['GLOBAL']||null; }
-function prodGlobal(rowsArr){let tt=0,ut=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tt+=r.total_min_util_medio*r.n_lotes;ut+=r.uds_media_lote*r.n_lotes;}});return ut>0?tt/ut:null;}
+/* min/ud de un conjunto de areas: tiempo total entre unidades totales. Las unidades son las de
+   la UNIDAD ACTIVA (UDSC); con la columna MO clavada, el resumen y la tendencia global se
+   quedaban en min/ud MO con el rotulo puesto en Mdona. */
+function prodGlobal(rowsArr){let tt=0,ut=0;const _UC=UDSC();rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r[_UC]!=null&&r.n_lotes!=null){tt+=r.total_min_util_medio*r.n_lotes;ut+=r[_UC]*r.n_lotes;}});return ut>0?tt/ut:null;}
 function tiempoGlobal(rowsArr){let s=0,n=0;rowsArr.forEach(r=>{if(r&&r.total_min_util_medio!=null&&r.n_lotes!=null){s+=r.total_min_util_medio*r.n_lotes;n+=r.n_lotes;}});return n>0?s/n:null;}
 // productividad global (real ≤20 o efectiva ≤6) de una tienda. which='real'|'efec'.
 function globProdOf(t,which,shift,mes){
@@ -3604,7 +3807,7 @@ function renderAll(){
   /* red de seguridad: si alguna seccion estaba oculta al pintar, al aparecer hay que remedir */
   requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
 }
-const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalDonut','cParetoDonut'];
+const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalPar','cCaudalDonut','cParetoDonut'];
 /* Plotly.Plots.resize RECHAZA una promesa si el div esta oculto (no lanza): sin el .catch
    quedaban "unhandled rejection" cada vez que se redimensionaba fuera del comparador.
    Ademas de CHARTS hay roscos (cf_r_*) en el resumen -> el barrido global los cubre. */
@@ -3653,20 +3856,21 @@ function plot(id,traces,layout){Plotly.react(id,traces,baseLayout(layout),PCFG);
 function paretoData(){
   const out=[];
   MODEL.filter(m=>m.disponible).forEach(m=>{
-    const peso=(m.udsA!=null&&m.lotesA!=null)?m.udsA*m.lotesA:null;
+    const peso=(m.baseUds!=null&&m.lotesN!=null)?m.baseUds*m.lotesN:null;
     const ud=(a,b)=>(m.udsA>0&&m.udsB>0&&a!=null&&b!=null)?(a/m.udsA-b/m.udsB):null;
     if(window.__GROUP){ // agrupado: por bloque (Preparación, Pesaje, Consolidación, Entre lotes)
-      FGRUPOS.forEach(g=>{ let a=0,b=0,any=false; g.keys.forEach(k=>{const va=m.ra[MINKEY[k]],vb=m.rb[MINKEY[k]];if(va!=null&&vb!=null){a+=va;b+=vb;any=true;}}); if(!any||m.lotesA==null)return; const imp=(a-b)*m.lotesA; out.push({area:m.area,faseK:g.k,faseName:g.name,col:g.col,imp,dvUd:ud(a,b),pesoUds:peso}); });
+      FGRUPOS.forEach(g=>{ let a=0,b=0,any=false; g.keys.forEach(k=>{const va=m.ra[MINKEY[k]],vb=m.rb[MINKEY[k]];if(va!=null&&vb!=null){a+=va;b+=vb;any=true;}}); if(!any||m.lotesN==null)return; const imp=(a-b)*m.lotesN; out.push({area:m.area,faseK:g.k,faseName:g.name,col:g.col,imp,dvUd:ud(a,b),pesoUds:peso}); });
     } else {
       const fl=m.compat?FASES:[FASES[0],PREP_SIN,FASES[3],FASES[4],FASES[5],FASES[6]];
-      fl.forEach(f=>{const a=m.ra[MINKEY[f.k]],b=m.rb[MINKEY[f.k]];if(a==null||b==null||m.lotesA==null)return;const imp=(a-b)*m.lotesA;out.push({area:m.area,faseK:f.k,faseName:f.name,col:f.col,imp,dvUd:ud(a,b),pesoUds:peso});});
+      fl.forEach(f=>{const a=m.ra[MINKEY[f.k]],b=m.rb[MINKEY[f.k]];if(a==null||b==null||m.lotesN==null)return;const imp=(a-b)*m.lotesN;out.push({area:m.area,faseK:f.k,faseName:f.name,col:f.col,imp,dvUd:ud(a,b),pesoUds:peso});});
     }
   });
   return out;
 }
 function renderSummary(){
-  const av=MODEL.filter(m=>m.disponible);
-  $('summaryScope').innerHTML=(ST.single?'Tienda: <b style="color:var(--brand)">'+scopeName('A')+'</b> · ficha individual':'Analizado: <b style="color:var(--brand)">'+scopeName('A')+'</b> · Referencia: <b style="color:var(--ink)">'+scopeName('B')+'</b> · comparación por área')+' · productividad en <b>'+udName()+'</b>';
+  const _vAreas=viewAreas();
+  const av=MODEL.filter(m=>m.disponible&&_vAreas.indexOf(m.area)>=0);
+  $('summaryScope').innerHTML=(ST.single?'Tienda: <b style="color:var(--brand)">'+scopeName('A')+'</b> · ficha individual':'Analizado: <b style="color:var(--brand)">'+scopeName('A')+'</b> · Referencia: <b style="color:var(--ink)">'+scopeName('B')+'</b>');
   const rowsA=viewAreas().map(a=>rowFor(curA,a)).filter(Boolean),rowsB=viewAreas().map(a=>rowFor(curB,a)).filter(Boolean);
   const tgA=tiempoGlobal(rowsA),tgB=tiempoGlobal(rowsB),pgA=prodGlobal(rowsA),pgB=prodGlobal(rowsB);
   const impTot=av.reduce((s,m)=>s+(m.impacto||0),0);
@@ -3685,7 +3889,7 @@ function renderSummary(){
   if(!av.length){badge='var(--ink3)';tx='No hay áreas comparables entre el analizado y la referencia. Prueba otro mes o turno.';}
   else if(impTot>30){
     badge='var(--bad)';
-    let s='<b>'+ST.nameA+'</b> pierde <span class="hot">≈ '+fmtH(impTot)+'/mes</span> frente a <b>'+ST.nameB+'</b>. ';
+    let s='<b>'+ST.nameA+'</b> pierde <span class="hot">≈ '+fmtH(impTot)+'/mes</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>. ';
     if(areaImp.length&&totalPos>0){const top2=areaImp.slice(0,2),pct=top2.reduce((a,o)=>a+o.imp,0)/totalPos*100;s+='El <b>'+fmt(pct,0)+'%</b> del tiempo de más se concentra en <b>'+top2.map(o=>o.area).join('</b> y <b>')+'</b>. ';}
     if(par.length){const p2=par.slice(0,2);s+='La mayor oportunidad está en <b>'+p2.map(p=>p.area+' · '+p.faseName).join('</b> y <b>')+'</b>. ';}
     if(mesesAlej>=2)s+='No parece puntual: lleva <b>'+mesesAlej+' meses</b> alejándose de la referencia. ';
@@ -3695,8 +3899,8 @@ function renderSummary(){
     tx=s;
   } else if(impTot<-30){
     badge='var(--good)';
-    let s='<b>'+ST.nameA+'</b> ahorra <span class="cool">≈ '+fmtH(impTot)+'/mes</span> frente a <b>'+ST.nameB+'</b>: en conjunto rinde mejor. ';
-    if(par.length){const p=par[0];s+='Aun así, donde más margen queda es <b>'+p.area+' · '+p.faseName+'</b> ('+parMag(p)+').';}else s+='No hay fases con tiempo de más relevante frente a la referencia.';
+    let s='<b>'+ST.nameA+'</b> ahorra <span class="cool">≈ '+fmtH(impTot)+'/mes</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>: rinde mejor. ';
+    if(par.length){const p=par[0];s+='Aun así, donde más margen queda es <b>'+p.area+' · '+p.faseName+'</b> ('+parMag(p)+').';}else s+='No hay subprocesos con tiempo de más relevante frente a la referencia.';
     tx=s;
   } else {
     badge='var(--ink3)';
@@ -3713,7 +3917,7 @@ function renderSummary(){
   const gA=genRow(curA.tienda,curA.mesKey), gB=genRow(curB.tienda,curB.mesKey);
   const k=[];
   if(gA){
-    $('summaryScope').innerHTML=(ST.single?'Tienda: <b style="color:var(--brand)">'+scopeName('A')+'</b> · ficha individual':'Analizado: <b style="color:var(--brand)">'+scopeName('A')+'</b> · Referencia: <b style="color:var(--ink)">'+scopeName('B')+'</b>')+' · valores <b>globales del centro</b> (día completo, no por área) · productividad en <b>'+udName()+'</b>';
+    $('summaryScope').innerHTML=(ST.single?'Tienda: <b style="color:var(--brand)">'+scopeName('A')+'</b> · ficha individual':'Analizado: <b style="color:var(--brand)">'+scopeName('A')+'</b> · Referencia: <b style="color:var(--ink)">'+scopeName('B')+'</b>');
     // ---- TARJETA de tienda (Región · Zona · Modelo · veteranía del mes completo) ----
     /* UNA sola pastilla, la del estado. El resto es una linea de texto. */
     const chip=(v,bg)=>v?'<span class="stchip'+(bg?' st-on':'')+'"'+(bg?(' style="background:'+bg+'"'):'')+'>'+v+'</span>':'';
@@ -3727,7 +3931,11 @@ function renderSummary(){
     const _fase=faseTienda(curA.tienda,gA);
     const vetTxt=faseTxt(curA.tienda,gA,gA.estado);
     const _mesTxt=ST.mesLabel[curA.mesKey]||'ese mes';
-    const aunNoChip=faseAunNo(_fase,gA.estado)?chip('aún no en '+_mesTxt):'';
+    /* NOTA, no pastilla: la pastilla de al lado del nombre es para la fase, que es lo que define
+       a la tienda. Esto es una salvedad de ESTE mes y va en letra pequeña, debajo. */
+    const aunNoNota=faseAunNo(_fase,gA.estado)
+      ? '<div style="font-size:11px;color:var(--ink3);margin-top:5px">Cumplió los 180 días durante '+_mesTxt+': ese mes mezcla días de aprendiz con días de veterana.</div>'
+      : '';
     const _liebreReal=!SYNTH.includes(curA.tienda)&&curA.tienda!==OBJ_NAME&&curA.tienda!==LIEBRE_HIST&&!(ST.aggMeta&&ST.aggMeta[curA.tienda]);
     /* "liebre" ya no es una pastilla: va en la linea de ficha, que es donde estan los datos que
        no cambian el juicio sobre la tienda. */
@@ -3735,19 +3943,40 @@ function renderSummary(){
       '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(_agg?(_agg.kind==='region'?'Región analizada':'Zona analizada'):'Tienda analizada')+'</div>'+
       '<div class="sthead-row"><span class="sthead-n">'+titulo+'</span>'+
         (_agg?chip('Media de sus tiendas')
-             :(chip(vetTxt,_fase?faseBg(_fase):(gA.estado==='Veterana'?'var(--brand-soft)':''))+aunNoChip))+'</div>'+
+             :chip(vetTxt,_fase?faseBg(_fase):(gA.estado==='Veterana'?'var(--brand-soft)':'')))+'</div>'+
       '<div class="sthead-meta">'+(_agg
         ? (_agg.kind==='region'
             ? meta([num(_agg.nZonas,'zona','zonas'), num(_agg.nTiendas,'tienda','tiendas')])
             : meta([dato('Región',_agg.region), num(_agg.nTiendas,'tienda','tiendas')]))
-        : meta([dato('Región',gA.region), dato('Zona',gA.zona),
+        /* DOS lineas, no una. Arriba lo que dice QUE centro es (region, zona, modelo y si es
+           liebre); abajo su historia (apertura, veterania y el ultimo cambio de modelo). En una
+           sola linea, en movil, "Liebre" caia junto a las fechas y se leia como una fecha mas. */
+        : (meta([dato('Región',gA.region), dato('Zona',gA.zona),
                 /* "NTC120" -> etiqueta "NTC" en gris y "120" en tinta fuerte, igual que Región y
                    Zona. Si el modelo no sigue ese patron, se deja tal cual. */
                 (function(){ var mo=String(gA.model||''); if(!mo)return '';
                   var t=/^([A-Za-z]+)\s*(.+)$/.exec(mo);
                   return t?dato(t[1],t[2]):dato('',mo); })(),
                 (window.__liebreSet&&_liebreReal)?dato('Liebre', window.__liebreSet.has(String(curA.tienda))?'Sí':'No'):''])
-        )+'</div></div>'+
+           +(function(){
+                /* Las dos fechas que explican la veterania: cuando abrio y cuando cumple los 180
+                   dias. Si ya los ha cumplido, la segunda es pasado y se dice igual: es el dato.
+                   Van JUNTAS en un grupo que no se parte: en movil se rompia a mitad de la fecha. */
+                var fechas=meta([dato('Apertura', fechaCorta(gA.apertura)),
+                  (function(){ var v=fechaVeterana(gA.apertura);
+                     return v?dato('Veterana el', fechaCorta(v)):''; })()]);
+                /* El ULTIMO cambio de modelo, en su propio grupo. Un cambio de modelo mueve la
+                   curva de la tienda mas que casi nada, y sin esto no se ve. Cuantos hubo antes
+                   da igual: el que manda es el ultimo. */
+                var modelo=(function(){ var cs=cambiosModelo(curA.tienda); if(!cs.length) return '';
+                   var u=cs[cs.length-1];
+                   return dato(u.dir==='REDUCCION'?'Reducción':'Ampliación',
+                               modNum(u.de)+'\u2192'+modNum(u.a)+' el '+fechaCorta(u.fecha)); })();
+                if(!fechas&&!modelo) return '';
+                return '</div><div class="sthead-meta sthead-meta2">'
+                       +(fechas?'<span class="sm-g">'+fechas+'</span>':'')
+                       +(modelo?'<span class="sm-g">'+modelo+'</span>':''); })())
+        )+'</div>'+aunNoNota+'</div>'+
       '<div style="text-align:right"><div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px">'+mesAA(curA.mesKey)+'</div><div style="font-size:12px;color:var(--ink2);margin-top:2px">'+(gA.n_dias!=null?fmt(gA.n_dias,0)+' días con datos':'')+'</div></div>'+
       '</div>';
     /* ---- PRODUCTIVIDADES · orden: real · efectiva · oficial · óptima ----
@@ -3761,15 +3990,24 @@ function renderSummary(){
     const verOf = false;
     /* Titulos ABREVIADOS: "Productividad efectiva (≤6')" se partia en dos lineas y las cuatro
        tarjetas dejaban de estar alineadas entre si. Con "Prod." cabe todo en una linea. */
-    k.push(kpiCard("Prod. real (≤20')", gv(gA,'prod_conparadas_min_ud'), objAct(),udName(),true,3,0.003));
-    k.push(kpiCard("Prod. efectiva (≤6')", gv(gA,'prod_efectiva_min_ud'), objAct(),udName(),true,3,0.003));
+    /* Contra el objetivo DE ESTA TIENDA en ESTE MES, no contra el 0,34 de flota: una tienda
+       recien abierta o recien ampliada tiene margen y salia en rojo sin merecerlo. */
+    const _objT=objEscA();
+    k.push(kpiCard("Prod. real (≤20')", gv(gA,'prod_conparadas_min_ud'), _objT,udName(),true,3,0.003));
+    k.push(kpiCard("Prod. efectiva (≤6')", gv(gA,'prod_efectiva_min_ud'), _objT,udName(),true,3,0.003));
     if(verOf) k.push('<div class="kpi '+kpiOfCls()+'" id="kpiOf">'+kpiOfIn()+'</div>');
     /* el mismo objetivo en la otra unidad, al lado: 0,306 MO es 0,33 contando como Mercadona */
     /* la equivalencia en la otra unidad NO se calcula con ningun factor fijo: o viene del CSV
        (obj_mcd_min_ud / obj_mo_min_ud) o, si has puesto un objetivo a mano en Ajustes, sale de la
        proporcion real medida entre las dos bases de las tiendas liebre. */
-    const equiv = fmt(objOther(),3)+' '+udOther();
-    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima</div><div class="kpi-v">'+fmt(objAct(),3)+' <small>'+udName()+'</small></div>'+
+    /* El equivalente en la OTRA unidad lleva el mismo coeficiente: si aqui el objetivo sube un
+       23 %, alli tambien. Sin esto salia 0,418 Mdona contra 0,315 MO, que no es el mismo objetivo. */
+    const _facT=facEscenario(curA.tienda,curA.mesKey);
+    const equiv = fmt(objOther()*_facT,3)+' '+udOther();
+    /* +6%, no +6,0%: el decimal solo cuando aporta algo (un mes con el escalon partido). */
+    const _pct=Math.round((_facT-1)*1000)/10;
+    const _pctDec=(Math.abs(_pct-Math.round(_pct))<0.05)?0:1;
+    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima'+(_pct>0.05?(' <span style="font-weight:700;color:var(--warn,#b8860b)">· con coef. de improd. +'+fmt(_pct,_pctDec)+'%</span>'):'')+'</div><div class="kpi-v">'+fmt(_objT,3)+' <small>'+udName()+'</small></div>'+
       '<div class="kpi-r"><span class="ref-v">Obj. de ref. = '+equiv+'</span></div></div>');
     $('kpis').className='kpis'+(k.length===3?' k3':'');
     $('kpis').innerHTML=k.join('');
@@ -3780,21 +4018,45 @@ function renderSummary(){
         '<div class="modes" id="caudalView"><button class="mode'+(ST.caudalView!=='mes'?' on':'')+'" data-cv="dia">Diario · media</button><button class="mode'+(ST.caudalView==='mes'?' on':'')+'" data-cv="mes">Mensual · sumatorio</button></div>'+
       '</div>'+
       '<div class="caudal-grid" style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:stretch">'+
-        '<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:8px"><button class="png" data-png="cCaudalDonut" data-pngname="caudal_composicion">⤓ PNG</button><div class="csub" style="margin:4px 0 6px 8px">Composición del real</div><div id="cCaudalDonut" style="height:196px"></div><div id="cCaudalLeg" style="padding:4px 10px 8px"></div></div></div>'+
-        '<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:10px 12px"><button class="png" data-png="cCaudal" data-pngname="caudal_evolucion">⤓ PNG</button><div class="csub" style="margin:2px 0 0 6px">Evolución 12 meses</div><div class="chart" id="cCaudal" style="height:262px"></div></div></div>'+
+        '<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:8px"><button class="png" data-png="cCaudalDonut" data-pngname="caudal_composicion">⤓ PNG</button><div class="csub" style="margin:4px 0 6px 8px">Composición del real</div><div id="cCaudalDonut" style="height:224px"></div><div id="cCaudalLeg" style="padding:4px 10px 8px"></div></div></div>'+
+        /* Dos graficas, no una: las paradas son un orden de magnitud menores que las efectivas
+           y en un eje comun no se lee ninguna de las dos. */
+        '<div style="display:grid;grid-template-rows:1fr 1fr;gap:12px;min-width:0">'+
+          '<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:8px 12px"><button class="png" data-png="cCaudal" data-pngname="caudal_evolucion">⤓ PNG</button><div class="csub" style="margin:2px 0 0 6px">Evolución 12 meses · óptimo, usado y efectivas</div><div class="chart" id="cCaudal" style="height:124px"></div></div></div>'+
+          '<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:8px 12px"><button class="png" data-png="cCaudalPar" data-pngname="caudal_paradas">⤓ PNG</button><div class="csub" style="margin:2px 0 0 6px">Evolución 12 meses · horas de paradas</div><div class="chart" id="cCaudalPar" style="height:124px"></div></div></div>'+
+        '</div>'+
       '</div>'+
       '<div id="caudalTable" style="margin-top:14px"></div>';
     $('caudalView').querySelectorAll('[data-cv]').forEach(b=>b.addEventListener('click',()=>{ST.caudalView=b.dataset.cv;$('caudalView').querySelectorAll('[data-cv]').forEach(x=>x.classList.toggle('on',x.dataset.cv===ST.caudalView));renderCaudal();}));
     renderCaudal();
     if($('kpiCalc'))$('kpiCalc').innerHTML=
-      '<div class="calc-c"><div class="ct"><i style="background:var(--brand)"></i>Productividades</div><div class="cf">min/ud frente al objetivo <b>'+fmt(objAct(),3)+' '+udName()+'</b>. <b>Efectiva</b> quita huecos &gt; 6 min; <b>real</b> quita solo paradas largas (&gt; 20 min).</div></div>'+
-      '<div class="calc-c"><div class="ct"><i style="background:var(--f-traslado)"></i>Caudal (horas)</div><div class="cf"><b>Óptimo</b> = uds × '+fmt(objAct(),3)+' ÷ 60, con las unidades y el objetivo de la unidad activa. <b>Usado</b> = efectivo + tiempo de paradas. <b>Diferencia</b> = usado − óptimo, calculada en origen con todos los decimales.</div></div>'+
+      '<div class="calc-c"><div class="ct"><i style="background:var(--brand)"></i>Productividades</div><div class="cf">min/ud frente al objetivo <b>'+fmt(objEscA(),3)+' '+udName()+'</b>'+(tieneRampa(curA.tienda,curA.mesKey)?(' ('+fmt(objAct(),3)+' de flota, con el margen de apertura o de ampliación de modelo)'):'')+'. <b>Efectiva</b> quita huecos &gt; 6 min; <b>real</b> quita solo paradas largas (&gt; 20 min).</div></div>'+
+      '<div class="calc-c"><div class="ct"><i style="background:var(--f-traslado)"></i>Caudal (horas)</div><div class="cf"><b>Óptimo</b> = uds × '+fmt(objEscA(),3)+' ÷ 60, con las unidades y el objetivo de la unidad activa. <b>Usado</b> = efectivo + tiempo de paradas. <b>Diferencia</b> = usado − óptimo.</div></div>'+
       '<div class="calc-c"><div class="ct"><i style="background:var(--ink3)"></i>Diario vs mensual</div><div class="cf">Diario = media de los días (cada día pesa igual). Mensual = suma de todos los días del mes.</div></div>';
   } else {
+    /* Sin fila "general" no hay ficha de centro, pero SI hay que decir que se esta mirando. El
+       objetivo es el caso: se analiza para bajarse su mapa de calor por area y fase. */
+    (function(){
+      var esObj=(curA.tienda===OBJ_NAME);
+      var sub=esObj?'Objetivo oficial por área y subproceso · no es un centro, no tiene región ni apertura'
+                   :'Conjunto de tiendas';
+      $('execSummary').innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-sm);padding:18px 22px;margin-bottom:14px">'+
+        '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(esObj?'Objetivo analizado':'Conjunto analizado')+'</div>'+
+        '<div class="sthead-row"><span class="sthead-n">'+esc1(shortStore(curA.tienda))+'</span></div>'+
+        '<div class="sthead-meta">'+sub+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:1px">'+mesAA(curA.mesKey)+'</div></div>'+
+        '</div>';
+    })();
     k.push(kpiCard('Tiempo medio por lote',tgA,ST.single?null:tgB,'min',true,2,0.05));
-    k.push(kpiCard('Productividad global',(pgA),ST.single?null:(pgB),udName(),true,3,0.003));
+    /* Con el escenario "Objetivo" la productividad global NO es la suma ponderada de sus areas:
+       es el objetivo con el que se genero el fichero. Sumar areas daba 0,325 donde el fichero
+       dice 0,33, y la grafica de al lado decia 0,34: tres numeros para el mismo dato. */
+    let _pgA=pgA;
+    if(curA.tienda===OBJ_NAME){ const _g=(window.__objGlobal?window.__objGlobal(OBJ_ROWS):null);
+      if(_g!=null&&isFinite(_g)&&_g>0) _pgA=_g; }
+    k.push(kpiCard('Productividad global',(_pgA),ST.single?null:(pgB),udName(),true,3,0.003));
     if(!ST.single){
-      k.push('<div class="kpi '+(impTot>30?'up':impTot<-30?'down':'')+'"><div class="kpi-l">Impacto estimado / mes</div><div class="kpi-v">'+fmtImpact(impTot)+'</div><div class="kpi-r">'+(impTot>0?'tiempo de más vs referencia':impTot<0?'tiempo ahorrado vs referencia':'sin impacto neto')+'</div></div>');
+      k.push('<div class="kpi '+(impTot>30?'up':impTot<-30?'down':'')+'"><div class="kpi-l">Impacto estimado / mes'+(nTiendasImp()>1?' · por tienda':'')+'</div><div class="kpi-v">'+fmtImpact(impTot)+'</div><div class="kpi-r">'+(impTot>0?'tiempo de más vs referencia':impTot<0?'tiempo ahorrado vs referencia':'sin impacto neto')+'</div></div>');
       k.push('<div class="kpi '+(nrev>2?'up':nrev>0?'':'down')+'"><div class="kpi-l">Áreas a revisar</div><div class="kpi-v">'+nrev+' <small>de '+av.length+'</small></div><div class="kpi-r">'+(nrev?'marcadas en rojo abajo':'todas en línea o mejor')+'</div></div>');
     }
     $('kpis').innerHTML=k.join('');
@@ -3812,9 +4074,15 @@ function renderSummary(){
     $('kpiWarn').innerHTML='<div class="notice warn" style="margin-top:14px"><span class="ic">!</span><span>'+t2+'</span></div>';
   }else if(!gA)$('kpiWarn').innerHTML='';   // en modo general, kpiWarn lleva el caudal (no borrar)
 }
+/* optimo' = optimo x (objetivo de la tienda / objetivo de flota). Es una proporcion pura: no hace
+   falta reconstruirlo desde las unidades y no se arrastra el redondeo del CSV. */
+function kRampa(t,mk){ var o=objAct(); return (o>0)?(objEsc(t,mk)/o):1; }
+function optCorr(v,t,mk){ return (v==null||isNaN(v))?v:v*kRampa(t,mk); }
 function renderCaudal(){
   const g=genRow(curA.tienda,curA.mesKey); if(!g||!$('cCaudal'))return;
-  const mes=ST.caudalView==='mes', dec=mes?1:2, ud=mes?'h/mes':'h/día';
+  /* Dos decimales SIEMPRE: en la vista mensual iba con uno y en la tabla se colaban tres. Son
+     horas; con dos ya se lee el minuto. */
+  const mes=ST.caudalView==='mes', dec=2, ud=mes?'h/mes':'h/día';
   const efc='#22b37f',pac='#e08a3c',realC='#4f8fe0',optC=cssv('--ink3');
   const efcS='rgba(34,179,127,.16)',pacS='rgba(224,138,60,.16)';
   // los tiempos NO cambian de unidad; el optimo si (depende del objetivo y de las unidades)
@@ -3829,10 +4097,14 @@ function renderCaudal(){
     marker:{colors:[efc,pac],line:{color:cssv('--panel'),width:3}},automargin:true,
     textinfo:'percent',textposition:'outside',textfont:{size:12.5,color:ink2,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif'},
     hovertemplate:'%{label}: %{value:.'+dec+'f} h · %{percent}<extra></extra>',sort:false,direction:'clockwise',rotation:0
-  }],baseLayout({height:196,margin:{l:26,r:26,t:18,b:18},showlegend:false,
+  }],baseLayout({height:224,margin:{l:22,r:22,t:12,b:12},showlegend:false,
+    /* UNA anotacion, anclada al centro del papel (xanchor/yanchor), igual que el rosco de
+       "Reparto por area". Con dos anotaciones sueltas a alturas fijas el texto quedaba bajo y
+       descentrado, y ademas se movia segun cuanto ocupaban los porcentajes de fuera. */
     annotations:[
-      {text:'Total real',showarrow:false,font:{size:10,color:ink2,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif'},x:0.5,y:0.565},
-      {text:'<b>'+fmt(real,dec)+'</b> <span style="font-size:10px;color:'+ink2+'">'+ud+'</span>',showarrow:false,font:{size:21,color:ink,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif'},x:0.5,y:0.45}
+      {text:'<span style="font-size:10px;color:'+ink2+'">Total real</span><br><b>'+fmt(real,dec)+'</b> <span style="font-size:10px;color:'+ink2+'">'+ud+'</span>',
+       showarrow:false,x:.5,y:.5,xref:'paper',yref:'paper',xanchor:'center',yanchor:'middle',
+       font:{size:21,color:ink,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif'}}
     ]}),PCFG);
   // leyenda HTML debajo (horas + %) — cabe bien y queda ordenado
   const pej=(efec!=null&&real)?efec/real*100:null;
@@ -3841,18 +4113,26 @@ function renderCaudal(){
     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 2px"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+pac+';margin-right:7px"></span>Paradas</span><b style="font-family:ui-monospace,monospace">'+fmt(par,dec)+' h'+(pej!=null?' · '+fmt(100-pej,0)+'%':'')+'</b></div>';
   // ---- EVOLUCIÓN 12 meses (área apilada: efectivas + paradas = real; óptimo punteado) ----
   const t=curA.tienda,x=xMeses();
-  const sOpt=genSerie(t,mes?'caudal_optimo_h_total':'caudal_optimo_h');
+  const sOpt=genSerie(t,mes?'caudal_optimo_h_total':'caudal_optimo_h').map(function(v,i){ return optCorr(v,t,ST.meses[i]); });
   const sReal=genSerie(t,mes?'caudal_real_h_total':'caudal_real_h');
   const sEf=genSerie(t,mes?'caudal_efectivo_h_total':'caudal_efectivo_h');
   const sPar=genSerie(t,mes?'horas_paradas_h_total':'horas_paradas_h');
-  const lay=baseLayout({height:268,margin:{l:48,r:16,t:56,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.3,x:0,font:{size:10,color:ink2},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{size:10,color:ink2},automargin:true,zeroline:false,autorange:true,title:{text:'horas',font:{size:10,color:cssv('--ink3')}}}});
-  // líneas (sin apilar) y eje ajustado a los datos para ver dónde está cada una; Real por encima
+  /* Un layout para las dos: mismo alto, mismo margen izquierdo (asi los dos ejes quedan
+     alineados uno debajo del otro) y la leyenda arriba. */
+  const layCd=function(){ return baseLayout({height:124,margin:{l:48,r:16,t:22,b:30},hovermode:'x unified',showlegend:true,
+    legend:{orientation:'h',y:1.42,x:0,font:{size:9.5,color:ink2},bgcolor:'rgba(0,0,0,0)'},
+    xaxis:{gridcolor:cssv('--line'),tickfont:{size:9,color:ink2},automargin:true},
+    yaxis:{gridcolor:cssv('--line'),tickfont:{size:9,color:ink2},automargin:true,zeroline:false,autorange:true}}); };
+  // 1 · optimo, usado y efectivas
   Plotly.react('cCaudal',[
-    {x,y:sEf,name:'Efectivas',legendrank:3,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:efc,width:2,shape:'spline'},marker:{size:4}},
-    {x,y:sPar,name:'Paradas',legendrank:4,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:pac,width:2,shape:'spline'},marker:{size:4}},
     {x,y:sOpt,name:'Óptimo',legendrank:1,type:'scatter',mode:'lines',connectgaps:false,line:{color:optC,width:1.8,dash:'dot'}},
-    {x,y:sReal,name:'Usado',legendrank:2,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:realC,width:3,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}}}
-  ],lay,PCFG);
+    {x,y:sReal,name:'Usado',legendrank:2,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:realC,width:2.6,shape:'spline'},marker:{size:5,color:realC,line:{width:1.4,color:cssv('--panel')}}},
+    {x,y:sEf,name:'Efectivas',legendrank:3,type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:efc,width:2,shape:'spline'},marker:{size:4}}
+  ],conModelo(layCd(),t),PCFG);
+  // 2 · paradas, con su propio eje: son horas mucho menores y aqui si se ven
+  if($('cCaudalPar')) Plotly.react('cCaudalPar',[
+    {x,y:sPar,name:'Paradas',type:'scatter',mode:'lines+markers',connectgaps:false,line:{color:pac,width:2.2,shape:'spline'},marker:{size:5,color:pac,line:{width:1.4,color:cssv('--panel')}}}
+  ],conModelo(layCd(),t),PCFG);
   // ---- TABLA 12 meses (ordenable por mes, último arriba por defecto) ----
   const desc=ST.caudalTblDesc!==false;
   const order=ST.meses.map((k,i)=>i); if(desc)order.reverse();
@@ -3864,14 +4144,16 @@ function renderCaudal(){
     const d=(sReal[i]!=null&&sOpt[i]!=null)?sReal[i]-sOpt[i]:null;
     const dc=d==null?ink2:d>0?cssv('--bad'):cssv('--good'),db=d==null?'transparent':d>0?cssv('--up-soft'):cssv('--down-soft');
     rows+='<tr>'+
-      '<td style="'+td+';text-align:left;font-family:var(--ui);font-weight:700">'+ST.mesLabel[k]+'</td>'+
+      '<td style="'+td+';text-align:left;font-family:var(--ui);font-weight:700"><span class="mes-lg">'+ST.mesLabel[k]+'</span><span class="mes-sm">'+mesAA(k)+'</span></td>'+
       '<td style="'+td+';color:var(--ink2)">'+fmt(sOpt[i],dec)+'</td>'+
       '<td style="'+td+';color:'+realC+';font-weight:850">'+fmt(sReal[i],dec)+'</td>'+
       '<td style="'+td+';color:'+efc+';font-weight:700">'+fmt(sEf[i],dec)+'</td>'+
       '<td style="'+td+';color:'+pac+';font-weight:700">'+fmt(sPar[i],dec)+'</td>'+
       '<td style="'+td+'"><span style="display:inline-block;min-width:54px;text-align:center;padding:2px 8px;border-radius:999px;background:'+db+';color:'+dc+';font-weight:800;font-size:11.5px">'+(d==null?'—':(d>0?'+':'')+fmt(d,dec))+'</span></td></tr>';
   });
-  $('caudalTable').innerHTML='<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:0;overflow:hidden;border-radius:var(--r)"><div style="display:flex;justify-content:flex-end;padding:8px 10px 0"><button class="csv dl-in" data-csv="caudalMonthTbl" data-csvname="caudal_por_mes">⤓ CSV</button></div>'+
+  /* El boton iba en su propia fila, encima de la cabecera pegajosa: dejaba una franja blanca
+     sobre los titulos. Flotando en la esquina no ocupa alto. */
+  $('caudalTable').innerHTML='<div class="cbox" style="margin:0"><div class="cbox-in" style="padding:0;overflow:hidden;border-radius:var(--r);position:relative"><button class="csv dl-in" data-csv="caudalMonthTbl" data-csvname="caudal_por_mes" style="position:absolute;top:6px;right:8px;z-index:3">⤓ CSV</button>'+
     '<div class="tbl-scroll" style="max-height:340px;overflow:auto"><table class="gen-tbl" id="caudalMonthTbl" style="width:100%;border-collapse:collapse">'+
     '<thead><tr><th id="caudalSortMes" style="'+th+';text-align:left;cursor:pointer;user-select:none">Mes '+(desc?'▼':'▲')+'</th>'+
     '<th style="'+th+'">Óptimo</th><th style="'+th+'">Usado</th><th style="'+th+'">Efectivas</th><th style="'+th+'">Paradas</th><th style="'+th+'">Dif (usado−óptimo)</th>'+
@@ -4105,7 +4387,7 @@ function renderMatrix(){
       const minB=(rawB2!=null&&m.lotesB!=null)?rawB2*m.lotesB:null;
       const vb=(minB!=null&&_PCTTB>0)?minB/_PCTTB*100:null;
       const dv=(val!=null&&vb!=null)?val-vb:null;
-      const imp=(rawA!=null&&rawB2!=null&&m.lotesA!=null)?(rawA-rawB2)*m.lotesA:null;
+      const imp=(rawA!=null&&rawB2!=null&&m.lotesN!=null)?(rawA-rawB2)*m.lotesN:null;
       return {val,dv,imp,cD:dv,ref:vb,dec:1};
     }
     const val=faroConv(rawA,k,m.udsA);
@@ -4113,7 +4395,7 @@ function renderMatrix(){
     const rawB=keys?sumKeys(m.rb,keys):(m.rb?m.rb[MINKEY[k]]:null);
     const vb=faroConv(rawB,k,m.udsB);
     const dv=(val!=null&&vb!=null)?val-vb:null;
-    const imp=(rawA!=null&&rawB!=null&&m.lotesA!=null)?(rawA-rawB)*m.lotesA:null;
+    const imp=(rawA!=null&&rawB!=null&&m.lotesN!=null)?(rawA-rawB)*m.lotesN:null;
     const cD=(rawA!=null&&rawB!=null&&m.tiempoA>0&&m.tiempoB>0&&m.prodA!=null&&m.prodB!=null)?(m.prodA*(rawA/m.tiempoA)-m.prodB*(rawB/m.tiempoB)):null; // lógica inversa: reparto de la productividad por % de tiempo de la fase → Σ fases = prodA-prodB
     return {val,dv,imp,cD,ref:vb,dec:faroDec(k)};
   }
@@ -4123,7 +4405,7 @@ function renderMatrix(){
      desviada podia saturar de rojo sin haber movido el extremo de la escala. */
   function totCell(m){
     if(isMinV) return {val:m.tiempoA, dv:ST.single?null:m.dTiempo,
-      imp:ST.single?null:((m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null),
+      imp:ST.single?null:((m.dTiempo!=null&&m.lotesN!=null)?m.dTiempo*m.lotesN:null),
       cv:ST.single?null:m.dTiempo, ref:m.tiempoB, name:'Total del lote', k:'total', dec:1};
     if(isPctV){
       const aA=(m.tiempoA!=null&&m.lotesA!=null&&_PCTTA>0)?m.tiempoA*m.lotesA/_PCTTA*100:null;
@@ -4211,12 +4493,13 @@ function renderFaroDetail(area,faseK){
   const m=MODEL.find(x=>x.area===area);if(!m||!m.disponible){$('faroDetail').innerHTML='';return;}
   let name,valA,valB,col,dec,sA,sB,imp;
   // serie 12m de una fase/bloque EN LA UNIDAD ACTIVA del faro (tiempo/prod/objetivo oficial)
-  const faroDetSerie=(t,sh,keys,uk)=>ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let raw=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){raw+=v;any=true;}});if(!any)return null;return faroConv(raw,uk,r.uds_media_lote);});
+  const faroDetSerie=(t,sh,keys,uk)=>ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let raw=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){raw+=v;any=true;}});if(!any)return null;return faroConv(raw,uk,r[UDSC()]);});
   if(faseK==='prodcol'){ // columna de productividad del faro
     name='Productividad'; col=cssv('--brand'); dec=2;
     valA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA:null; valB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB:null;
-    const pk=(ST.corte==='efec')?'prod_efectiva_min_ud_media':'prod_total_min_ud_media';
-    const ps=(t,sh)=>ST.meses.map(mkey=>{const r=(((ST.index[t]||{})[mkey]||{})[sh]||{})[area];const v=r?r[pk]:null;return (v!=null&&!isNaN(v))?v:null;});
+    /* mapCorte() aplica el corte de tiempo y PRODC() elige la unidad: exactamente lo mismo que
+       hace la celda del mapa de calor, asi que los dos numeros ya no pueden discrepar. */
+    const ps=(t,sh)=>ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);const v=r?r[PRODC()]:null;return (v!=null&&!isNaN(v))?v:null;});
     sA=ps(curA.tienda,curA.shift); sB=ps(curB.tienda,curB.shift);
     imp=(!ST.single)?m.impacto:null;
   } else {
@@ -4230,7 +4513,7 @@ function renderFaroDetail(area,faseK){
     valA=faroConv(rawA,uk,m.udsA); valB=faroConv(rawB,uk,m.udsB);
     sA=faroDetSerie(curA.tienda,curA.shift,keys,uk); sB=faroDetSerie(curB.tienda,curB.shift,keys,uk);
     dec=faroDec(uk);
-    imp=(!ST.single&&rawA!=null&&rawB!=null&&m.lotesA!=null)?(rawA-rawB)*m.lotesA:null;
+    imp=(!ST.single&&rawA!=null&&rawB!=null&&m.lotesN!=null)?(rawA-rawB)*m.lotesN:null;
   }
   const d=(!ST.single&&valA!=null&&valB!=null)?valA-valB:null;
   const tr=sparkTrend(sA,true);
@@ -4248,7 +4531,7 @@ function renderFaroDetail(area,faseK){
     (ST.single?'':'<div class="fd-m"><div class="l">'+ST.nameB+'</div><div class="v">'+fmt(valB,dec)+'</div></div>'+
     '<div class="fd-m"><div class="l">Diferencia</div><div class="v" style="color:'+(d==null?'inherit':Math.abs(d)<eps?'inherit':d>0?'var(--bad)':'var(--good)')+'">'+(d==null?'—':sg(d)+fmt(d,dec))+'</div></div>'+
     '<div class="fd-m"><div class="l">Impacto / mes</div><div class="v" style="color:'+(imp==null?'inherit':imp>0?'var(--bad)':imp<0?'var(--good)':'inherit')+'">'+fmtImpact(imp)+'</div></div>')+
-    '<div class="fd-m"><div class="l">Nº de lotes</div><div class="v">'+fmt(m.lotesA,0)+'</div></div>'+
+    '<div class="fd-m"><div class="l">Nº de lotes</div><div class="v">'+fmt(m.lotesN,0)+'</div></div>'+
     '</div>'+
     '<div class="fd-chart"><div style="position:relative"><button class="png" data-png="cFaroDetail" data-pngname="faro_detalle"'+
       ' data-pngtitle="'+esc1(name+' · '+area)+'" data-pngsub="'+esc1([scnSub(),unitLbl].filter(Boolean).join(' · '))+'">⤓ PNG</button><div class="csub" style="margin-bottom:7px">Tendencia 12 meses ('+unitLbl+')</div><div class="chart" id="cFaroDetail" style="height:200px"></div></div><div class="fd-read">'+lectura+'</div></div></div>';
@@ -4292,6 +4575,9 @@ function areaColor(a){return AREA_COL[a]||'#8896ab';}
 
    El signo de contrib es el de dvUd, así que una celda que el faro pinta VERDE en min/ud
    no puede aparecer aquí nunca. */
+/* Por debajo de esto no hay nada que priorizar: son milesimas que se pintan como "+0,000" y
+   ocupan la seccion entera con una fila que no dice nada. */
+const PARETO_MIN=0.001;
 function paretoRows(){
   const av=viewAreas();
   const rows=paretoData().filter(o=>av.includes(o.area));
@@ -4320,11 +4606,31 @@ function renderPareto(){
   const uLbl=udName();          // min/ud MO o min/ud Mdona segun la unidad global
   const tEl=$('paretoTable');
   if(!data.length){
-    if(tEl)tEl.innerHTML='<tbody><tr><td style="padding:16px;color:var(--ink3);font-family:var(--ui);font-weight:600">'+ST.nameA+' no está por encima de '+ST.nameB+' en productividad en ninguna combinación área+fase. Nada que priorizar por aquí.</td></tr></tbody>';
+    /* Nada por encima de la referencia = va igual o mejor en todo. Es una buena noticia, no un
+       error: se dice claro y se enseña lo que mas se le acerca, para que la seccion no quede en
+       blanco. El rosco se esconde (no hay nada que repartir). */
+    /* Un panel y nada mas: ni tabla sin cabecera, ni boton de descarga de una tabla vacia, ni
+       una lista de combinaciones justo debajo de un titular que dice que no hay ninguna. */
+    if(tEl) tEl.innerHTML='<tbody><tr><td class="pt-vacio">'+
+      '<span class="pt-ok"><svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'+
+      '<span><b>'+esc1(ST.nameA)+' no pierde nada apreciable frente a '+esc1(ST.nameB)+'.</b>'+
+      '<span class="pt-vsub">Ninguna combinación de área y subproceso va por encima de la referencia, así que no hay nada que priorizar.</span></span>'+
+      '</td></tr></tbody>';
+    const _cbx=$('cParetoDonut')&&$('cParetoDonut').closest?$('cParetoDonut').closest('.cbox'):null;
+    if(_cbx) _cbx.style.display='none';
     try{Plotly.purge('cParetoDonut');}catch(e){}
-    $('paretoNote').textContent='Aquí solo salen las fases donde el analizado va peor por unidad que la referencia. Si no hay ninguna, queda vacía.';
+    /* la caja de la nota se esconde entera: si solo se vacia el texto queda el icono "i" solo,
+       con toda la pinta de un boton roto */
+    var _nb=$('paretoNoteBox'); if(_nb){ _nb.hidden=true; _nb.style.display='none'; }
+    $('paretoNote').textContent='';
+    if(tEl){ var _cin=tEl.closest?tEl.closest('.cbox-in'):null; if(_cin) _cin.classList.add('pt-sinbtn'); }
+    var _gp=$('secPareto')?$('secPareto').querySelector('.grid'):null; if(_gp) _gp.style.gridTemplateColumns='1fr';
     return;
   }
+  (function(){ const c=$('cParetoDonut')&&$('cParetoDonut').closest?$('cParetoDonut').closest('.cbox'):null; if(c) c.style.display='';
+    var nb=$('paretoNoteBox'); if(nb){ nb.hidden=false; nb.style.display=''; }
+    var ci=tEl&&tEl.closest?tEl.closest('.cbox-in'):null; if(ci) ci.classList.remove('pt-sinbtn');
+    var g=$('secPareto')?$('secPareto').querySelector('.grid'):null; if(g) g.style.gridTemplateColumns=''; })();
   const total=data.reduce((s,o)=>s+o.contrib,0);
   /* LAS IMPORTANTES son las que explican el 80 % del desvio: las primeras de la tabla, que ya va
      ordenada por aporte. Un solo criterio para ordenar y para marcar, asi que la marca nunca puede
@@ -4333,7 +4639,10 @@ function renderPareto(){
   let _c=0,n80=data.length;
   for(let i=0;i<data.length;i++){ _c+=data[i].contrib; if(total>0&&_c/total>=0.8){ n80=i+1; break; } }
   let cum=0;
-  let th='<thead><tr><th>Área · fase</th><th>Aporta ('+uLbl+')</th><th>%</th><th>Acum.</th></tr></thead><tbody>';
+  /* Con una tienda casi en linea, los aportes son milesimas: con 3 decimales salian todos
+     "+0,000" y la tabla no decia nada. Los decimales salen del tamaño del total. */
+  const decC=(total>=0.05)?3:(total>=0.005?4:5);
+  let th='<thead><tr><th>Área · subproceso</th><th>Aporta ('+uLbl+')</th><th>%</th><th>Acum.</th></tr></thead><tbody>';
   const rows=data.map((o,i)=>{cum+=o.contrib;
     const prio=(i<n80);
     const tip=o.faseName+' · '+o.area+': se desvía '+sg(o.dvUd)+fmt(o.dvUd,3)+' '+uLbl+' por unidad'
@@ -4341,9 +4650,9 @@ function renderPareto(){
       +' → aporta '+fmt(o.contrib,3)+' '+uLbl+' al desvío global'
       +(o.imp!=null?(' · '+fmtImpact(o.imp)+'/mes'):'')
       +(prio?' · de las que explican el 80% del desvío: empieza por aquí':'');
-    return '<tr class="'+(prio?'prio':'')+'" data-a="'+o.area+'" data-f="'+o.faseK+'" style="cursor:pointer" title="'+tip.replace(/"/g,'&quot;')+'"><td><span class="fdot" style="background:'+areaColor(o.area)+'"></span>'+o.area+' · '+o.faseName+'</td><td class="an">+'+fmt(o.contrib,3)+'</td><td>'+fmt(o.contrib/total*100,0)+'%</td><td>'+fmt(cum/total*100,0)+'%</td></tr>';
+    return '<tr class="'+(prio?'prio':'')+'" data-a="'+o.area+'" data-f="'+o.faseK+'" style="cursor:pointer" title="'+tip.replace(/"/g,'&quot;')+'"><td><span class="fdot" style="background:'+areaColor(o.area)+'"></span>'+o.area+' · '+o.faseName+'</td><td class="an">+'+fmt(o.contrib,decC)+'</td><td>'+fmt(o.contrib/total*100,0)+'%</td><td>'+fmt(cum/total*100,0)+'%</td></tr>';
   }).join('');
-  tEl.innerHTML=th+rows+'<tr class="totrow"><td>Total de más</td><td class="an">+'+fmt(total,3)+'</td><td>100%</td><td></td></tr></tbody>';
+  tEl.innerHTML=th+rows+'<tr class="totrow"><td>Total de más</td><td class="an">+'+fmt(total,decC)+'</td><td>100%</td><td></td></tr></tbody>';
   tEl.querySelectorAll('[data-a]').forEach(r=>r.addEventListener('click',()=>{renderFaroDetail(r.dataset.a,r.dataset.f);$('secMatrix').scrollIntoView({behavior:'smooth',block:'start'});}));
   // rosco por área
   const byArea={};data.forEach(o=>{byArea[o.area]=(byArea[o.area]||0)+o.contrib;});
@@ -4419,7 +4728,7 @@ function renderDesplTot(){
   let top=null,sumDT=0,sumT=0;ad.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.dDesplTot!=null&&(!top||m.dDesplTot>top.dDesplTot))top=m;sumDT+=m.desplTotA||0;sumT+=m.tiempoA||0;});
   const pct=sumT>0?sumDT/sumT*100:null;
   let n='';if(pct!=null)n+='En las áreas con desglose, el desplazamiento total es de media el <b>'+fmt(pct,0)+'%</b> del tiempo del lote de <b>'+ST.nameA+'</b>: mucho tiempo se va en moverse y enlazar, no solo en coger producto. ';
-  if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesA;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
+  if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
   n+='<b>Frescos y FYV</b> no se incluyen: su desplazamiento de preparación no se separa, así que el dato no sería comparable. ';
   n+='Suma arranque + desplazamiento + traslado + tiempo entre lotes. '+legendSem;
   $('desplTotNote').innerHTML=n;
@@ -4435,7 +4744,7 @@ function renderCont(){
   const tot7=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).p7A||0),0),totT=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).tiempoA||0),0);
   const pct=totT>0?tot7/totT*100:null;
   let n='';if(pct!=null)n+='El tiempo entre lotes supone de media un <b>'+fmt(pct,1)+'%</b> del tiempo del lote en <b>'+ST.nameA+'</b>. ';
-  if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesA;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
+  if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
   n+='Es tiempo que no prepara producto: esperas, cambios de área o el carro del siguiente lote sin preparar.';
   $('contNote').innerHTML=n+' '+legendSem;
 }
@@ -4447,8 +4756,8 @@ function valoresDe(m,metric){
   return {a:(m.prodA),b:(m.prodB),d:(m.dProd),dec:2,unit:udName(),eps:0.005};
 }
 function impactoDe(m,metric){
-  if(metric==='tiempo')return (m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null;
-  if(metric==='uds')return (m.dUds!=null&&m.lotesA!=null)?m.dUds*m.lotesA:null; // unidades/mes de diferencia
+  if(metric==='tiempo')return (m.dTiempo!=null&&m.lotesN!=null)?m.dTiempo*m.lotesN:null;
+  if(metric==='uds')return (m.dUds!=null&&m.lotesN!=null)?m.dUds*m.lotesN:null; // unidades/mes de diferencia
   return m.impacto;
 }
 function renderDiffControls(){
@@ -4480,7 +4789,7 @@ function renderDiff(){
       '<div class="spark-wrap"><div style="flex:1;height:36px;min-width:0">'+svgSpark(sA,sB,130,36,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
       '<div class="dr-vals"><div class="dr-pair"><span class="k">Analizado</span><span class="v an">'+fmt(v.a,v.dec)+'</span></div><div class="dr-pair"><span class="k">Referencia</span><span class="v rf">'+fmt(v.b,v.dec)+'</span></div></div>'+
       '<div class="dr-dif">'+deltaHtml+'</div>'+
-      '<div class="dr-imp"><div class="k">'+(isUds?'Dif. uds/mes':'Impacto/mes')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
+      '<div class="dr-imp"><div class="k">'+(isUds?'Dif. uds/mes':'Impacto/mes')+(nTiendasImp()>1?'<br><span style="font-weight:800">por tienda</span>':'')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
       '</div>';
   }).join('');
   if(nd.length)html+='<div class="drow nd"><div class="dr-area">'+nd.map(m=>m.area).join(', ')+'<small>no está en uno de los escenarios</small></div><div></div><div class="dr-vals"></div><div></div><div class="dr-imp"></div></div>';
@@ -4501,6 +4810,34 @@ function refreshTrMetricOptions(){const area=$('trArea').value,cur=$('trMetric')
   $('trMetric').innerHTML=allowed.map(k=>opt(k,METRICS[k].label,k===cur)).join('');if(!allowed.includes(cur))$('trMetric').value='prod';}
 function initTrend(){if(!ST._trInit){ST.trArea=$('trArea').value;ST._trInit=true;}refreshTrMetricOptions();}
 function renderTrendGen(mk,x){
+  /* El OBJETIVO no es una tienda: no tiene serie mensual de centro (vive en ST.index, por area, y
+     solo en el ultimo mes cerrado). Sin esto la grafica salia con las lineas de la referencia y
+     ningun dato propio, que parece que este rota. */
+  if(curA.tienda===OBJ_NAME){
+    /* El objetivo no tiene serie medida, pero SI tiene valor: su productividad es el objetivo (el
+       de Ajustes o el de la calculadora) y su caudal es el optimo, o sea diferencia cero. Un punto
+       en su mes, como una tienda recien abierta. */
+    const iObj=ST.meses.indexOf(ST.objMes||ST.meses[ST.meses.length-1]);
+    const esProd=(mk==='gprod'||mk==='gprodcp'||(GTREND[mk]&&GTREND[mk].isProd));
+    /* SU objetivo, el del fichero que estas analizando, no el oficial de flota. Si no se puede
+       recuperar (falta la tabla de las liebres), se cae al de flota como hasta ahora. */
+    let vObj=0;
+    if(esProd){ const _g=(window.__objGlobal?window.__objGlobal(OBJ_ROWS):null);
+                vObj=(_g!=null&&isFinite(_g)&&_g>0)?_g:objAct(); }
+    const yy=ST.meses.map((_,i)=>i===iObj?vObj:null);
+    const dcO=esProd?3:1;
+    Plotly.react('cTrend',[{x,y:yy,name:'Objetivo',type:'scatter',mode:'markers+text',
+      marker:{size:9,color:cssv('--bad')},text:yy.map(v=>v==null?'':fmt(v,dcO)),
+      textposition:'top center',textfont:{size:11,color:cssv('--ink2')},
+      hovertemplate:'%{y:.'+dcO+'f}<extra></extra>'}],
+      baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},showlegend:false,
+        xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},
+        yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false}}),PCFG);
+    $('trendTitle').textContent=esProd?('Objetivo de productividad ('+udName()+')'):(mk==='gcaudal'?'Caudal: el óptimo ES el objetivo':'Horas de más al mes');
+    $('trendSub').textContent=esProd?'el objetivo no tiene histórico: un solo valor'
+                                    :'por definición, el objetivo no se desvía de sí mismo: 0';
+    return;
+  }
   const tA=curA.tienda,tB=curB.tienda,lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
   const lay=baseLayout({height:H.trend+22,margin:{l:54,r:18,t:26,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2')},automargin:true,zeroline:false}});
   /* En pantalla estrecha se rotula un mes de cada dos: con doce cifras seguidas encima de la
@@ -4525,21 +4862,35 @@ function renderTrendGen(mk,x){
     traces.push({x,y:efA,name:'Efectiva',legendrank:1,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(efA,3),textposition:'top center',textfont:{size:8,color:lineA}});
     /* el valor del objetivo ya va escrito sobre la propia linea ("obj 0,306"): en la leyenda
        basta la palabra, si no se repite dos veces lo mismo. */
-    const _obj=objAct();
-    traces.push({x,y:x.map(()=>_obj),name:'Objetivo',legendrank:5,type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(_obj,3):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
+    /* ESCALON, no recta: el objetivo cambia de mes a mes mientras la tienda esta en rampa. */
+    /* Antes de abrir no hay objetivo: la linea empieza cuando empieza la tienda. */
+    const _apA=(typeof aperturaDe==='function')?aperturaDe(curA.tienda):null;
+    const _objSerie=ST.meses.map(function(k){
+      if(_apA){ var y=+k.slice(0,4), m=+k.slice(5,7);
+        if(new Date(y,m,0).getTime() < _apA.getTime()) return null; }
+      return objEsc(curA.tienda,k); });
+    const _obj=objEscA();
+    traces.push({x,y:_objSerie,name:'Objetivo',legendrank:5,type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash',shape:'hv'},text:_objSerie.map((v,i)=>i===0?'obj '+fmt(v,3):''),textposition:'top right',textfont:{size:9,color:bad},hovertemplate:'objetivo %{y:.3f}<extra></extra>'});
     title='Productividad efectiva y con paradas ('+udName()+')';sub=scnSub();
   }else if(mk==='gcaudal'){
-    const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h');
+    /* el optimo va detras del objetivo: si la tienda tiene margen, su optimo sube con el */
+    const real=genSerie(tA,'caudal_real_h'),op=genSerie(tA,'caudal_optimo_h').map(function(v,i){ return optCorr(v,tA,ST.meses[i]); });
     traces=[{x,y:op,name:'Óptimo',type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},
             {x,y:real,name:'Usado',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:6,color:lineA,line:{width:1.5,color:cssv('--panel')}},text:lbl(real,1),textposition:'top center',textfont:{size:8,color:lineA}}];
     title='Caudal real y óptimo (h/día)';sub=ST.nameA;
   }else{
-    const hm=genSerie(tA,'diferencia_caudal_h_total'),cols=hm.map(v=>v==null?ref:(v>0?bad:good));
+    /* diferencia = usado - optimo, y el optimo se ha movido: se rehace con las dos series en vez
+       de usar la columna del CSV, que lleva dentro el 0,34 de flota. */
+    const _rT=genSerie(tA,'caudal_real_h_total'), _oT=genSerie(tA,'caudal_optimo_h_total');
+    const hm=ST.meses.map(function(k,i){
+      if(_rT[i]==null||_oT[i]==null) return genSerie(tA,'diferencia_caudal_h_total')[i];
+      return _rT[i]-optCorr(_oT[i],tA,k); });
+    const cols=hm.map(v=>v==null?ref:(v>0?bad:good));
     traces=[{x,y:hm,name:'Horas de más/mes',type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:lineA,width:2.8,shape:'spline'},marker:{size:7,color:cols,line:{width:1.5,color:cssv('--panel')}},text:lbl(hm,1),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}];
     traces.push({x,y:x.map(()=>0),name:'Objetivo (0)',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.3,dash:'dash'},text:x.map((_,i)=>i===0?'obj 0':''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
     title='Horas de más al mes (real − óptimo)';sub=ST.nameA+' · positivo = más horas que el óptimo';
   }
-  Plotly.react('cTrend',traces,lay,PCFG);
+  Plotly.react('cTrend',traces,conModelo(lay,curA.tienda),PCFG);
   $('trendTitle').textContent=title;$('trendSub').textContent=sub;
 }
 function renderTrend(){
@@ -4561,9 +4912,20 @@ function renderTrend(){
   traces.push({x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}});
   // objetivo del área (Objetivos Tiendas Liebre) — línea roja discontinua, activable en la leyenda, aparece aun comparando dos tiendas
   const objRow=(typeof OBJ_ROWS!=='undefined'&&OBJ_ROWS)?OBJ_ROWS[area]:null;
-  let objVal=objRow?metricVal(mapCorte(objRow),area,mk):null; if(objVal!=null&&tf!==1)objVal*=tf;
-  if(objVal!=null&&isFinite(objVal))traces.push({x,y:x.map(()=>objVal),name:'Objetivo',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash'},text:x.map((_,i)=>i===0?'obj '+fmt(objVal,M.dec):''),textposition:'top right',textfont:{size:9,color:bad},hoverinfo:'skip'});
-  const lay=baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,autorange:true}});
+  /* SIN factor de unidades: metricVal ya devuelve el valor en la unidad activa, porque
+     PRODC()/UDSC() eligen la columna. SI con el coeficiente de improductividad: el objetivo de un
+     area de una tienda con margen sube igual que el global, y mes a mes, asi que es un escalon. */
+  const objBase=objRow?metricVal(mapCorte(objRow),area,mk):null;
+  const esProdM=(M&&(M.dyn==='prod'||M.perud||/min\/ud/.test(String(M.unit||''))));
+  /* Antes de abrir la tienda no hay objetivo que valga, igual que en la grafica global. */
+  const _apAr=(typeof aperturaDe==='function')?aperturaDe(curA.tienda):null;
+  const objSerie=(objBase==null||!isFinite(objBase))?null
+    : ST.meses.map(function(k){
+        if(_apAr){ var yy=+k.slice(0,4), mm2=+k.slice(5,7);
+          if(new Date(yy,mm2,0).getTime() < _apAr.getTime()) return null; }
+        return esProdM?(objBase*facEscenario(curA.tienda,k)):objBase; });
+  if(objSerie)traces.push({x,y:objSerie,name:'Objetivo',type:'scatter',mode:'lines+text',connectgaps:true,line:{color:bad,width:1.4,dash:'dash',shape:'hv'},text:objSerie.map((v,i)=>i===0?'obj '+fmt(v,M.dec):''),textposition:'top right',textfont:{size:9,color:bad},hovertemplate:'objetivo %{y:.'+M.dec+'f}<extra></extra>'});
+  const lay=conModelo(baseLayout({height:H.trend,margin:{l:54,r:18,t:24,b:46},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,autorange:true}}), curA.tienda);
   Plotly.react('cTrend',traces,lay,PCFG);
   $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+(area==='__global'?'':' · '+area);
   /* el subtitulo dice SOLO quien es quien: el rango de meses ya esta en el eje x, la unidad en
@@ -4593,8 +4955,8 @@ function renderFicha(){
   h+=fk('Unidades/lote',m.udsA,m.udsB,m.dUds,false,1,0,true);
   h+=fk('Preparación',m.prepA,m.prepB,m.dPrep,true,2,0.05);
   h+='</div>';
-  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_fase">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada fase</div><div class="csub">min/lote, en el orden del proceso · impacto = diferencia × nº de lotes</div></div></div>'+
-    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Fase</th><th>'+ST.nameA+'</th><th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes</th><th class="spk">12 meses</th></tr></thead><tbody>';
+  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_subproceso">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada subproceso</div><div class="csub">min/lote, en el orden del proceso · impacto = diferencia × nº de lotes</div></div></div>'+
+    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Subproceso</th><th>'+ST.nameA+'</th><th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes</th><th class="spk">12 meses</th></tr></thead><tbody>';
   fcomp.forEach(f=>{const a=fval(m.ra,f),b=fval(m.rb,f),d=(a!=null&&b!=null)?a-b:null,imp=(d!=null&&m.lotesA!=null)?d*m.lotesA:null;
     const mk=f.mk||FASE2MK[f.k],sA=serie(curA.tienda,curA.shift,m.area,mk),sB=serie(curB.tienda,curB.shift,m.area,mk);
     h+='<tr><td><span class="fdot" style="background:'+cssv(f.col)+'"></span>'+f.name+' <span class="micro">'+f.code+'</span></td><td class="an">'+fmt(a,2)+'</td><td>'+fmt(b,2)+'</td><td>'+deltaChip(d,true,2,'',0.05)+'</td><td>'+fmtImpact(imp)+'</td><td class="spk"><div class="tspark">'+svgSpark(sA,sB,96,26)+'</div></td></tr>';});
@@ -4622,6 +4984,7 @@ function renderFevo(){
   const x=xMeses(),realC='#4f8fe0',ref=cssv('--ref'),bad=cssv('--bad');
   const _all=[...sA,...sB].filter(v=>v!=null),_mn=_all.length?Math.min(..._all):0,_mx=_all.length?Math.max(..._all):1,_pad=((_mx-_mn)||_mx||1)*0.20;
   const lay=baseLayout({height:256,margin:{l:48,r:16,t:24,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.18,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:9},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,range:[_mn-_pad,_mx+_pad]}});
+  conModelo(lay,curA.tienda);
   plot('cFevo',[{x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},{x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}],lay);
 }
 function lecturaArea(m){
@@ -4633,7 +4996,7 @@ function lecturaArea(m){
   if(m.tiempoA!=null)p.push('Cada lote tarda <b>'+fmt(m.tiempoA,1)+' min</b> (referencia '+fmt(m.tiempoB,1)+').');
   if(m.compat&&m.ratioA!=null)p.push('De cada minuto de picking hay <b>'+fmt(m.ratioA,2)+'</b> de desplazamiento (referencia '+fmt(m.ratioB,2)+')'+(m.dRatio!=null&&m.dRatio>0.1?': hay margen en el recorrido':'')+'.');
   if(m.impacto!=null&&Math.abs(m.impacto)>=1)p.push('Impacto: <b>'+fmtImpact(m.impacto)+'/mes</b> '+(m.impacto>0?'de más':'ahorrados')+' frente a la referencia.');
-  if(m.faseTop&&Math.abs(m.faseTopVal)>0.05){ if(window.__GROUP)p.push('El bloque que más explica la diferencia es <b>'+macroOfFase(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote).'); else p.push('La fase que más explica la diferencia es <b>'+faseName(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote)'+(FASE_REVISAR[m.faseTop]?'; revisar '+FASE_REVISAR[m.faseTop].join(', ')+'.':'.')); }
+  if(m.faseTop&&Math.abs(m.faseTopVal)>0.05){ if(window.__GROUP)p.push('El bloque que más explica la diferencia es <b>'+macroOfFase(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote).'); else p.push('El subproceso que más explica la diferencia es <b>'+faseName(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote)'+(FASE_REVISAR[m.faseTop]?'; revisar '+FASE_REVISAR[m.faseTop].join(', ')+'.':'.')); }
   p.push('Situación: <b>'+ESTADO_LBL[m.estado]+'</b>.');
   return p.join(' ');
 }
@@ -4683,14 +5046,130 @@ function fmtUds(u){if(u==null)return '—';return u>=1000?fmt(u/1000,1)+'k uds':
    Fuentes: general.fase (260 tiendas) y, si viene vacia, __faFase() del CSV de Farolas (254).
    Coinciden en 253 de 254; la unica discrepancia es la tienda 4256 (general="Aprendiz",
    farolas="Roll out") y manda general, que es de donde sale el resto de la tarjeta. */
+/* ===== CAMBIOS DE MODELO =====
+   Se recorren los meses de la ventana y se recoge el que traiga fecha de cambio. El CSV publica
+   como mucho UN cambio por mes (medido: cero meses con mas de uno), asi que con esto esta todo. */
+function modName(m){ var t=String(m||'').trim(); var x=/^NTC\s*(\d+)$/i.exec(t); return x?('NTC '+x[1]):t; }
+function modNum(m){ var x=/(\d+)/.exec(String(m||'')); return x?x[1]:String(m||''); }
+/* La cadena de 24 meses de una tienda (la traen todos sus meses igual; vale el primero). */
+function hist24(t){
+  if(!t||!ST.gen||!ST.gen[t]) return '';
+  var g=ST.gen[t];
+  for(var mk in g){ if(g[mk]&&g[mk].cambios24) return g[mk].cambios24; }
+  return '';
+}
+function cambiosModelo(t){
+  var out=[]; if(!t||!ST.gen||!ST.gen[t]) return out;
+  /* 1) Si el CSV trae el historial de 2 anos, manda: incluye los cambios de fuera de la ventana,
+        que son justo los que faltaban en las graficas de 2 anos. Mismo filtro que abajo: cuenta
+        un cambio solo si el modelo de antes y el de despues son distintos. */
+  var h=hist24(t);
+  if(h){
+    h.split(';').forEach(function(p){
+      var q=p.split('|'); if(q.length<3) return;
+      var f=(q[0]||'').trim(), de=(q[1]||'').trim(), a=(q[2]||'').trim();
+      if(!f||!de||!a||de===a) return;
+      out.push({mk:f.slice(0,7), fecha:f, de:de, a:a, dir:(q[3]||'').trim()});
+    });
+    out.sort(function(x,y){ return x.fecha<y.fecha?-1:x.fecha>y.fecha?1:0; });
+    if(out.length) return out;
+  }
+  /* 2) Respaldo de siempre: mes a mes, dentro de la ventana. */
+  (ST.meses||[]).forEach(function(mk){
+    var g=ST.gen[t][mk]; if(!g||!g.cambioFecha) return;
+    /* Que haya fecha no basta. Un cambio cuenta si el contador del mes dice que lo hubo Y el
+       modelo del principio y el del final son distintos. Medido: 102 cambios de verdad y UNO
+       fantasma (fecha y dirección, n_cambios = 0 y el mismo modelo a los dos lados). */
+    if(!(g.nCambios>=1)) return;
+    if(!g.modIni||!g.modFin||g.modIni===g.modFin) return;
+    out.push({mk:mk, fecha:g.cambioFecha, de:g.modIni, a:g.modFin, dir:g.cambioDir});
+  });
+  return out;
+}
+/* Marcas para una grafica cuyo eje x son los meses de ST.meses EN ORDEN: en un eje de categorias
+   Plotly entiende la posicion por su indice, asi que la raya cae en el mes del cambio. */
+function marcasModelo(t){
+  var sh=[], an=[];
+  cambiosModelo(t).forEach(function(c){
+    var i=(ST.meses||[]).indexOf(c.mk); if(i<0) return;
+    var sube=(c.dir!=='REDUCCION');
+    sh.push({type:'line',xref:'x',yref:'paper',x0:i,x1:i,y0:0,y1:1,layer:'below',
+             line:{color:cssv('--ink3'),width:1,dash:'dot'}});
+    an.push({x:i,xref:'x',y:1,yref:'paper',yanchor:'bottom',showarrow:false,yshift:2,
+             _modelo:1,
+             text:(sube?'\u25b4 ':'\u25be ')+modNum(c.a),
+             font:{size:9,color:cssv('--ink3')},
+             hovertext:modName(c.de)+' \u2192 '+modName(c.a)+' el '+fechaCorta(c.fecha)});
+  });
+  return {shapes:sh, annotations:an};
+}
+/* ===== MARCAS PARA CUALQUIER EJE =====
+   'mapa' dice donde cae cada mes en el eje ('2026-07' -> 6, o -> 'Jul', o -> '2026-07-10' si el
+   eje es de fechas). 'saltar' son las posiciones que ya ha marcado otra serie: con dos años a la
+   vista, si los dos cambian en el mismo mes se queda el del año de delante y no se pisan. */
+window.__cambiosModelo=function(t){ try{ return cambiosModelo(t); }catch(e){ return []; } };
+window.__marcasModelo=function(t,mapa,color,saltar,dy){
+  var sh=[], an=[], hechos={};
+  try{
+    cambiosModelo(t).forEach(function(c){
+      if(!(c.mk in mapa)) return;
+      var x=mapa[c.mk]; if(x==null) return;
+      hechos[String(x)]=1;
+      var sube=(c.dir!=='REDUCCION');
+      sh.push({type:'line',xref:'x',yref:'paper',x0:x,x1:x,y0:0,y1:1,layer:'below',
+               line:{color:color,width:1,dash:'dot'},opacity:.85});
+      an.push({x:x,xref:'x',y:1,yref:'paper',yanchor:'bottom',showarrow:false,yshift:(dy||0)+2,
+               _modelo:1,
+               text:(sube?'\u25b4 ':'\u25be ')+modNum(c.a),font:{size:9,color:color}});
+    });
+  }catch(e){}
+  return {shapes:sh, annotations:an, hechos:hechos};
+};
+/* Mete las marcas en un layout ya hecho, sin pisar lo que hubiera. */
+function conModelo(lay,t){
+  try{ var m=marcasModelo(t); if(!m.shapes.length) return lay;
+    lay.shapes=(lay.shapes||[]).concat(m.shapes);
+    lay.annotations=(lay.annotations||[]).concat(m.annotations);
+    /* hueco arriba para la flecha: sin esto se corta contra el borde de la grafica */
+    if(lay.margin&&lay.margin.t!=null&&lay.margin.t<30) lay.margin.t=30;
+  }catch(e){}
+  return lay;
+}
+
+/* ===== FECHAS DE LA FICHA =====
+   El CSV las trae como "27/3/2026". Se pintan como 27-03-26, que es corto y no se confunde con
+   el formato americano. */
+function fechaDe(v){ var t=String(v||'').trim(); if(!t) return null;
+  var m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t); if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+  m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t);          if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  var d=new Date(t); return isNaN(d.getTime())?null:d; }
+function fechaCorta(v){ var d=(v instanceof Date)?v:fechaDe(v); if(!d) return '';
+  /* El MES EN TRES LETRAS, igual que en la tabla de caudal ("Ago 26"). Con "22-07-21" hay que
+     contar posiciones para saber cual es el mes, y tres fechas seguidas se leen como una fila de
+     numeros. */
+  var me=MESES_ES[d.getMonth()]||'';
+  me=me?(me.charAt(0).toUpperCase()+me.slice(1,3)):('0'+(d.getMonth()+1)).slice(-2);
+  return ('0'+d.getDate()).slice(-2)+' '+me+' '+String(d.getFullYear()).slice(2); }
+function masDias(d,n){ var x=new Date(d.getTime()); x.setDate(x.getDate()+n); return x; }
+/* Veterana a los 180 DIAS desde la apertura (no a los 6 meses: el corte es en dias). */
+const DIAS_VETERANA=180;
+function fechaVeterana(ap){ var d=fechaDe(ap); return d?masDias(d,DIAS_VETERANA):null; }
+
+function faseNtcLabel(f){ f=String(f||'').trim().toUpperCase();
+  return f==='VETERANA'?'Veterana':f==='APRENDIZ'?'Aprendiz':(f==='ROLLOUT'||f==='ROLL OUT')?'Roll out':''; }
 function faseTienda(t,gr){
-  var f=(gr&&gr.fase!=null)?String(gr.fase).trim():'';
+  /* fase_ntc manda. 'fase' es la columna vieja y discrepa; queda solo de respaldo. */
+  var f=(gr&&gr.faseNtc)?faseNtcLabel(gr.faseNtc):'';
+  if(!f) f=(gr&&gr.fase!=null)?String(gr.fase).trim():'';
   if(!f){ try{ f=(window.__faFase&&window.__faFase(t))||''; }catch(e){} }
   return f;
 }
 function faseLabel(f){ return (f==='Veterana'||f==='Roll out'||f==='Aprendiz')?f:''; }
 function faseBg(f){ return f==='Veterana'?'var(--brand-soft)':'var(--panel3)'; }
-/* la tienda es Veterana hoy, pero en el mes analizado aun no lo era */
+/* VETERANA A MITAD DE MES: fase_ntc dice VETERANA (ya ha pasado los 180 dias al cerrar el mes)
+   pero estado_veterana dice que no lo fue todo el mes. Son 75 meses-tienda de 2.784. Importa
+   porque ese mes mezcla dias de aprendiz con dias de veterana: ni el numero es comparable con
+   las veteranas ni deberia entrar en su media. */
 function faseAunNo(f,est){ return f==='Veterana' && est==='No veterana'; }
 /* texto de veterania para las fichas: la fase si la hay, y si no el binario de siempre */
 function faseTxt(t,gr,est){
@@ -4702,7 +5181,7 @@ function faseTxt(t,gr,est){
 function vetTag(est){if(est==='Veterana')return '<span class="rk-tag vet">veterana</span>';if(est==='No veterana')return '<span class="rk-tag nov">no veterana</span>';if(est==='Mixta/parcial')return '<span class="rk-tag">veteranía mixta</span>';if(est==='Sintética: todas')return '<span class="rk-tag">conjunto</span>';return '';}
 function estadoVet(t,mes,shift,area){if(area==='__global'){const c={};AREAS.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r.vet)c[r.vet]=(c[r.vet]||0)+1;});let best='',bn=0;for(const k in c)if(c[k]>bn){bn=c[k];best=k;}return best;}const r=rowTMSA(t,mes,shift,area);return r?(r.vet||''):'';}
 function lotesT(t,mes,shift,area){const list=area==='__global'?AREAS:[area];let s=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r.n_lotes!=null){s+=r.n_lotes;any=true;}});return any?s:null;}
-function unidadesEst(t,mes,shift,area){const list=area==='__global'?AREAS:[area];let s=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r.uds_media_lote!=null&&r.n_lotes!=null){s+=r.uds_media_lote*r.n_lotes;any=true;}});return any?s:null;}
+function unidadesEst(t,mes,shift,area){const list=area==='__global'?AREAS:[area];let s=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r[UDSC()]!=null&&r.n_lotes!=null){s+=r[UDSC()]*r.n_lotes;any=true;}});return any?s:null;}
 function rkSerie(t,area,shift,mk){return ST.meses.map(k=>valorTienda(t,mk,area,shift,k));}
 /* Catalogo de metricas del ranking. Los indicadores de FAROLAS se anaden con el prefijo
    "fa_" cuando el CSV de farolas (20 MB) ya ha aterrizado; hasta entonces el select va sin
@@ -4834,13 +5313,20 @@ function renderRank(){
   $('rkList').innerHTML=rkHead+top.map((o,i)=>{
     const isCur=curA&&String(o.t)===String(curA.tienda);
     let cls='flat',difTxt='';
+    /* Contra el OBJETIVO, cada tienda lleva el suyo: una recien abierta tiene margen y compararla
+       con el 0,34 de flota la pinta de rojo sin merecerlo. Contra otra tienda o contra un grupo,
+       la referencia es una sola y no cambia por fila. */
+    const _refFila=(ref===OBJ_NAME && (isProdMetric||(isGen&&G&&G.isProd)||(isFa&&FA&&FA.k==='Productividad_min_ud')))
+      ? objEsc(o.t,mes)*(rf!==1?rf:1)
+      : vRef;
     if(special){cls=o.val>0?'up':o.val<0?'down':'flat';}
-    else if(vRef!=null){const d=o.val-vRef;cls=Math.abs(d)<eps?'flat':(d*faSigno>0?'up':'down');difTxt=deltaChip(d,faSigno>0,dec,'',eps);}
+    else if(_refFila!=null){const d=o.val-_refFila;cls=Math.abs(d)<eps?'flat':(d*faSigno>0?'up':'down');difTxt=deltaChip(d,faSigno>0,dec,'',eps);}
     const lineColor=cls==='up'?cssv('--bad'):cls==='down'?cssv('--good'):null;
     const sA=isFa?(window.__faStoreSerie?window.__faStoreSerie(o.t,ST.meses,FA.k):ST.meses.map(()=>null))
       :(isGen?genSerie(o.t,G.calc||G.prop):rkSerie(o.t,area,shift,special?'prod':mk));
-    const sB=isFa?ST.meses.map(()=>vRef)
-      :(isGen?(ref===OBJ_NAME?ST.meses.map(()=>vRef):genSerie(ref,G.calc||G.prop)):rkSerie(ref,area,shift,special?'prod':mk));
+    const _serObj=()=>ST.meses.map(k=>objEsc(o.t,k)*(rf!==1?rf:1));
+    const sB=isFa?(ref===OBJ_NAME&&FA&&FA.k==='Productividad_min_ud'?_serObj():ST.meses.map(()=>vRef))
+      :(isGen?(ref===OBJ_NAME?(G&&G.isProd?_serObj():ST.meses.map(()=>vRef)):genSerie(ref,G.calc||G.prop)):rkSerie(ref,area,shift,special?'prod':mk));
     const tr=sparkTrend(sA,true);
     const valTxt=special?(sg(o.val)+fmt(o.val,dec)):fmt(o.val,dec);
     const subTxt=isFa?(FA.unit||''):(isGen?G.unit:(mk==='__imp'?'h/mes':(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio')));
@@ -4862,7 +5348,7 @@ function renderRank(){
       '<div class="dr-area"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3);margin-right:5px">#'+(i+1)+'</span>'+nom+(isCur?' <span style="color:var(--brand);font-size:10px">· activa</span>':'')+
         '<small>'+attrs+'</small></div>'+
       '<div class="spark-wrap" style="gap:8px"><div style="flex:1;height:40px;min-width:0">'+svgSpark(sA,sB,220,40,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
-      '<div class="dr-vals"><div class="dr-pair"><span class="k">'+_qLbl+'</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(vRef!=null?'<div class="dr-pair"><span class="k">'+((isGen&&!G.isProd&&ref!==OBJ_NAME)?'Media '+shortStore(ref):(ref===OBJ_NAME?'Objetivo':shortStore(ref)))+'</span><span class="v rf">'+fmt(vRef,dec)+'</span></div>':'')+'</div>'+
+      '<div class="dr-vals"><div class="dr-pair"><span class="k">'+_qLbl+'</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(_refFila!=null?'<div class="dr-pair"><span class="k">'+((isGen&&!G.isProd&&ref!==OBJ_NAME)?'Media '+shortStore(ref):(ref===OBJ_NAME?'Objetivo':shortStore(ref)))+'</span><span class="v rf">'+fmt(_refFila,dec)+'</span></div>':'')+'</div>'+
       '<div style="text-align:right">'+(difTxt||'<span class="delta na">—</span>')+'</div>'+
       '<div class="dr-imp"><div class="k">'+subTxt+'</div><div class="v '+valCls+'">'+valTxt+'</div></div>'+
       '</div>';
@@ -4906,12 +5392,12 @@ function answer(q){
   if(has('hola','buenas','ayuda','qué puedes','que puedes','cómo funciona','como funciona','qué sabes','que sabes','ejemplos'))
     return 'Puedo responderte con tus datos sobre: <b>por dónde empezar</b>, una <b>área</b> (Secos, Refrigerado, Congelado, Frescos, FYV…), la <b>productividad y el objetivo</b>, los <b>tiempos por lote</b>, el <b>ratio desplazamiento/picking</b>, el <b>desplazamiento total</b>, el <b>tiempo entre lotes</b>, las <b>unidades</b> y el <b>impacto al mes</b>. Escríbeme en lenguaje normal.';
   if(has('resum','cómo voy','como voy','qué tal','que tal','visión','vision','en general','balance')){
-    const t=byImp()[0],obj=objAct(),nMal=av.filter(m=>m.prodA!=null&&m.prodA>obj+0.003).length;
+    const t=byImp()[0],obj=objEscA(),nMal=av.filter(m=>m.prodA!=null&&m.prodA>obj+0.003).length;
     return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>: '+(t?'donde más margen hay es <b>'+t.area+'</b> ('+fmtImpact(t.impacto)+'/mes de más; lo explica '+causaText(t)+'). ':'no hay un área que destaque por perder tiempo. ')+(nMal>0?('<b>'+nMal+' de '+av.length+'</b> áreas están por encima del objetivo de productividad ('+fmt(obj,3)+' '+udName()+').'):'La productividad va en objetivo en casi todas las áreas.');
   }
   if(has('productividad','min/ud','min ud','objetivo','cumpl','meta')){
     const bs=[...av].filter(x=>x.prodA!=null); if(!bs.length)return 'Sin datos de productividad en estos escenarios.';
-    const best=[...bs].sort((a,b)=>a.prodA-b.prodA)[0],worst=[...bs].sort((a,b)=>b.prodA-a.prodA)[0],obj=objAct(),ok=bs.filter(m=>m.prodA<=obj+0.003).length;
+    const best=[...bs].sort((a,b)=>a.prodA-b.prodA)[0],worst=[...bs].sort((a,b)=>b.prodA-a.prodA)[0],obj=objEscA(),ok=bs.filter(m=>m.prodA<=obj+0.003).length;
     return 'Objetivo: <b>'+fmt(obj,3)+' '+udName()+'</b>. En '+ST.nameA+', la más rápida es <b>'+best.area+'</b> ('+fmt((best.prodA),3)+') y la más lenta <b>'+worst.area+'</b> ('+fmt((worst.prodA),3)+'). Cumplen el objetivo <b>'+ok+' de '+bs.length+'</b> áreas.';
   }
   if(has('mejores y peores','clasifica','clasificación','clasificacion','ranking de áreas','ranking de areas','ordena las áreas','ordena las areas','mejores áreas','peores áreas','mejores y peores áreas')){const bs=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(a.prodA)-(b.prodA));if(bs.length<2)return 'Sin datos suficientes de productividad.';const top=bs.slice(0,3).map(m=>m.area+' ('+fmt((m.prodA),3)+')').join(', ');const bot=bs.slice(-3).reverse().map(m=>m.area+' ('+fmt((m.prodA),3)+')').join(', ');return 'Por productividad en '+ST.nameA+' — <b>mejores</b>: '+top+'. <b>Peores</b>: '+bot+'.';}
@@ -4926,12 +5412,12 @@ function answer(q){
   if(s.includes('desplazamiento total')||s.includes('despl total')){const c=av.filter(m=>m.compat&&m.dDesplTot!=null);if(!c.length)return 'Sin desplazamiento total comparable.';const peor=[...c].sort((a,b)=>b.dDesplTot-a.dDesplTot)[0];return 'En desplazamiento total (arranque+desplazamiento+traslado+entre lotes), donde más se desvía es <b>'+peor.area+'</b> ('+sg(peor.dDesplTot)+fmt(peor.dDesplTot,1)+' min/lote).';}
   if(s.includes('tarda')||s.includes('largo')){const m=[...av].filter(x=>x.tiempoA!=null).sort((a,b)=>b.tiempoA-a.tiempoA)[0];return 'El lote más largo de <b>'+ST.nameA+'</b> es <b>'+m.area+'</b>: '+fmt(m.tiempoA,1)+' min/lote.';}
   if(s.includes('entre lote')||s.includes('continuidad')){const m=[...av].filter(x=>x.gaps.p7!=null).sort((a,b)=>b.gaps.p7-a.gaps.p7)[0];return 'En tiempo entre lotes, donde más se desvía <b>'+ST.nameA+'</b> es <b>'+m.area+'</b> ('+sg(m.gaps.p7)+fmt(m.gaps.p7,2)+' min vs '+ST.nameB+').';}
-  if(s.includes('tiempo')){const m=[...av].filter(x=>x.dTiempo!=null).sort((a,b)=>b.dTiempo-a.dTiempo)[0];return 'Donde más tiempo de más hay por lote es <b>'+m.area+'</b> ('+sg(m.dTiempo)+fmt(m.dTiempo,1)+' min). Fase que más explica: '+causaText(m)+'.';}
+  if(s.includes('tiempo')){const m=[...av].filter(x=>x.dTiempo!=null).sort((a,b)=>b.dTiempo-a.dTiempo)[0];return 'Donde más tiempo de más hay por lote es <b>'+m.area+'</b> ('+sg(m.dTiempo)+fmt(m.dTiempo,1)+' min). Subproceso que más explica: '+causaText(m)+'.';}
   if(s.includes('puntual')||s.includes('tendencia')||s.includes('mes')){return 'En la sección de tendencia puedes elegir área y métrica para ver la evolución de 12 meses de '+ST.nameA+' frente a '+ST.nameB+' y comprobar si la diferencia es puntual o viene de antes.';}
   if(s.includes('mejor')){const m=[...av].filter(x=>x.dProd!=null).sort((a,b)=>a.dProd-b.dProd)[0];if(m.dProd>=0)return 'Ningún área mejora con claridad a '+ST.nameB+'; la más cercana es '+m.area+'.';return '<b>'+m.area+'</b> es donde '+ST.nameA+' va mejor ('+fmt(m.dProd,3)+' min/ud).';}
   const r=[...av].filter(x=>x.impacto!=null).sort((a,b)=>(b.impacto||0)-(a.impacto||0)),t=r[0];
   if(!t||t.impacto<=0)return 'Con los datos actuales no hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';
-  return 'Empezaría por <b>'+t.area+'</b>: más impacto ('+fmtImpact(t.impacto)+'/mes de más). La fase que más lo explica es <b>'+causaText(t)+'</b>'+(t.faseTop&&FASE_REVISAR[t.faseTop]?', revisaría '+FASE_REVISAR[t.faseTop].join(', ')+'.':'.');
+  return 'Empezaría por <b>'+t.area+'</b>: más impacto ('+fmtImpact(t.impacto)+'/mes de más). El subproceso que más lo explica es <b>'+causaText(t)+'</b>'+(t.faseTop&&FASE_REVISAR[t.faseTop]?', revisaría '+FASE_REVISAR[t.faseTop].join(', ')+'.':'.');
 }
 
 /* ===== EXPORT ===== */
@@ -5018,7 +5504,18 @@ window.__pngPlotly=function(el,tit,sub,fname){
   if(lay.xaxis){ lay.xaxis.tickfont={size:26,family:F}; lay.xaxis.automargin=true; }
   if(lay.yaxis){ lay.yaxis.tickfont={size:26,family:F}; lay.yaxis.automargin=true;
     if(lay.yaxis.title) lay.yaxis.title.font={size:26,family:F,color:ink3}; }
+  /* Las flechas de cambio de modelo no son texto de la grafica: son marcas al margen. Si se las
+     lleva a 30 px como al resto, y ademas sin escalar su desplazamiento, se montan unas sobre
+     otras y tapan el titulo. Van a su tamaño y con el hueco que les toca. */
+  var _hayMod=false;
+  if(lay.annotations) lay.annotations.forEach(function(a){ if(a&&a._modelo) _hayMod=true; });
+  if(_hayMod){
+    lay.margin=lay.margin||{};
+    lay.margin.t=Math.max((lay.margin.t||0)*2.1, 96);
+  }
   if(lay.annotations) lay.annotations.forEach(function(a){
+    if(a&&a._modelo){ a.font=a.font||{}; a.font.size=22; a.font.family=F;
+      a.yshift=(typeof a.yshift==='number'?a.yshift:0)*2.4; return; }
     a.font=a.font||{};
     /* El texto de una anotacion puede llevar sus propios <span style="font-size:Npx">, y ese
        tamaño en linea gana sobre a.font.size: si solo se toca a.font.size, en la imagen el texto
@@ -5034,6 +5531,12 @@ window.__pngPlotly=function(el,tit,sub,fname){
   });
   if(lay.shapes) lay.shapes.forEach(function(x){ if(x.line) x.line.width=2; });
   var hayLeg=(lay.showlegend!==false);
+  /* Un rosco SIN leyenda en un lienzo de 1.800x1.020 sale con el circulo limitado por el alto y
+     rodeado de blanco: se ve pequeno. Con el lienzo casi cuadrado y los margenes justos, el
+     mismo rosco ocupa casi toda la imagen. (El de "Reparto por area" lleva leyenda abajo y se
+     queda como esta: ese ya estaba bien.) */
+  var soloTarta=(data.length>0 && data.every(function(t){ return t.type==='pie'; }));
+  if(soloTarta && !hayLeg) W=1150;
   /* itemwidth a escala de la imagen: con 30 px el simbolo quedaba diminuto al lado de una
      letra de 26 px y las entradas se veian pegadas */
   if(hayLeg) lay.legend={orientation:'h',xref:'paper',yref:'paper',x:0,xanchor:'left',y:1.02,yanchor:'bottom',
@@ -5043,7 +5546,8 @@ window.__pngPlotly=function(el,tit,sub,fname){
      'pad' se lo salta. Se dibuja despues sobre la imagen (__pngBandaUrl), que ademas es lo
      que hace que salga identico al de las capturas de html2canvas. */
   lay.title=undefined;
-  lay.margin={l:130,r:110,t:(hayLeg?86:26),b:((lay.xaxis&&lay.xaxis.tickangle)?152:100)};
+  lay.margin=(soloTarta&&!hayLeg)?{l:70,r:70,t:50,b:50}
+            :{l:130,r:110,t:(hayLeg?86:26),b:((lay.xaxis&&lay.xaxis.tickangle)?152:100)};
   lay.width=W; lay.height=H; lay.autosize=false;
   return Plotly.newPlot(tmp,data,lay,{displayModeBar:false,staticPlot:true})
     .then(function(){ return Plotly.toImage(tmp,{format:'png',width:W,height:H,scale:2}); })
@@ -5341,6 +5845,8 @@ const GEN_NUMC=['n_dias','uds_dia_media','uds_total_mes','tiempo_efectivo_min','
   // los dos objetivos, como dato
   'obj_mcd_min_ud','obj_mo_min_ud','obj_mo_equiv_min_ud'];
 function genRow(t,mk){return (ST.gen[t]||{})[mk]||null;}
+/* El factor no depende de la unidad, pero si de los datos: al recargarlos hay que olvidarlo. */
+function olvidaRampas(){ _facCache={}; _ampCache={}; _apCache={}; _nTCache={}; _ultDiaMs=null; }
 function loadGeneral(){
   if(!GENERAL_URL)return;
   window.__uniLoad(function(err,uni){
@@ -5353,7 +5859,23 @@ function loadGeneral(){
         (res.data||[]).forEach(r=>{
           const t=String(r.tienda||'').trim(),mk=mesKeyFromCell(r.mes);
           if(!t||!mk)return;
-          const o={center_name:r.center_name,region:r.region,zona:r.zona,fase:r.fase,model:r.model,estado:(r.estado_veterana||'').trim()};
+          /* fase_ntc es la BUENA: se calcula con los 180 dias desde apertura_ntc y cuadra con
+             flag_veterana. La columna 'fase' es la vieja y discrepa (La Almunia: 'Veterana' con
+             157 dias). Se guardan las dos y manda fase_ntc; 'fase' queda de respaldo. */
+          const o={center_name:r.center_name,region:r.region,zona:r.zona,fase:r.fase,model:r.model,estado:(r.estado_veterana||'').trim(),
+                   faseNtc:String(r.fase_ntc||'').trim(), apertura:String(r.apertura_ntc||'').trim(),
+                   /* Cambio de modelo DE ESE MES: el dia exacto, de que a que, y si sube o baja. */
+                   modIni:String(r.modelo_ini_mes||'').trim(), modFin:String(r.modelo_fin_mes||'').trim(),
+                   cambioFecha:String(r.fecha_cambio_modelo_mes||'').trim(),
+                   cambioDir:String(r.direccion_cambio_modelo_mes||'').trim(),
+                   /* Si el SQL lo publica, manda: lo calcula sobre los dias con lotes de verdad.
+                      Si no esta, el HTML lo saca de la apertura y del historial de modelo. */
+                   nCambios:numv(r.n_cambios_modelo_mes),
+                   /* Historial de cambios de modelo de los ULTIMOS 2 ANOS, en una sola cadena y
+                      repetido en todos los meses de la tienda. Es lo unico que hace falta para
+                      marcar el ano anterior en las graficas de 2 anos sin doblar el CSV. */
+                   cambios24:String(r.cambios_modelo_24m||'').trim(),
+                   factorObj:numv(r.factor_obj)};
           GEN_NUMC.forEach(c=>o[c]=numv(r[c]));
           (idx[t]=idx[t]||{})[mk]=o;
         });
@@ -5361,7 +5883,9 @@ function loadGeneral(){
            no estaran, y se queda el respaldo avisando en pantalla. */
         (function(){ for(const t in idx){ for(const mk in idx[t]){ const o=idx[t][mk];
             if(o.obj_mcd_min_ud>0&&o.obj_mo_min_ud>0){ OBJ.mcd=o.obj_mcd_min_ud; OBJ.mo=o.obj_mo_min_ud; OBJ.fromCsv=true; return; } } } })();
-        ST.gen=idx;ST.genReady=true;
+        ST.gen=idx;ST.genReady=true;olvidaRampas();
+        /* Farolas ya puede mover el objetivo de su caudal: la apertura de cada tienda esta aqui. */
+        try{ if(window.__faRampaCaudal) window.__faRampaCaudal(); }catch(e){}
         try{ if(window.__cdStoreNames) window.__cdStoreNames(); }catch(e){}   // Caudal ya puede poner el nombre largo del centro
         try{if(window.__buildAgg)window.__buildAgg();}catch(e){}  // ya hay zona/región: (re)construye agregadas geográficas
         let nfilas=0,ntiendas=0;for(const t in idx){if(!SYNTH.includes(t))ntiendas++;for(const mk in idx[t])nfilas++;}
@@ -5577,6 +6101,26 @@ function calcBaseMO(){ // base para el corte elegido, EN LA UNIDAD ACTIVA
   if(ST.calcCorte==='efec') return isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'+mm):globEfec();
   return isNaN(globReal())?estGlobalProd(ST.objTrim,'prod_total_min_ud_media'+mm):globReal();
 }
+/* EL GLOBAL DEL FICHERO DE OBJETIVOS, en la unidad activa.
+   loSaveObj() escribe la tabla multiplicada por k = objetivo / base, asi que el camino de vuelta
+   es base x k. k se recupera de cualquier area (es el mismo en todas; se toma la mediana para que
+   un area rara no lo mueva) y la base es el global OFICIAL de las liebres, calcBaseMO(). */
+window.__objGlobal=function(rowsObj){
+  try{
+    if(!rowsObj) return null;
+    var PC='prod_total_min_ud_media'+(window.__MERC?'_mcd':'');
+    var ks=[];
+    AREAS.forEach(function(a){
+      var ro=rowsObj[a], rl=ST.objTrim&&ST.objTrim[a];
+      if(ro&&rl&&rl[PC]>0&&ro[PC]>0) ks.push(ro[PC]/rl[PC]);
+    });
+    if(!ks.length) return null;
+    ks.sort(function(x,y){ return x-y; });
+    var k=ks[Math.floor(ks.length/2)];
+    var base=calcBaseMO();
+    return (base>0&&isFinite(base))?base*k:null;
+  }catch(e){ return null; }
+};
 function round3(x){return Math.round(x*1000)/1000;}
 function loSaveObj(){
   /* k se calcula con los valores EXACTOS, no con los que se ven. Redondear la base a 3 decimales y
@@ -5802,8 +6346,9 @@ function renderMonthly(){
     trim={real:ST.glob.trimGen[OFK('real')],efec:ST.glob.trimGen[OFK('efec')]};
     lbl='oficial';
   }else{
-    series=ST.meses.map(m=>{const r=ST.objMes[m]&&ST.objMes[m][area];return{m,real:r?r.prod_total_min_ud_media:NaN,efec:r?r.prod_efectiva_min_ud_media:NaN};});
-    const rt=ST.objTrim[area]; trim={real:rt?rt.prod_total_min_ud_media:NaN,efec:rt?rt.prod_efectiva_min_ud_media:NaN};
+    const _kr='prod_total_min_ud_media'+(window.__MERC?'_mcd':''), _ke='prod_efectiva_min_ud_media'+(window.__MERC?'_mcd':'');
+    series=ST.meses.map(m=>{const r=ST.objMes[m]&&ST.objMes[m][area];return{m,real:r?r[_kr]:NaN,efec:r?r[_ke]:NaN};});
+    const rt=ST.objTrim[area]; trim={real:rt?rt[_kr]:NaN,efec:rt?rt[_ke]:NaN};
     lbl='desglose';
   }
   const objL=objAct();
@@ -5841,9 +6386,9 @@ function rkMetrics(){
     {k:'g_efec',lbl:'Productividad global · efectiva (≤6)',get:t=>storeOf(t,'efec'),sec:t=>storeOf(t,'real'),obj:()=>isNaN(globEfec())?estGlobalProd(ST.objTrim,'prod_efectiva_min_ud_media'+(window.__MERC?'_mcd':'')):globEfec(),unit:'min/ud',dec:3},
   ];
   viewAreas().filter(a=>ST.objTrim[a]).forEach(a=>L.push({k:'pa_'+a,grp:'Productividad por área',lbl:aName(a),
-    get:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r.prod_total_min_ud_media:NaN;},
-    sec:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r.prod_efectiva_min_ud_media:NaN;},
-    obj:()=>ST.objTrim[a].prod_total_min_ud_media,unit:'min/ud',dec:3}));
+    get:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r['prod_total_min_ud_media'+(window.__MERC?'_mcd':'')]:NaN;},
+    sec:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r['prod_efectiva_min_ud_media'+(window.__MERC?'_mcd':'')]:NaN;},
+    obj:()=>ST.objTrim[a]['prod_total_min_ud_media'+(window.__MERC?'_mcd':'')],unit:'min/ud',dec:3}));
   viewAreas().filter(a=>ST.objTrim[a]).forEach(a=>L.push({k:'ta_'+a,grp:'Tiempo de lote por área',lbl:aName(a),
     get:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r.total_min_util_medio:NaN;},
     sec:t=>{const r=ST.stTrim[t]&&ST.stTrim[t][a];return r?r.total_min_efec_medio:NaN;},
@@ -5876,8 +6421,11 @@ function renderRanking(){
 }
 
 /* ---------- STORES ---------- */
-function stCorteVal(r){ if(!r)return NaN; if(ST.stCorte==='util')return r.prod_total_min_ud_media; if(ST.stCorte==='efec')return r.prod_efectiva_min_ud_media;
-  const a=r.prod_total_min_ud_media,b=r.prod_efectiva_min_ud_media; return (isNaN(a)||isNaN(b))?NaN:a-b; }
+/* La cabecera de esta tabla dice min/ud Mdona cuando toca; los numeros tienen que decir lo
+   mismo. El sufijo _mcd elige la columna gemela, igual que en todo el panel. */
+function stCorteVal(r){ if(!r)return NaN; const mm=window.__MERC?'_mcd':'';
+  if(ST.stCorte==='util')return r['prod_total_min_ud_media'+mm]; if(ST.stCorte==='efec')return r['prod_efectiva_min_ud_media'+mm];
+  const a=r['prod_total_min_ud_media'+mm],b=r['prod_efectiva_min_ud_media'+mm]; return (isNaN(a)||isNaN(b))?NaN:a-b; }
 function storeGlobCorte(t){ if(ST.stCorte==='util')return storeOf(t,'real'); if(ST.stCorte==='efec')return storeOf(t,'efec');
   const a=storeOf(t,'real'),b=storeOf(t,'efec'); return (isNaN(a)||isNaN(b))?NaN:a-b; }
 function globObjCorte(){ const mm=window.__MERC?'_mcd':'';
@@ -6571,6 +7119,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   var OTROS=[{name:'Tiendas liebre', test:function(r){ return isLiebre(r); }, need:function(){ return !!liebreSet(); }}];
   function liebreSet(){ try{ return (window.__liebreSet&&window.__liebreSet.size)?window.__liebreSet:null; }catch(e){ return null; } }
   function isLiebre(r){ var s=liebreSet(); return s?s.has(String(r.Tienda)):false; }
+  /* objetivo de productividad de LO QUE SE ESTA PINTANDO (null = el de flota) */
+  var _objProdSel=null;
   var AZUL='#3b82c4', AMBAR='#d9932b';
   var FONT='-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif';
 
@@ -6603,7 +7153,10 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
          conversion a MO los resuelve faObj()/dayIgual(), que leen lo que haya en Ajustes. */
       /* mcd:true = viene en unidades MERCADONA desde su origen, y aqui no se convierte nunca. Su
          objetivo es por tanto el de Mercadona, no el de la unidad que haya en Ajustes. */
-      {k:'Productividad_min_ud',label:'Productividad',l2:'Productividad',l3:'Prod.',unit:'min/ud',dec:3,mcd:true,get obj(){try{return objMCD();}catch(e){return 0.34;}},low:true},
+      /* El objetivo YA NO es el 0,34 pelado: es la media dia-igual del objetivo de cada
+         tienda-dia de lo que estas mirando. Para una tienda en regimen sale 0,34 clavado; para
+         una recien abierta o recien ampliada, el suyo. Lo pone _objProdSel antes de pintar. */
+      {k:'Productividad_min_ud',label:'Productividad',l2:'Productividad',l3:'Prod.',unit:'min/ud',dec:3,mcd:true,get obj(){try{return (_objProdSel!=null&&isFinite(_objProdSel))?_objProdSel:objMCD();}catch(e){return 0.34;}},low:true},
       {k:'Caudal',label:'Caudal',l2:'Caudal',l3:'Caudal',unit:'h/día',dec:2,obj:0,low:true},
       {k:'Ocupacion_pct',label:'Ocupación',unit:'%',dec:2,obj:null}
     ]}
@@ -6634,12 +7187,25 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   window.__faFase=function(t){ try{ for(var i=0;i<ROWS.length;i++) if(ROWS[i].Tienda===String(t)) return ROWS[i].Fase; }catch(e){} return null; };
   /* faView: 'tabla' (todos los indicadores en una pantalla) o 'cards' (los roscos y las graficas
      de siempre). Arranca en tabla, que es lo que se mira a diario. */
-  var ST={dim:'Global', val:'Veterana', scope:'vet', mes:null, per:'a2', refKind:'vet', refVal:null, faView:'tabla'};
+  var ST={dim:'Global', val:'Veterana', scope:'vet', mes:null, per:'a2', refKind:'vet', refVal:null, faView:'cards'};
   /* recordar la ultima vista de Farolas entre sesiones */
   function saveFa(){ try{ localStorage.setItem('javify_farolas_cfg', JSON.stringify({dim:ST.dim,val:ST.val,scope:ST.scope,per:ST.per,refKind:ST.refKind,refVal:ST.refVal,faView:ST.faView})); }catch(e){} }
   function loadFa(){ try{ var s=localStorage.getItem('javify_farolas_cfg'); return s?JSON.parse(s):null; }catch(e){ return null; } }
 
-  function num(v){ if(v==null)return null; v=(''+v).trim(); if(v==='')return null; var x=parseFloat(v.replace(/\s/g,'').replace(',','.')); return isNaN(x)?null:x; }
+  /* OJO CON EL PUNTO. El CSV viene en formato español: "1.331" son MIL TRESCIENTOS TREINTA Y UNO,
+     no 1,331. El parser de antes hacia parseFloat("1.331") = 1,331 y se comia tres ordenes de
+     magnitud. Medido en el fichero: 73.451 filas de Caudal_uds, 118 de Hora_Fin_TT_min y 7 de
+     Hora_Fin_TM_min con separador de miles. Una tienda que cerraba a las 22:11 (1.331 min) se
+     leia como si cerrara a las 00:01. Misma regla que numv() del nucleo. */
+  function num(v){
+    if(v==null)return null;
+    var s=(''+v).trim().replace(/\s/g,''); if(s==='')return null;
+    var hayPunto=s.indexOf('.')>=0, hayComa=s.indexOf(',')>=0;
+    if(hayPunto&&hayComa)      s=s.replace(/\./g,'').replace(',','.');   // 5.138,17 -> 5138.17
+    else if(hayComa)           s=s.replace(',','.');                     // 0,3118 -> 0.3118
+    else if(hayPunto&&/^-?\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,''); // 1.331 -> 1331
+    var x=parseFloat(s); return isNaN(x)?null:x;
+  }
   function mkeyOf(d){ var p=(''+d).split('/'); if(p.length<3)return null; return p[2]+'-'+('0'+p[1]).slice(-2); }
   function isoOf(d){ var p=(''+d).split('/'); if(p.length<3)return null; return p[2]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[0]).slice(-2); }
   function dOf(iso){ var p=iso.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
@@ -6733,9 +7299,27 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* Farolas mide como mide la app de control: unidades MERCADONA, siempre. El selector global
      MO/Mercadona no aplica aqui, asi que tampoco se convierte: la pestaña enseña el mismo numero
      se ponga lo que se ponga en Ajustes. */
+  /* OBJETIVO DIA-IGUAL. El 0,34 no vale para una tienda en rampa, y Farolas tiene el dato por
+     dias, asi que no hay que aproximar nada: cada fila lleva el objetivo de SU dia y se promedia
+     igual que el valor. Para un conjunto sale la media de los objetivos de sus tienda-dia, que es
+     con lo que hay que compararlo. */
+  function objDiaIgual(rows){
+    if(!window.__facDia) return null;
+    var s=0,n=0;
+    for(var i=0;i<rows.length;i++){ var r=rows[i]; if(!r.d)continue;
+      s+=window.__facDia(r.Tienda, r.d); n++; }
+    if(!n) return null;
+    var base=(window.__objMCDBase?window.__objMCDBase():0.34);
+    return base*(s/n);
+  }
   function dayIgual(rows,key){ var s=0,n=0; for(var i=0;i<rows.length;i++){ var v=rows[i][key]; if(v!=null&&!isNaN(v)){s+=v;n++;} }
     return n? s/n : null; }
-  function scopeOk(r){ if(ST.dim==='Global')return true; return ST.scope==='all'?true:(r.Fase==='Veterana'); }
+  /* El ambito ("solo veteranas" / "todas") sirve para recortar un CONJUNTO: una zona, una region,
+     un modelo. Sobre una sola tienda no recorta nada: o la deja entera o la borra entera. Y la
+     borraba: una tienda en roll-out tiene Fase='Roll out' en todas sus filas y salian las 16
+     farolas vacias aunque el CSV tuviera sus dias. */
+  function scopeOk(r){ if(ST.dim==='Global'||ST.dim==='Tienda')return true;
+    return ST.scope==='all'?true:(r.Fase==='Veterana'); }
   function dimMatch(r){ if(ST.dim==='Otros'){ var g=OTROS.filter(function(x){ return x.name===ST.val; })[0]; return g?!!g.test(r):false; }
     if(ST.dim==='Global') return ST.val===TODAS ? true : (r.Fase===ST.val);
     return r[ST.dim]===ST.val; }
@@ -6768,9 +7352,12 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
               Modelo:(r.Modelo||'').trim(), Fase:(r.Fase||'').trim(), mk:mkeyOf(r.Fecha), d:isoOf(r.Fecha) };
       if(!o.Tienda)continue;
       for(var j=0;j<M.length;j++){ o[M[j].k]=num(r[M[j].k]); }
+      /* unidades del dia: hacen falta para mover el objetivo del caudal (columna nueva del SQL) */
+      o.cdUds=num(r.Caudal_uds);
       if(o.mk)mset[o.mk]=1; ROWS.push(o); }
     ROWS.forEach(function(r){ if(r.Nombre&&r.Tienda)NAMES[r.Tienda]=r.Nombre; });
     MESES=Object.keys(mset).sort();
+    try{ ajustaCaudalRampa(); }catch(e){ console.warn('faRampaCaudal',e); }
     DIMS.forEach(function(d){ if(d.k==='Otros'){ DIMV[d.k]=otrosVals(); return; }
       /* Global no es una columna del CSV: son las fases que haya, con "Todas las tiendas" delante. */
       if(d.k==='Global'){ var fs={}; ROWS.forEach(function(r){ if(r.Fase)fs[r.Fase]=1; });
@@ -6780,6 +7367,27 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       else arr.sort(function(a,b){ return a.localeCompare(b,'es',{numeric:true}); });
       DIMV[d.k]=arr; }); }
 
+  /* ===== EL CAUDAL, CON EL OBJETIVO DE CADA DIA =====
+     Se guarda el valor crudo en Caudal0 y se recalcula Caudal. Una sola pasada, y solo cuando ya
+     se sabe la apertura de cada tienda (la trae el otro CSV, que llega por su cuenta). */
+  var _cdRampa=false;
+  function ajustaCaudalRampa(){
+    if(!ROWS.length || !window.__facDia) return false;
+    var base=(window.__objMCDBase?window.__objMCDBase():0.34), tocadas=0;
+    for(var i=0;i<ROWS.length;i++){
+      var r=ROWS[i];
+      if(r.Caudal0===undefined) r.Caudal0=r.Caudal;
+      if(r.Caudal0==null||isNaN(r.Caudal0)||r.cdUds==null||!r.d){ r.Caudal=r.Caudal0; continue; }
+      var f=window.__facDia(r.Tienda, r.d);
+      if(f===1){ r.Caudal=r.Caudal0; continue; }
+      r.Caudal=r.Caudal0 - r.cdUds*base*(f-1)/60;
+      tocadas++;
+    }
+    _cdRampa=true;
+    return tocadas;
+  }
+  /* lo llama el nucleo cuando los valores generales (apertura, modelo) han aterrizado */
+  window.__faRampaCaudal=function(){ try{ var n=ajustaCaudalRampa(); if(n)render(); return n; }catch(e){ return 0; } };
   function lastDay(){ var mx=null; for(var i=0;i<ROWS.length;i++){ var d=ROWS[i].d; if(d&&(mx===null||d>mx))mx=d; } return mx; }
   /* que periodo resumen las tarjetas y los roscos: 30 dias -> ultimos 30 dias reales; resto -> ultimo mes cerrado */
   function cardSel(){ if(ST.per==='d30'){ var to=lastDay(); if(to){ var from=addD(to,-29);
@@ -6997,6 +7605,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     el.querySelectorAll('[data-v]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-v')===ST.faView); }); }
 
   function renderBlocks(rows,rrows,same){
+    /* El objetivo que juzga las tarjetas sale de las MISMAS filas que su valor. */
+    try{ _objProdSel=objDiaIgual(rows); }catch(e){ _objProdSel=null; }
     if(ST.faView==='tabla'){
       /* Las GRAFICAS de linea si desaparecen en Resumen: purgarlas antes de tirar el HTML o
          Plotly se queda escuchando 'resize' sobre nodos ya desconectados. Los roscos se quedan,
@@ -7016,11 +7626,19 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       ' data-pngtitle="Farolas generales"'+
       ' data-pngsub="'+faEsc(groupName()+(same?'':' frente a '+refLabel())+' &middot; '+cardSel().label)+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div><div class="fa-rings" id="fa_rings"></div></div>';
     /* misma tarjeta que el Resumen y que Comparar tienda: un solo sitio que la construye */
-    h+='<div style="display:flex;flex-direction:column;gap:18px">'+faCards(GRUPOS,rows,rrows,same,null,false)+'</div>';
+    /* Mismo formato compacto que en "Comparar tienda": la tarjeta grande ocupaba el doble para
+       decir lo mismo y obligaba a bajar mucho para llegar a las graficas. */
+    h+='<div style="display:flex;flex-direction:column;gap:18px">'+faCards(GRUPOS,rows,rrows,same,null,true)+'</div>';
     /* los roscos viven dentro de este bloque: purgarlos ANTES de tirar el HTML, si no
        Plotly se queda con su listener de 'resize' sobre divs ya desconectados. */
     GLOB.forEach(function(m){ var old=$('fa_r_'+m.k); if(old&&old.data){ try{ Plotly.purge(old); }catch(e){} } });
     host.innerHTML='<div style="display:flex;flex-direction:column;gap:22px">'+h+'</div>';
+    /* la tarjeta compacta se puede pulsar (lo dice el cursor): lleva a su grafica, que en esta
+       vista esta mas abajo en la misma pagina */
+    host.querySelectorAll('.fa-card[data-k]').forEach(function(c){
+      c.addEventListener('click',function(){ var el=$('fa_ch_'+c.getAttribute('data-k'));
+        if(el){ var box=(el.closest&&el.closest('.fa-cbox'))||el; box.scrollIntoView({behavior:'smooth',block:'center'}); } });
+    });
     renderRings(rows,rrows,same); }
 
   var PERS={a2:{lab:'2 años',mode:'mes',n:24},m12:{lab:'12 meses',mode:'mes',n:12},
@@ -7110,7 +7728,42 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       if(vals.length){ var mn=Math.min.apply(null,vals), mx=Math.max.apply(null,vals), pad=Math.max(0.4,(mx-mn)*0.16);
         PR[pr]=[mn-pad, Math.min(100.8,mx+pad)]; } });
 
+    /* El objetivo de la linea discontinua tiene que ser el del PERIODO pintado, no el de las
+       tarjetas (que miran un mes). Mismo calculo, otras filas. */
+    try{
+      var _rp=[];
+      if(modo==='mes'){ var _set={}; keysA.concat(dosAnios?keysB:[]).forEach(function(k){_set[k]=1;});
+        ROWS.forEach(function(r){ if(r.mk&&_set[r.mk]&&dimMatch(r)&&scopeOk(r)) _rp.push(r); }); }
+      else { var _d0=keysA[0], _d1=keysA[keysA.length-1];
+        ROWS.forEach(function(r){ if(r.d&&r.d>=_d0&&r.d<=_d1&&dimMatch(r)&&scopeOk(r)) _rp.push(r); }); }
+      _objProdSel=objDiaIgual(_rp);
+    }catch(e){ _objProdSel=null; }
+
     var good=cvar('--good'), bad=cvar('--bad'), ink=cvar('--ink2'), grid=cvar('--line2'), panel=cvar('--panel'), line=cvar('--line'), inkS=cvar('--ink');
+    /* ===== CAMBIOS DE MODELO =====
+       Solo con UNA tienda: un conjunto no tiene un modelo. Se marcan los que caen DENTRO del
+       periodo que se esta viendo, con el color de su serie (verde el año de delante, rojo el de
+       atras) y, si los dos años cambian en el mismo mes, se queda el de delante. */
+    var MM_A=null, MM_B=null;
+    if(ST.dim==='Tienda' && window.__marcasModelo){
+      var mapA={}, mapB={};
+      if(modo==='mes'){
+        keysA.forEach(function(k,i){ mapA[k]=xs[i]; });
+        if(dosAnios) keysB.forEach(function(k,i){ mapB[k]=xs[i]; });
+      }else{
+        /* eje de fechas: la marca va en el DIA exacto del cambio, si cae en el rango pintado */
+        var d0=keysA[0], d1=keysA[keysA.length-1];
+        (window.__cambiosModelo(ST.val)||[]).forEach(function(c){
+          var f=String(c.fecha||''), p=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(f);
+          var iso=p?(p[3]+'-'+('0'+p[2]).slice(-2)+'-'+('0'+p[1]).slice(-2)):f;
+          if(iso>=d0 && iso<=d1) mapA[c.mk]=iso;
+        });
+      }
+      /* El de delante abajo y el de atras encima: asi se ven los dos aunque caigan en el mismo
+         mes, cada uno de su color, en vez de perderse el de atras. */
+      MM_A=window.__marcasModelo(ST.val, mapA, good, null, 0);
+      if(dosAnios) MM_B=window.__marcasModelo(ST.val, mapB, bad, null, 13);
+    }
     M.forEach(function(m){ var box=$('fa_ch_'+m.k); if(!box||!window.Plotly)return;
       var A=ser(m.k,keysA), B=dosAnios?ser(m.k,keysB):null;
       var hf='.'+(m.isMin?0:m.dec)+'f';
@@ -7139,11 +7792,15 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
              la del año en curso salia con el numero suelto y no se sabia cual era cual. */
           hovertemplate:(modo!=='mes'?'%{x|%d %b}<br>':'')+(dosAnios?(yA+': '):'')+(m.isMin?'%{customdata}<extra></extra>':'%{y:'+hf+'}<extra></extra>')});
       var shapes=[], anns=[];
+      if(MM_A){ shapes=shapes.concat(MM_A.shapes); anns=anns.concat(MM_A.annotations); }
+      if(MM_B){ shapes=shapes.concat(MM_B.shapes); anns=anns.concat(MM_B.annotations); }
       monthLines.forEach(function(k){ shapes.push({type:'line',x0:k,x1:k,yref:'paper',y0:0,y1:1,line:{color:grid,width:1}}); });
       if(m.obj!=null){ shapes.push({type:'line',xref:'paper',x0:0,x1:1,y0:m.obj,y1:m.obj,line:{color:ink,width:1.2,dash:'dash'},opacity:.7});
         anns.push({xref:'paper',x:1,y:m.obj,yref:'y',text:'Objetivo '+fmtVal(m,m.obj),showarrow:false,xanchor:'right',yanchor:'bottom',
           font:{size:11,color:ink,family:FONT},bgcolor:panel,opacity:.95}); }
-      var lay={margin:{l:56,r:14,t:10,b:(modo==='mes'?40:52)},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
+      /* Con marcas de modelo hace falta hueco arriba: con t:10 las flechas se cortaban. */
+      var _tTop=(anns.some(function(a){return a&&a._modelo;}))?(dosAnios?44:26):10;
+      var lay={margin:{l:56,r:14,t:_tTop,b:(modo==='mes'?40:52)},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
         font:{family:FONT,color:ink,size:12},showlegend:false,shapes:shapes,annotations:anns,hovermode:'x unified',
         /* la etiqueta de hover la pone igual para todas el envoltorio de Plotly del head */
         xaxis:{gridcolor:grid,automargin:true,tickfont:{size:11.5}},
@@ -7247,6 +7904,20 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(sel.kind==='Region') return {refKind:'Region', refVal:sel.val};
     return null;
   }
+  /* Lo pone el comparador mientras empuja su escenario aqui. Sin esto, el render que provoca ese
+     empujon llamaba a __compFromFa y devolvia al comparador la referencia que Farolas tuviera
+     puesta, pisando la que acababas de elegir: por eso "Objetivos Tiendas Liebre" se convertia
+     sola en "Tiendas Veteranas". */
+  var _desdeComp=false;
+  /* _faUser: has tocado algun control de Farolas en esta sesion. _faUlt: el ultimo escenario que
+     se dio por bueno. Sin las dos cosas, el primer pintado (o un repintado por unidad o por tema)
+     se cuela como si fuera una eleccion tuya. */
+  var _faUser=false, _faUlt=null;
+  function _faClave(){ return ST.dim+'|'+ST.val+'|'+ST.refKind+'|'+ST.refVal; }
+  document.addEventListener('pointerdown',function(e){
+    var t=document.getElementById('farolasTab');
+    if(t && e.target && t.contains(e.target)) _faUser=true;
+  },true);
   window.__faSetScenario=function(selA,selB,mesKey){
     if(!LOADED) return false;
     var a=_faApply(selA); if(!a) return false;      // el escenario "Objetivo" no tiene farolas
@@ -7258,14 +7929,21 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
                   || ((DIMV[b.refKind]||[]).indexOf(b.refVal)>=0);
            if(ok){ ST.refKind=b.refKind; ST.refVal=b.refVal; } }
     if(mesKey && MESES.indexOf(mesKey)>=0) ST.mes=mesKey;
+    _desdeComp=true;
     try{ render(); }catch(e){ console.warn('faSetScenario',e); }
+    finally{ _desdeComp=false; }
     return true;
   };
   function render(){ try{ saveFa(); }catch(e){}
     /* Que el comparador se ponga en el mismo escenario. Va aqui, en el unico sitio por el que
        pasan TODOS los cambios de Farolas (grupo, dimension, referencia), en vez de engancharlo a
        cada control por separado. */
-    try{ if(window.__compFromFa) window.__compFromFa(ST.dim, ST.val, ST.refKind, ST.refVal); }catch(e){}
+    try{
+      var _k=_faClave();
+      if(!_desdeComp && _faUser && _k!==_faUlt && window.__compFromFa){
+        _faUlt=_k; window.__compFromFa(ST.dim, ST.val, ST.refKind, ST.refVal);
+      } else { _faUlt=_k; }
+    }catch(e){}
     try{ render_(); }catch(e){ console.warn('farolas render',e);
       var st=$('fa_status'); if(st){ st.style.display='block'; st.innerHTML='<span style="color:var(--bad)">No se ha podido pintar Farolas: '+e.message+'</span>'; } } }
   function render_(){ syncOtros();               // por si la lista de liebres llego despues
@@ -7346,6 +8024,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var rrows=(rt&&!same)?ROWS.filter(function(r){ return r.mk===mk && rt(r); }):[];
     if(!rows.length){ host.innerHTML='<div style="font-size:12.5px;color:var(--ink3)">No hay farolas de '+selName(grp)+' en '+mesLab(mk)+'.</div>'; return false; }
     var hasRef=rrows.length>0;
+    /* MISMO objetivo que las tarjetas de la pestaña Farolas, calculado con ESTAS filas. Sin esto
+       el resumen del comparador heredaba el de la ultima pintada. */
+    try{ _objProdSel=objDiaIgual(rows); }catch(e){ _objProdSel=null; }
     /* "Pedido eficiente" (productividad y caudal) estaba excluido a proposito: con el conteo de
        unidades antiguo no cuadraba con el resto del dashboard y enfrentarlos confundia. Desde que
        la productividad se calcula en unidades MERCADONA los dos caminos dan lo mismo (contrastado
@@ -7401,7 +8082,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
           if(fc){
             if(fc.scope==='vet'||fc.scope==='all') ST.scope=fc.scope;
             if(fc.per&&PERS[fc.per]) ST.per=fc.per;
-            if(fc.faView==='tabla'||fc.faView==='cards') ST.faView=fc.faView;
+            /* el selector ya no existe: aunque haya un 'tabla' guardado de antes, se ignora */
+            ST.faView='cards';
           }
         }catch(e){ console.warn('farolas cfg',e); }
         LOADED=true; if(st)st.style.display='none';
