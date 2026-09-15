@@ -2108,14 +2108,20 @@ body.simple #mObj{display:none!important}
         <div class="rk-f"><label for="rkShift">Turno</label><select id="rkShift"></select></div>
         <div class="rk-f"><label for="rkVet">Veteranía</label><select id="rkVet"><option value="all">Todas</option><option value="vet">Solo veteranas</option><option value="roll">Solo roll out</option><option value="apr">Solo aprendices</option><option value="nov">Solo no veteranas</option></select></div>
         <div class="rk-f"><label for="rkRef">Referencia</label><select id="rkRef"></select></div>
-        <div class="rk-f"><label for="rkRegion">Región</label><input class="tin" id="rkRegion" list="rkRegionList" placeholder="Todas" autocomplete="off"><datalist id="rkRegionList"></datalist></div>
-        <div class="rk-f"><label for="rkZona">Zona</label><input class="tin" id="rkZona" list="rkZonaList" placeholder="Todas" autocomplete="off"><datalist id="rkZonaList"></datalist></div>
+        <div class="rk-f"><label for="rkRegion">Región</label><select id="rkRegion"></select></div>
+        <div class="rk-f" id="rkZonaF" style="position:relative"><label>Zonas</label>
+          <button class="cd-btn" id="rkZonaBtn" type="button" style="min-width:150px"><span class="cd-txt">Todas</span><span class="cd-cnt"></span></button>
+          <div class="cd-pop" id="rkZonaPop"></div></div>
         <div class="rk-f"><label for="rkModel">Modelo</label><select id="rkModel"></select></div>
         <div class="rk-f"><label>Orden</label><div class="rk-seg" id="rkOrder"><button data-o="worst" class="on">Peores primero</button><button data-o="best">Mejores primero</button></div></div>
         <div class="rk-f"><label for="rkLimit">Mostrar</label><select id="rkLimit"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="0">Todas</option></select></div>
+        <div class="rk-f" style="margin-left:auto"><label>Descargar</label>
+          <div style="display:flex;gap:7px">
+            <button class="cd-dlbtn" id="rkXls" type="button">⤓ Excel</button>
+            <button class="cd-dlbtn" id="rkPdf" type="button">⤓ PDF</button>
+          </div></div>
       </div>
       <div class="rk-list" id="rkList"></div>
-      <div class="notice info" style="margin-top:14px"><span class="ic">i</span><span id="rkNote">—</span></div>
     </div>
   </div>
 
@@ -2336,6 +2342,8 @@ body.simple #mObj{display:none!important}
     .cd-p-top .cd-srch{margin-bottom:6px}
     .cd-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:12.5px;cursor:pointer;color:var(--ink)}
     .cd-opt:hover{background:var(--panel2)}
+    /* fuera de la lista: no queda ninguna fila con ese valor con los demas filtros puestos */
+    .cd-opt.cd-no{display:none}
     .cd-opt input{width:15px;height:15px;accent-color:var(--brand);cursor:pointer}
     /* CABECERA FIJA DEL DESPLEGABLE (buscador + Todos/Ninguno).
        Antes solo .cd-p-act era sticky y no llevaba fondo: daba igual porque la lista se abria
@@ -2696,6 +2704,114 @@ body.simple #mObj{display:none!important}
     }).catch(function(e){ console.warn('descarga',e); });
   };
   window.__addDownload=window.__deliver;   // compatibilidad
+
+  /* ---------- utilidades de bytes ---------- */
+  var _CRCT=null;
+  function crcTabla(){ if(_CRCT)return _CRCT; var t=new Int32Array(256);
+    for(var n=0;n<256;n++){ var c=n; for(var k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c; }
+    return (_CRCT=t); }
+  function crc32(b){ var t=crcTabla(), c=-1; for(var i=0;i<b.length;i++) c=t[(c^b[i])&0xFF]^(c>>>8); return (c^-1)>>>0; }
+  function utf8(s){ return new TextEncoder().encode(String(s)); }
+  function b64bytes(d){ var s=atob(String(d).split(',')[1]||''), a=new Uint8Array(s.length);
+    for(var i=0;i<s.length;i++) a[i]=s.charCodeAt(i); return a; }
+  function u16(v){ return [v&255,(v>>8)&255]; }
+  function u32(v){ return [v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255]; }
+
+  /* ---------- ZIP (almacenado) ---------- */
+  function zipStore(files,mime){
+    var parts=[], cen=[], off=0, dosT=0, dosD=((2020-1980)<<9)|(1<<5)|1;
+    files.forEach(function(f){
+      var nm=utf8(f.name), d=f.data, c=crc32(d);
+      var h=[].concat([0x50,0x4b,0x03,0x04],u16(20),u16(0),u16(0),u16(dosT),u16(dosD),
+                      u32(c),u32(d.length),u32(d.length),u16(nm.length),u16(0));
+      parts.push(new Uint8Array(h),nm,d);
+      cen.push({nm:nm,c:c,len:d.length,off:off});
+      off += h.length+nm.length+d.length;
+    });
+    var ini=off, dir=[];
+    cen.forEach(function(e){
+      var h=[].concat([0x50,0x4b,0x01,0x02],u16(20),u16(20),u16(0),u16(0),u16(dosT),u16(dosD),
+                      u32(e.c),u32(e.len),u32(e.len),u16(e.nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(e.off));
+      dir.push(new Uint8Array(h),e.nm); off += h.length+e.nm.length;
+    });
+    var fin=new Uint8Array([].concat([0x50,0x4b,0x05,0x06],u16(0),u16(0),u16(cen.length),u16(cen.length),
+                                     u32(off-ini),u32(ini),u16(0)));
+    return new Blob(parts.concat(dir,[fin]),{type:mime||'application/zip'});
+  }
+
+  /* ---------- XLSX ----------
+     Una hoja, texto en linea (sin tabla de cadenas compartidas) y los numeros como numeros, que
+     es lo que permite sumar y ordenar en Excel sin tocar nada. */
+  function xEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,''); }
+  function colLetra(i){ var s=''; i++; while(i>0){ var m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); } return s; }
+  window.__xlsx=function(hoja,filas){
+    var rows=filas.map(function(fila,ri){
+      var cs=fila.map(function(v,ci){
+        var ref=colLetra(ci)+(ri+1);
+        if(typeof v==='number'&&isFinite(v)) return '<c r="'+ref+'"><v>'+v+'</v></c>';
+        return '<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+xEsc(v)+'</t></is></c>';
+      }).join('');
+      return '<row r="'+(ri+1)+'">'+cs+'</row>';
+    }).join('');
+    var nom=String(hoja||'Hoja1').replace(/[\\\/\*\?\[\]:]/g,' ').slice(0,31)||'Hoja1';
+    var P='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    var sheet=P+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+rows+'</sheetData></worksheet>';
+    var wb=P+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="'+xEsc(nom)+'" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var wbr=P+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>';
+    var rel=P+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var ct=P+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>';
+    return zipStore([
+      {name:'[Content_Types].xml',data:utf8(ct)},
+      {name:'_rels/.rels',data:utf8(rel)},
+      {name:'xl/workbook.xml',data:utf8(wb)},
+      {name:'xl/_rels/workbook.xml.rels',data:utf8(wbr)},
+      {name:'xl/worksheets/sheet1.xml',data:utf8(sheet)}
+    ],'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  };
+
+  /* ---------- PDF a partir de una imagen larga ----------
+     A4 apaisado. La imagen se parte en tantas paginas como haga falta y cada trozo entra como
+     un JPEG (DCTDecode), que es el unico formato que un PDF acepta sin comprimir nada a mano. */
+  window.__pdfDeImagen=function(img,bg){
+    var PW=842, PH=595, MG=24;
+    var esc=(PW-MG*2)/img.width;                 // px de imagen -> puntos
+    var altoPag=Math.max(40,Math.floor((PH-MG*2)/esc));
+    var nPag=Math.max(1,Math.ceil(img.height/altoPag)), pags=[];
+    for(var i=0;i<nPag;i++){
+      var alto=Math.min(altoPag,img.height-i*altoPag);
+      var c=document.createElement('canvas'); c.width=img.width; c.height=alto;
+      var x=c.getContext('2d'); x.fillStyle=bg||'#ffffff'; x.fillRect(0,0,c.width,c.height);
+      x.drawImage(img,0,-i*altoPag);
+      pags.push({b:b64bytes(c.toDataURL('image/jpeg',0.92)),w:c.width,h:alto});
+    }
+    var out=[], len=0, off=[];
+    function put(x){ var b=(typeof x==='string')?utf8(x):x; out.push(b); len+=b.length; }
+    function obj(n,cuerpo,stream){ off[n]=len; put(n+' 0 obj\n'+cuerpo+'\n');
+      if(stream){ put('stream\n'); put(stream); put('\nendstream\n'); } put('endobj\n'); }
+    put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    var kids=pags.map(function(_,i){ return (3+i*3)+' 0 R'; }).join(' ');
+    obj(1,'<</Type/Catalog/Pages 2 0 R>>');
+    obj(2,'<</Type/Pages/Kids['+kids+']/Count '+pags.length+'>>');
+    pags.forEach(function(pg,i){
+      var nP=3+i*3, nC=nP+1, nI=nP+2;
+      var w=pg.w*esc, h=pg.h*esc, y=PH-MG-h;
+      var cont='q '+w.toFixed(2)+' 0 0 '+h.toFixed(2)+' '+MG+' '+y.toFixed(2)+' cm /I0 Do Q';
+      obj(nP,'<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+PW+' '+PH+']/Resources<</XObject<</I0 '+nI+' 0 R>>>>/Contents '+nC+' 0 R>>');
+      obj(nC,'<</Length '+cont.length+'>>',cont);
+      obj(nI,'<</Type/XObject/Subtype/Image/Width '+pg.w+'/Height '+pg.h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+pg.b.length+'>>',pg.b);
+    });
+    var nObj=2+pags.length*3, xref=len;
+    var t='xref\n0 '+(nObj+1)+'\n0000000000 65535 f \n';
+    for(var n=1;n<=nObj;n++) t+=('0000000000'+off[n]).slice(-10)+' 00000 n \n';
+    t+='trailer\n<</Size '+(nObj+1)+'/Root 1 0 R>>\nstartxref\n'+xref+'\n%%EOF\n';
+    put(t);
+    return new Blob(out,{type:'application/pdf'});
+  };
 })();
 </script>
 <button class="fab" id="cfgFab" title="Ajustes" aria-label="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -3478,10 +3594,19 @@ function populate(){
      nada y se esconden en vez de quedarse ahí sin efecto. Con Zonas se deja Región, que sí acota. */
   window.__rkSyncScope=function(){ const sc=($('rkScope')||{}).value||'tienda', agr=(sc!=='tienda');
     const set=(id,ver)=>{ const e=$(id); if(!e)return; const f=e.closest?e.closest('.rk-f'):null; if(f)f.style.display=ver?'':'none'; };
-    set('rkVet',!agr); set('rkModel',!agr); set('rkZona',!agr); set('rkRegion',!agr||sc==='zona'); };
+    set('rkVet',!agr); set('rkModel',!agr);
+    /* Zonas sirve tanto rankeando tiendas como rankeando zonas; solo sobra con Regiones. */
+    set('rkZonaF', sc!=='region'); set('rkRegion',!agr||sc==='zona'); };
   {const e=$('rkScope'); if(e)e.addEventListener('change',window.__rkSyncScope);}
   try{ window.__rkSyncScope(); }catch(e){}
-  ['rkRegion','rkZona'].forEach(id=>$(id).addEventListener('input',renderRank));
+  /* al cambiar de region se reconstruye la lista de zonas (solo las suyas) y se repinta */
+  {const e=$('rkRegion'); if(e)e.addEventListener('change',()=>{ try{rkZonasUI();}catch(x){} renderRank(); });}
+  {const b=$('rkZonaBtn'), p=$('rkZonaPop');
+   if(b&&p){ b.addEventListener('click',ev=>{ ev.stopPropagation();
+       const abierto=p.classList.contains('open');
+       document.querySelectorAll('.cd-pop.open').forEach(x=>x.classList.remove('open'));
+       if(!abierto) p.classList.add('open'); });
+     document.addEventListener('click',()=>p.classList.remove('open')); }}
   syncShift('A');syncShift('B');
   preview();
 }
@@ -5019,12 +5144,94 @@ function valorTienda(t,mk,area,shift,mes){
 function impTienda(t,ref,area,shift,mes){const list=area==='__global'?AREAS:[area];let tot=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a),rr=rowTMSA(ref,mes,shift,a);if(r&&rr&&r.prod_total_min_ud_media!=null&&rr.prod_total_min_ud_media!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tot+=(r.prod_total_min_ud_media-rr.prod_total_min_ud_media)*r.uds_media_lote*r.n_lotes;any=true;}});return any?tot:null;}
 function prodSerieT(t,area,shift){return ST.meses.map(mk=>area==='__global'?prodGlobal(AREAS.map(a=>rowTMSA(t,mk,shift,a)).filter(Boolean)):metricVal(rowTMSA(t,mk,shift,area),area,'prod'));}
 function slopeBrecha(t,ref,area,shift){const sT=prodSerieT(t,area,shift),sR=prodSerieT(ref,area,shift);return slope(sT.map((v,i)=>(v!=null&&sR[i]!=null)?v-sR[i]:null));}
-function initRank(){fillRankAttrs();if(ST._rkInit)return;ST._rkInit=true;$('rkOrder').querySelectorAll('[data-o]').forEach(b=>b.addEventListener('click',()=>{ST.rkOrder=b.dataset.o;$('rkOrder').querySelectorAll('[data-o]').forEach(x=>x.classList.toggle('on',x.dataset.o===ST.rkOrder));renderRank();}));}
+/* ===== DESCARGAS DEL RANKING =====
+   Excel con los numeros tal cual (para seguir trabajando) y PDF con la foto de la pantalla
+   (para mandarlo o imprimirlo). Los dos llevan arriba QUE ranking es: sin eso, un fichero
+   suelto no dice ni la metrica ni el mes ni los filtros. */
+function rkSubtitulo(){
+  const M=ST._rkMeta||{};
+  return [M.ambito, M.mes, 'Región '+(M.region||'Todas'),
+    (M.zonasFuera&&M.zonasFuera.length)?('sin '+M.zonasFuera.join(', ')):'',
+    M.veterania, M.modelo, M.orden,
+    M.referencia?('Referencia: '+M.referencia):''].filter(Boolean).join(' · ');
+}
+function rkNombreFichero(){
+  const M=ST._rkMeta||{};
+  let n='ranking_'+pngSlug(M.metrica||'tiendas');
+  if(M.mes) n+='_'+pngSlug(M.mes);
+  if(M.region&&M.region!=='Todas') n+='_'+pngSlug(M.region);
+  return n;
+}
+function rkExcel(){
+  const M=ST._rkMeta||{}, filas=ST._rkRows||[];
+  if(!filas.length){ alert('No hay nada que descargar con estos filtros.'); return; }
+  const cab=['#', (M.cosa==='tienda'?'Tienda':(M.cosa==='zona'?'Zona':'Región')), 'Código',
+             'Región','Zona','Modelo',(M.cosa==='tienda'?'Veteranía':'Nº de tiendas'),
+             (M.unidad||'Valor'), 'Referencia', 'Diferencia'];
+  const hoja=[['Ranking · '+(M.metrica||'')],[rkSubtitulo()],[],cab].concat(filas);
+  try{ window.__deliver(rkNombreFichero()+'.xlsx', window.__xlsx('Ranking',hoja), false); }
+  catch(e){ console.warn('rk xlsx',e); alert('No se pudo generar el Excel: '+(e&&e.message||e)); }
+}
+function rkPDFdl(b){
+  const host=$('rkList');
+  if(!host||!host.children.length||typeof html2canvas==='undefined'){ alert('No hay nada que descargar con estos filtros.'); return; }
+  const M=ST._rkMeta||{}, bg=cssv('--panel','#ffffff');
+  const fin=(window.btnBusy?window.btnBusy(b):null); if(window.btnBusy&&!fin)return;
+  html2canvas(host,{backgroundColor:bg,scale:2,useCORS:true,logging:false,imageTimeout:0,
+      ignoreElements:(window.pngIgnore?pngIgnore(host):undefined)})
+    .then(function(cv){
+      const url=window.__pngBanda(cv,'Ranking · '+(M.metrica||''),rkSubtitulo(),bg);
+      return new Promise(function(res,rej){ const im=new Image(); im.onload=function(){res(im);}; im.onerror=rej; im.src=url; });
+    })
+    .then(function(im){ window.__deliver(rkNombreFichero()+'.pdf', window.__pdfDeImagen(im,bg), false); if(fin)fin(); })
+    .catch(function(e){ console.warn('rk pdf',e); if(fin)fin(); alert('No se pudo generar el PDF: '+(e&&e.message||e)); });
+}
+function initRank(){fillRankAttrs();if(ST._rkInit)return;ST._rkInit=true;
+  {const x=$('rkXls'); if(x)x.addEventListener('click',rkExcel);}
+  {const q=$('rkPdf'); if(q)q.addEventListener('click',()=>rkPDFdl(q));}$('rkOrder').querySelectorAll('[data-o]').forEach(b=>b.addEventListener('click',()=>{ST.rkOrder=b.dataset.o;$('rkOrder').querySelectorAll('[data-o]').forEach(x=>x.classList.toggle('on',x.dataset.o===ST.rkOrder));renderRank();}));}
+/* zonas de cada region (y de todas): lo que hace que al elegir R08 solo salgan sus zonas */
+var RK_ZON_REG={}, RK_ZON_ALL=[];
+function rkZonasDe(reg){ return (reg&&RK_ZON_REG[reg])?RK_ZON_REG[reg]:RK_ZON_ALL; }
+function rkZonaOut(){ if(!ST.rkZonaOut) ST.rkZonaOut=new Set(); return ST.rkZonaOut; }
+function rkZonaOk(z){ return !rkZonaOut().has(String(z||'')); }
+function rkZonaBtnSync(){
+  const b=$('rkZonaBtn'); if(!b)return;
+  const zs=rkZonasDe((($('rkRegion')||{}).value||'').trim());
+  const dentro=zs.filter(rkZonaOk), n=dentro.length;
+  b.querySelector('.cd-txt').textContent = (n===zs.length)?'Todas' : n===0?'Ninguna' : n===1?dentro[0] : n+' de '+zs.length;
+  b.querySelector('.cd-cnt').textContent = n+'/'+zs.length;
+  b.classList.toggle('cd-part', n>0&&n<zs.length);
+}
+function rkZonasUI(){
+  const pop=$('rkZonaPop'); if(!pop)return;
+  const zs=rkZonasDe((($('rkRegion')||{}).value||'').trim());
+  pop.innerHTML='<div class="cd-p-top"><div class="cd-p-act"><button data-a="all" type="button">Todas</button><button data-a="none" type="button">Ninguna</button></div></div><div class="cd-list"></div>';
+  const list=pop.querySelector('.cd-list');
+  zs.forEach(z=>{ const o=document.createElement('label'); o.className='cd-opt';
+    o.innerHTML='<input type="checkbox"><span></span>'; o.querySelector('span').textContent=z;
+    const c=o.querySelector('input'); c.checked=rkZonaOk(z);
+    c.addEventListener('change',()=>{ if(c.checked) rkZonaOut().delete(z); else rkZonaOut().add(z);
+      rkZonaBtnSync(); renderRank(); });
+    list.appendChild(o); });
+  pop.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',function(ev){ ev.stopPropagation();
+    const all=b.dataset.a==='all';
+    zs.forEach(z=>{ if(all) rkZonaOut().delete(z); else rkZonaOut().add(z); });
+    list.querySelectorAll('input').forEach(i=>i.checked=all); rkZonaBtnSync(); renderRank(); }));
+  if(!pop._wired){ pop._wired=1; pop.addEventListener('click',e=>e.stopPropagation()); }
+  rkZonaBtnSync();
+}
 function fillRankAttrs(){
   const reg=new Set(),zon=new Set(),mod=new Set();
-  ST.realStores.forEach(t=>{const o=ST.gen[t];if(!o)return;for(const mk in o){const r=o[mk];if(r.region)reg.add(r.region);if(r.zona)zon.add(r.zona);if(r.model&&r.model!=='CIERRE')mod.add(r.model);}});
-  const fillList=(id,set)=>{const el=$(id);if(!el)return;el.innerHTML=[...set].sort((a,b)=>String(a).localeCompare(String(b),'es')).map(v=>'<option value="'+String(v).replace(/"/g,'')+'">').join('');};
-  fillList('rkRegionList',reg);fillList('rkZonaList',zon);
+  RK_ZON_REG={};
+  ST.realStores.forEach(t=>{const o=ST.gen[t];if(!o)return;for(const mk in o){const r=o[mk];if(r.region)reg.add(r.region);if(r.zona)zon.add(r.zona);if(r.model&&r.model!=='CIERRE')mod.add(r.model);
+    if(r.region&&r.zona){ (RK_ZON_REG[r.region]=RK_ZON_REG[r.region]||new Set()).add(r.zona); } }});
+  const ordZ=(a,b)=>String(a).localeCompare(String(b),'es',{numeric:true});
+  RK_ZON_ALL=[...zon].sort(ordZ);
+  for(const k in RK_ZON_REG) RK_ZON_REG[k]=[...RK_ZON_REG[k]].sort(ordZ);
+  {const el=$('rkRegion'); if(el){ const cur=el.value||'';
+     el.innerHTML='<option value="">Todas</option>'+[...reg].sort(ordZ).map(v=>opt(v,v,v===cur)).join('');
+     if(cur&&[...el.options].some(o=>o.value===cur)) el.value=cur; }}
+  try{ rkZonasUI(); }catch(e){ console.warn('rkZonas',e); }
   const MORD=['NTC15','NTC30','NTC60','NTC90','NTC120','NTC150'],ord=v=>{const i=MORD.indexOf(v);return i<0?99:i;};
   const el=$('rkModel');if(el){const cur=el.value||'__all';const arr=[...mod].sort((a,b)=>ord(a)-ord(b)||String(a).localeCompare(b));el.innerHTML='<option value="__all">Todos</option>'+arr.map(v=>opt(v,v,v===cur)).join('');}
 }
@@ -5215,14 +5422,14 @@ function renderRank(){
   try{ if(window.__rkSyncScope) window.__rkSyncScope(); }catch(e){}
   const mk=$('rkMetric').value,area=$('rkArea').value,shift=$('rkShift').value,mes=$('rkMes').value,ref=$('rkRef').value;
   const fVet=$('rkVet').value;
-  const fReg=(($('rkRegion')||{}).value||'').trim(),fZon=(($('rkZona')||{}).value||'').trim(),fMod=($('rkModel')||{}).value||'__all';
+  const fReg=(($('rkRegion')||{}).value||'').trim(),fMod=($('rkModel')||{}).value||'__all';
   if(mk!==ST._lastRkMetric){if(mk==='__improve')ST.rkOrder='best';else if(mk==='__worsen')ST.rkOrder='worst';$('rkOrder').querySelectorAll('[data-o]').forEach(x=>x.classList.toggle('on',x.dataset.o===ST.rkOrder));ST._lastRkMetric=mk;}
   const special=mk==='__imp'||mk==='__worsen'||mk==='__improve';
   /* indicadores de FAROLAS (prefijo fa_): vienen del CSV de farolas, no del desglose.
      OJO: en varios de ellos MAS es MEJOR (Pedido 10, completo...), al contrario que en el
      resto del ranking; FA.low dice si lo bueno es bajar. */
   const isFa=mk.indexOf('fa_')===0, FA=isFa?(window.__FA_RK||{})[mk]:null;
-  if(isFa&&!FA){ $('rkList').innerHTML='<div class="combo-none">Los datos de Farolas aún se están cargando. Espera unos segundos y vuelve a elegir la métrica.</div>'; $('rkNote').textContent=''; return; }
+  if(isFa&&!FA){ $('rkList').innerHTML='<div class="combo-none">Los datos de Farolas aún se están cargando. Espera unos segundos y vuelve a elegir la métrica.</div>'; return; }
   const faSigno=isFa?(FA.low?1:-1):1;      // +1 = "peor" es mas alto; -1 = "peor" es mas bajo
   const isGen=(!isFa)&&GEN_METRICS.hasOwnProperty(mk),G=GEN_METRICS[mk],M=isFa?null:METRICS[mk];
   const isProdMetric=(!isFa)&&((isGen&&G.isProd)||mk==='prod'||(M&&M.perud));
@@ -5262,9 +5469,12 @@ function renderRank(){
        significan nada y los controles se esconden. Lo único que sigue teniendo sentido es
        acotar a una región cuando se rankean zonas. */
     if(scope==='zona'&&fReg) items=items.filter(o=>String(((ST.aggMeta||{})[o.t]||{}).region||'')===fReg);
+    /* rankeando ZONAS, quitar una zona de la lista tiene el mismo sentido que quitarla cuando se
+       rankean tiendas: se excluye del ranking entero. */
+    if(scope==='zona') items=items.filter(o=>rkZonaOk(String(o.t).replace(/^ZONE::/,'')));
   } else {
     if(fReg)items=items.filter(o=>o.gr&&o.gr.region===fReg);
-    if(fZon)items=items.filter(o=>o.gr&&o.gr.zona===fZon);
+    items=items.filter(o=>o.gr&&rkZonaOk(o.gr.zona));
     if(fMod!=='__all')items=items.filter(o=>o.gr&&o.gr.model===fMod);
   /* El filtro va por FASE, no por el binario del mes: "Solo veteranas" son las que HOY son
      veteranas (aunque en el mes analizado aun no lo fueran, que se avisa en la propia fila),
@@ -5275,7 +5485,7 @@ function renderRank(){
     else if(fVet==='nov') items=items.filter(o=>{var f=faseTienda(o.t,o.gr); return f==='Roll out'||f==='Aprendiz';});
   }
   const _qCosa=esAgr?(scope==='zona'?'zona':'región'):'tienda';
-  if(!items.length){$('rkList').innerHTML='<div class="combo-none">Ninguna '+_qCosa+' cumple los filtros en esta combinación.</div>';$('rkNote').textContent='Relaja los filtros.';return;}
+  if(!items.length){$('rkList').innerHTML='<div class="combo-none">Ninguna '+_qCosa+' cumple los filtros en esta combinación. Relaja los filtros.</div>';return;}
   const worst=ST.rkOrder==='worst';
   /* faSigno invierte el orden en los indicadores donde MAS es MEJOR */
   items.sort((a,b)=>(worst?(b.val-a.val):(a.val-b.val))*faSigno);
@@ -5310,6 +5520,7 @@ function renderRank(){
   const metricLabel=isFa?(FA.unit||'valor'):(isProdMetric?udName():(isGen?G.unit:(special?(mk==='__imp'?'h / mes':mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
   const _qLbl=esAgr?(scope==='zona'?'Zona':'Región'):'Tienda';
   const rkHead='<div class="difhead"><span>'+_qLbl+'</span><span>Tendencia 12 meses</span><span>'+_qLbl+' / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
+  const _exp=[];
   $('rkList').innerHTML=rkHead+top.map((o,i)=>{
     const isCur=curA&&String(o.t)===String(curA.tienda);
     let cls='flat',difTxt='';
@@ -5344,6 +5555,12 @@ function renderRank(){
       : [o.gr&&o.gr.region,o.gr&&o.gr.zona,o.gr&&o.gr.model,vetTxt?'<span style="white-space:nowrap">'+vetTxt+'</span>':''].filter(Boolean).join(' · ');
     const meStyle=isCur?' style="border-color:var(--brand-bd);background:var(--brand-soft)"':'';
     const nom=_am?_am.label:((o.gr&&o.gr.center_name)?o.gr.center_name:('Tienda '+o.t));
+    /* la fila, en crudo, para Excel: los mismos numeros de la pantalla pero como numeros */
+    const _r3=v=>(v==null||isNaN(v))?'':Math.round(v*1e6)/1e6;
+    _exp.push([ i+1, nom, _am?'':String(o.t),
+      _am?'':String((o.gr&&o.gr.region)||''), _am?'':String((o.gr&&o.gr.zona)||''),
+      _am?'':String((o.gr&&o.gr.model)||''), _am?String(_am.nTiendas||''):String(vetTxt||'').replace(/<[^>]*>/g,''),
+      _r3(o.val), _r3(_refFila), _r3(_refFila==null?null:(o.val-_refFila)) ]);
     return '<div class="drow '+cls+'"'+meStyle+' data-t="'+String(o.t).replace(/"/g,'')+'">'+
       '<div class="dr-area"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3);margin-right:5px">#'+(i+1)+'</span>'+nom+(isCur?' <span style="color:var(--brand);font-size:10px">· activa</span>':'')+
         '<small>'+attrs+'</small></div>'+
@@ -5353,13 +5570,21 @@ function renderRank(){
       '<div class="dr-imp"><div class="k">'+subTxt+'</div><div class="v '+valCls+'">'+valTxt+'</div></div>'+
       '</div>';
   }).join('');
+  ST._rkRows=_exp;
   $('rkList').querySelectorAll('[data-t]').forEach(r=>r.addEventListener('click',()=>{setCombo('tA',r.dataset.t);$('mA').value=mes;$('sA').value=(isGen?'global':shift);preview();setMode('comp');analyze();}));
   const lbl=isFa?(FA.label+' · farolas oficiales'):isGen?G.label+' (centro)':mk==='__imp'?'horas de oportunidad frente a '+shortStore(ref):mk==='__worsen'?'tiendas que más empeoran frente a '+shortStore(ref)+' (12 meses)':mk==='__improve'?'tiendas que más mejoran frente a '+shortStore(ref)+' (12 meses)':M.label;
-  const fIn=[fReg||null,fZon||null,fMod!=='__all'?fMod:null].filter(Boolean).join(' · ');
-  const vetLbl=fVet==='vet'?' · solo veteranas':fVet==='roll'?' · solo roll out':fVet==='apr'?' · solo aprendices'
-    :fVet==='nov'?' · solo no veteranas (roll out + aprendiz)':'';
-  const ambito=isFa?('media día-igual del CSV de Farolas · '+(FA.low?'menos es mejor':'más es mejor')):(isGen?'valores globales del centro (CSV general)':(area==='__global'?'global (todas las áreas, ponderado del desglose)':'área '+area+' · '+shiftLabel(shift)));
-  $('rkNote').innerHTML='Ranking por <b>'+lbl+'</b> · '+ambito+' · '+ST.mesLabel[mes]+vetLbl+(fIn?' · '+fIn:'')+'. '+(worst?'Peores primero.':'Mejores primero.')+(vRef!=null?(isFa?(' Rojo peor que '+(ref===OBJ_NAME?('el objetivo ('+fmt(vRef,dec)+(FA.unit||'')+')'):shortStore(ref))+', verde mejor.'):(isGen?' Rojo peor que el objetivo ('+fmt(vRef,G&&G.isProd?3:1)+'), verde mejor.':' Rojo peor que '+shortStore(ref)+', verde mejor.')):'')+' Pulsa una tienda para abrirla en el comparador.';
+  /* La nota de debajo del ranking se ha quitado: repetia lo que ya dicen los selectores de
+     arriba y la cabecera de la tabla. Lo que decia sigue haciendo falta para el pie de las
+     descargas (Excel y PDF), asi que se guarda en vez de pintarse. */
+  const _zOut=[...rkZonaOut()].filter(z=>rkZonasDe(fReg).indexOf(z)>=0).sort();
+  const vetLbl=fVet==='vet'?'solo veteranas':fVet==='roll'?'solo roll out':fVet==='apr'?'solo aprendices'
+    :fVet==='nov'?'solo no veteranas (roll out + aprendiz)':'';
+  const ambito=isFa?('media día-igual de Farolas · '+(FA.low?'menos es mejor':'más es mejor')):(isGen?'valores globales del centro':(area==='__global'?'global (todas las áreas, ponderado del desglose)':'área '+area+' · '+shiftLabel(shift)));
+  ST._rkMeta={ metrica:lbl, ambito:ambito, mes:ST.mesLabel[mes], region:fReg||'Todas',
+    zonasFuera:_zOut, modelo:(fMod!=='__all'?fMod:''), veterania:vetLbl,
+    orden:(worst?'Peores primero':'Mejores primero'), unidad:metricLabel,
+    referencia:(vRef!=null?(refLbl+' '+fmt(vRef,dec)):''), cosa:_qCosa,
+    cabecera:[_qLbl, _qLbl+' / Referencia', 'Diferencia', metricLabel] };
 }
 
 /* ===== ASISTENTE FLOTANTE ===== */
@@ -6703,7 +6928,12 @@ function dimDropdown(d){
   btn.addEventListener('click',e=>{ e.stopPropagation(); const isOpen=pop.classList.contains('open'); closePops();
     if(!isOpen){ pop.classList.add('open'); encajar(pop); verSeleccion(pop,list); } });
   f.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
-    SEL[d.k]=all?new Set(OPTS[d.k]):new Set(); list.querySelectorAll('input').forEach(i=>i.checked=all); syncBtn(d.k); render(); }));
+    /* "Todos" = todos los que se pueden elegir ahora; "Ninguno" deja el filtro sin marcar, que
+       en filtered() significa "no filtra" (lo de siempre). */
+    SEL[d.k]=all?new Set(OPTS[d.k]):new Set();
+    list.querySelectorAll('input').forEach(i=>{ const o=i.closest('.cd-opt'); i.checked=all&&!(o&&o.classList.contains('cd-no')); });
+    if(all&&AV&&AV[d.k]) SEL[d.k]=new Set(OPTS[d.k].filter(v=>AV[d.k].has(v)));
+    syncBtn(d.k); render(); }));
   const srch=f.querySelector('.cd-srch');
   if(srch)srch.addEventListener('input',()=>{ const q=cdNorm(srch.value); f.querySelectorAll('.cd-opt').forEach(o=>o.style.display=(o.dataset.search||cdNorm(o.textContent)).includes(q)?'':'none'); });
   return f;
@@ -6742,8 +6972,13 @@ function verSeleccion(pop,list){
   }catch(e){}
 }
 function syncBtn(k){ const btn=document.querySelector(`#cd_filts .cd-btn[data-dim="${k}"]`); if(!btn)return;
-  const n=SEL[k].size, tot=OPTS[k].length;
-  btn.querySelector('.cd-txt').textContent = n===tot?'Todos' : n===0?'Ninguno' : n===1?optLabel(k,[...SEL[k]][0]) : n+' seleccionados';
+  /* sobre lo que SE PUEDE elegir ahora mismo: decir "12/365 dias" cuando solo hay 28 dias
+     posibles no informa de nada */
+  const posibles=(AV&&AV[k])?AV[k]:null;
+  const lista=posibles?OPTS[k].filter(v=>posibles.has(v)):OPTS[k];
+  const marcadas=SEL[k].size?lista.filter(v=>SEL[k].has(v)):lista;
+  const n=marcadas.length, tot=lista.length;
+  btn.querySelector('.cd-txt').textContent = n===tot?'Todos' : n===0?'Ninguno' : n===1?optLabel(k,marcadas[0]) : n+' seleccionados';
   btn.querySelector('.cd-cnt').textContent = n+'/'+tot;
   btn.classList.toggle('cd-part', n>0 && n<tot);
 }
@@ -6806,6 +7041,39 @@ function periodLabel(k){ return TIME==='dia'?diaLabel(k) : TIME==='semana'?semLa
 function cmpTime(a,b){ return TIME==='dia'?(a<b?-1:a>b?1:0):((+a)-(+b)); }
 function filtered(){ return ROWS.filter(r=>{ if(ONLY_RR&&!r.tiene)return false;
   for(const d of FDIMS){ const s=SEL[d.k]; if(s.size && !s.has(r[d.k]))return false; } return true; }); }
+/* ===== QUE PUEDE OFRECER TODAVIA CADA FILTRO =====
+   Para el filtro X: los valores de X que aparecen en alguna fila que pasa TODOS los demas
+   filtros. Una sola pasada: 0 fallos -> la fila cuenta para todos; 1 fallo -> cuenta solo para
+   el filtro en el que falla (asi ese filtro se puede seguir ampliando). */
+function disponibles(){
+  const av={}; for(let j=0;j<FDIMS.length;j++) av[FDIMS[j].k]=new Set();
+  if(!ROWS) return av;
+  for(let i=0;i<ROWS.length;i++){
+    const r=ROWS[i];
+    if(ONLY_RR&&!r.tiene) continue;
+    let n=0, fallo=null;
+    for(let j=0;j<FDIMS.length;j++){ const k=FDIMS[j].k, sl=SEL[k];
+      if(sl.size && !sl.has(r[k])){ n++; if(n>1) break; fallo=k; } }
+    if(n===0){ for(let j=0;j<FDIMS.length;j++){ const k=FDIMS[j].k; av[k].add(r[k]); } }
+    else if(n===1) av[fallo].add(r[fallo]);
+  }
+  return av;
+}
+let AV={};
+/* Esconde de cada lista lo que ya no es posible y recalcula los rotulos de los botones. El
+   buscador usa style.display y esto una clase, asi que se combinan sin pisarse. */
+function syncFilterOpts(){
+  AV=disponibles();
+  const host=$('cd_filts'); if(!host)return;
+  FDIMS.forEach(d=>{
+    const btn=host.querySelector('.cd-btn[data-dim="'+d.k+'"]'); if(!btn)return;
+    const caja=btn.closest('.cd-f'); if(!caja)return;
+    const set=AV[d.k]||new Set();
+    caja.querySelectorAll('.cd-opt').forEach(o=>{ const v=o.dataset.val;
+      o.classList.toggle('cd-no', v!==undefined && !set.has(v)); });
+    syncBtn(d.k);
+  });
+}
 function newB(){ return {ancla:0,horario:0,real:0,rr:0,nrr:0}; }
 function addRow(b,r){ b.ancla+=r.ancla||0; b.horario+=r.horario||0; b.real+=r.real||0; if(r.tiene&&r.rr!=null){ b.rr+=r.rr; b.nrr++; } }
 function finish(b){ b.rrv=b.nrr>0?b.rr:null;
@@ -6833,7 +7101,9 @@ function tableGroups(rows){ const gf=geoFields(), m=new Map();
 }
 
 /* ---------- render ---------- */
-function render(){ if(!LOADED)return; const rows=filtered();
+function render(){ if(!LOADED)return;
+  try{ syncFilterOpts(); }catch(e){ console.warn('caudal opciones',e); }
+  const rows=filtered();
   // cada tabla/gráfica se pinta AISLADA: un fallo en una nunca bloquea a las demás (ni desplaza el layout con un banner de error)
   const safe=(fn,l)=>{ try{ fn(); }catch(e){ console.error('caudal render '+l,e); } };
   safe(()=>renderChart(chartAgg(rows)),'chart'); safe(()=>renderTable(rows),'table');
@@ -7855,12 +8125,21 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       if(lay.xaxis.type!=='date' && nx>=10){ lay.xaxis.tickangle=-45; lay.xaxis.tickfont.size=23; }
       else if(lay.xaxis.type==='date'){ lay.xaxis.tickangle=0; } }
     if(lay.yaxis){ lay.yaxis.tickfont={size:27,family:FONT}; lay.yaxis.automargin=true; }
-    if(lay.annotations&&lay.annotations.length) lay.annotations.forEach(function(a){ a.font=a.font||{}; a.font.size=26; });
+    /* Las flechas de cambio de modelo no son texto de la grafica: son marcas al margen y llevan
+       su propio tamaño y su propio hueco (ver el comentario de arriba). */
+    var _hayMod=false;
+    if(lay.annotations&&lay.annotations.length) lay.annotations.forEach(function(a){ a.font=a.font||{};
+      if(a._modelo){ _hayMod=true;
+        a.font.size=22; a.font.family=FONT;
+        /* x3 para que los dos anios no se toquen, y +60 para dejar la leyenda debajo */
+        a.yshift=60+(typeof a.yshift==='number'?a.yshift:0)*3;
+        return; }
+      a.font.size=26; });
     if(lay.shapes) lay.shapes.forEach(function(s){ if(s.line)s.line.width=2; });
     /* espacio arriba: solo la banda de la leyenda (el titulo va fuera de la grafica) */
     var tH = 0, lH = 66;
     var nxx=(data[0]&&data[0].x)?data[0].x.length:0, rot=(lay.xaxis&&lay.xaxis.type!=='date'&&nxx>=10);
-    lay.margin={l:132,r:110,t:(tH+lH+26),b:(rot?168:104)};
+    lay.margin={l:132,r:110,t:(tH+lH+26)+(_hayMod?70:0),b:(rot?168:104)};
     /* el titulo se dibuja DESPUES sobre la imagen (window.__pngBandaUrl), igual que en el
        resto de descargas: pedirselo a Plotly lo sube y lo corta por arriba. */
     lay.title=undefined;
