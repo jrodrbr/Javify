@@ -2040,11 +2040,11 @@ body.simple #mObj{display:none!important}
         <div class="sec-s">La preparación separada en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse), con su mix y ratio. Frescos y FYV no se separan.</div>
       </div></div>
       <div class="grid g2" style="margin-bottom:16px">
-        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/ud</div><div class="csub">coger producto · analizado frente a referencia</div></div></div><div class="chart" id="cPick"></div></div></div>
-        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDespl">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento · min/lote</div><div class="csub">moverse por el área · analizado frente a referencia</div></div></div><div class="chart" id="cDespl"></div></div></div>
+        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/ud</div><div class="csub" id="pickSubA">coger producto</div></div></div><div class="chart" id="cPick"></div></div></div>
+        <div class="cbox"><div class="cbox-in"><button class="png" data-png="cDespl">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Desplazamiento · min/lote</div><div class="csub" id="pickSubB">moverse por el área</div></div></div><div class="chart" id="cDespl"></div></div></div>
       </div>
       <div class="ctitle" style="margin-bottom:4px">Equilibrio picking / desplazamiento por área</div>
-      <div class="csub" style="margin-bottom:12px">qué parte de la preparación es cada cosa, y el ratio desplazamiento ÷ picking frente a la referencia</div>
+      <div class="csub" style="margin-bottom:12px" id="ratioSub">qué parte de la preparación es cada cosa, y el ratio desplazamiento ÷ picking</div>
       <div class="ratio-grid" id="ratioGrid"></div>
       <div class="notice info" style="margin-top:14px"><span class="ic">i</span><span id="pickNote">—</span></div>
     </div>
@@ -2095,6 +2095,7 @@ body.simple #mObj{display:none!important}
   <!-- ================= RANKING ================= -->
   <div id="rank" style="display:none">
     <div class="sec" style="margin-top:4px">
+      <div class="card rk-box"><div class="cpad">
       <div class="sec-hd"><div>
         <div class="sec-n">Ranking de tiendas</div>
         <div class="sec-h">Prioriza dónde ir, con criterio</div>
@@ -2115,12 +2116,13 @@ body.simple #mObj{display:none!important}
         <div class="rk-f"><label for="rkModel">Modelo</label><select id="rkModel"></select></div>
         <div class="rk-f"><label>Orden</label><div class="rk-seg" id="rkOrder"><button data-o="worst" class="on">Peores primero</button><button data-o="best">Mejores primero</button></div></div>
         <div class="rk-f"><label for="rkLimit">Mostrar</label><select id="rkLimit"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option><option value="150">Top 150</option><option value="0">Todas</option></select></div>
-        <div class="rk-f" style="margin-left:auto"><label>Descargar</label>
+        <div class="rk-f"><label>Descargar</label>
           <div style="display:flex;gap:7px">
             <button class="cd-dlbtn" id="rkXls" type="button">⤓ Excel</button>
             <button class="cd-dlbtn" id="rkPdf" type="button">⤓ PDF</button>
           </div></div>
       </div>
+      </div></div>
       <div class="rk-list" id="rkList"></div>
     </div>
   </div>
@@ -3646,7 +3648,12 @@ function smartName(s,other){
   const parts=[];if(dT||(!dT&&!dM&&!dS))parts.push(shortStore(s.tienda));if(dM)parts.push(mesCorto(s.mesKey,!sameYear));if(dS)parts.push(shiftLabel(s.shift));if(!parts.length)parts.push(shortStore(s.tienda));return parts.join(' · ');
 }
 function syncAutoNames(){['A','B'].forEach(w=>{const inp=$('n'+w);if(inp&&inp.dataset.touched!=='1')inp.value=smartName(scn(w),scn(w==='A'?'B':'A'));});}
-function resolveNames(){const A=scn('A'),B=scn('B'),_nA=$('nA'),_nB=$('nB'),cA=_nA?_nA.value.trim():'',cB=_nB?_nB.value.trim():'';ST.nameA=cA||smartName(A,B);ST.nameB=cB||smartName(B,A);if(ST.nameA===ST.nameB){ST.nameA+=' (analizado)';ST.nameB+=' (ref.)';}}
+function resolveNames(){const A=scn('A'),B=scn('B'),_nA=$('nA'),_nB=$('nB'),cA=_nA?_nA.value.trim():'',cB=_nB?_nB.value.trim():'';ST.nameA=cA||smartName(A,B);ST.nameB=cB||smartName(B,A);
+  /* Los sufijos "(analizado)" y "(ref.)" estan para distinguir dos lados que se llaman igual.
+     Si los dos lados son EL MISMO escenario no hay dos lados: es una ficha individual y el
+     nombre se queda limpio. */
+  const _mismo=(A.tienda===B.tienda&&A.mesKey===B.mesKey&&A.shift===B.shift);
+  if(!_mismo&&ST.nameA===ST.nameB){ST.nameA+=' (analizado)';ST.nameB+=' (ref.)';}}
 function preview(){syncAutoNames();resolveNames();
   var a=$('pvA'),b=$('pvB'); if(a)a.textContent=pickerName('A'); if(b)b.textContent=pickerName('B');
   autoAnalyze();}
@@ -3928,7 +3935,11 @@ function renderAll(){
   pintar('tendencia',renderTrend,'cTrend');
   pintar('asistente',initChat);
   // modo ficha (A=B): oculta las secciones puramente comparativas (impacto, ratios, ficha por área)
-  ['secDiff','secPareto','secPick','secDesplTot','secCont','secFicha'].forEach(id=>{const e=$(id);if(e)e.style.display=ST.single?'none':'';});
+  /* En ficha individual solo se van las dos secciones que SON la comparacion (sin referencia no
+     hay ni diferencia ni prioridad). El resto -picking/desplazamiento, el tiempo que no prepara
+     producto y la radiografia por area- son datos de la tienda y se quedan. */
+  ['secDiff','secPareto'].forEach(id=>{const e=$(id);if(e)e.style.display=ST.single?'none':'';});
+  ['secPick','secDesplTot','secCont','secFicha'].forEach(id=>{const e=$(id);if(e)e.style.display='';});
   /* red de seguridad: si alguna seccion estaba oculta al pintar, al aparecer hay que remedir */
   requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
 }
@@ -4810,8 +4821,27 @@ function renderPareto(){
 
 /* ===== barras semánticas (analizado verde mejor / rojo peor; referencia gris) ===== */
 const legendSem='<span style="color:var(--good);font-weight:700">■ mejor</span> · <span style="color:var(--bad);font-weight:700">■ peor</span> · <span style="color:var(--ref);font-weight:700">■ referencia</span>';
+/* La leyenda de colores no dice nada cuando no hay referencia: las barras van todas del color
+   de la tienda porque no hay con que compararlas. */
+function legSem(){ return ST.single?'':legendSem; }
+/* Subtitulo de una grafica comparada: en ficha individual, el nombre de la tienda y ya. */
+function refSub(base){
+  if(ST.single) return base||(typeof shortStore==='function'?shortStore(curA.tienda):'');
+  return base?(base+' · analizado frente a referencia'):'analizado frente a referencia'; }
 function barGroupSem(id,kA,kB,areas,dec,h,eps){
   const yA=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kA];}),yB=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kB];});
+  /* FICHA INDIVIDUAL: una sola barra por area. Dibujar dos series identicas (A contra A) no es
+     una comparacion, es el mismo dato dos veces. */
+  if(ST.single){
+    const mx1=yA.filter(v=>v!=null); const top=mx1.length?Math.max(...mx1):1;
+    Plotly.react(id,[{x:areas,y:yA,name:ST.nameA,type:'bar',marker:{color:cssv('--brand'),cornerradius:6},
+      text:yA.map(v=>fmt(v,dec)),textposition:'outside',textfont:{size:10,color:cssv('--ink')},cliponaxis:false,
+      hovertemplate:'%{x}: %{y:.'+dec+'f}<extra></extra>'}],
+      baseLayout({barmode:'group',height:h,margin:{l:46,r:14,t:14,b:44},bargap:0.42,showlegend:false,
+        yaxis:{range:[0,top*1.2],gridcolor:cssv('--line'),rangemode:'tozero',automargin:true},
+        xaxis:{tickfont:{color:cssv('--ink'),size:9.5},automargin:true,tickangle:-30}}),PCFG);
+    return;
+  }
   /* La tienda analizada va SIEMPRE en verde o rojo, aunque la diferencia sea de decimas: que
      coincidan todos los decimales es rarisimo, y el gris (que es el color de la referencia)
      hacia pensar que no habia dato. El gris se reserva para la referencia y para cuando falta
@@ -4834,14 +4864,17 @@ function renderPickDespl(){
   barGroupSem('cDespl','p3A','p3B',ad,2,H.pick,0.1);
   $('ratioGrid').innerHTML=ad.map(a=>{
     const m=MODEL.find(x=>x.area===a),pk=m.pctPickA!=null?m.pctPickA*100:null,dp=m.pctDesplA!=null?m.pctDesplA*100:null;
-    const rv=m.ratioA,col=barColor(m.dRatio,0.05);
-    const bc=m.dRatio==null?'var(--ref)':m.dRatio>0.05?'var(--bad)':m.dRatio<-0.05?'var(--good)':'var(--ref)';
+    const rv=m.ratioA,col=ST.single?cssv('--ink'):barColor(m.dRatio,0.05);
+    const bc=ST.single?'var(--brand)':(m.dRatio==null?'var(--ref)':m.dRatio>0.05?'var(--bad)':m.dRatio<-0.05?'var(--good)':'var(--ref)');
     return '<div class="rcard" style="border-left-color:'+bc+'"><div class="ra">'+a+'</div>'+
       '<div class="rbar"><i style="width:'+(pk||0).toFixed(0)+'%;background:var(--f-picking)"></i><i style="width:'+(dp||0).toFixed(0)+'%;background:var(--f-despl)"></i></div>'+
       '<div class="rbar-lab"><span class="pk">Picking '+fmt(pk,0)+'%</span><span class="dp">Despl. '+fmt(dp,0)+'%</span></div>'+
-      '<div class="rratio"><span>Ratio despl/picking</span><span><span class="v" style="color:'+col+'">'+fmt(rv,2)+'</span> '+deltaChip(m.dRatio,true,2,'',0.05)+'</span></div></div>';
+      '<div class="rratio"><span>Ratio despl/picking</span><span><span class="v" style="color:'+col+'">'+fmt(rv,2)+'</span> '+(ST.single?'':deltaChip(m.dRatio,true,2,'',0.05))+'</span></div></div>';
   }).join('');
-  $('pickNote').innerHTML='Todo esto es <b>dentro de la preparación</b>, no del lote completo. El ratio permite comparar áreas aunque tengan tamaños muy distintos. '+legendSem;
+  {const a=$('pickSubA'); if(a)a.textContent=refSub('coger producto');}
+  {const b=$('pickSubB'); if(b)b.textContent=refSub('moverse por el área');}
+  {const r=$('ratioSub'); if(r)r.textContent='qué parte de la preparación es cada cosa, y el ratio desplazamiento ÷ picking'+(ST.single?'':' frente a la referencia');}
+  $('pickNote').innerHTML='Todo esto es <b>dentro de la preparación</b>, no del lote completo. El ratio permite comparar áreas aunque tengan tamaños muy distintos. '+legSem();
 }
 
 /* ===== DESPLAZAMIENTO TOTAL ===== */
@@ -4849,13 +4882,13 @@ function renderDesplTot(){
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ad.length){Plotly.purge('cDesplTot');$('desplTotNote').textContent='Sin áreas con desplazamiento total comparable.';return;}
   barGroupSem('cDesplTot','desplTotA','desplTotB',ad,2,H.pick,0.2);
-  $('desplTotSub').textContent='analizado frente a referencia';
+  $('desplTotSub').textContent=refSub('');
   let top=null,sumDT=0,sumT=0;ad.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.dDesplTot!=null&&(!top||m.dDesplTot>top.dDesplTot))top=m;sumDT+=m.desplTotA||0;sumT+=m.tiempoA||0;});
   const pct=sumT>0?sumDT/sumT*100:null;
   let n='';if(pct!=null)n+='En las áreas con desglose, el desplazamiento total es de media el <b>'+fmt(pct,0)+'%</b> del tiempo del lote de <b>'+ST.nameA+'</b>: mucho tiempo se va en moverse y enlazar, no solo en coger producto. ';
   if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
   n+='<b>Frescos y FYV</b> no se incluyen: su desplazamiento de preparación no se separa, así que el dato no sería comparable. ';
-  n+='Suma arranque + desplazamiento + traslado + tiempo entre lotes. '+legendSem;
+  n+='Suma arranque + desplazamiento + traslado + tiempo entre lotes. '+legSem();
   $('desplTotNote').innerHTML=n;
 }
 
@@ -4864,14 +4897,14 @@ function renderCont(){
   const ac=viewAreas().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible&&(m.p7A!=null||m.p7B!=null);}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ac.length){Plotly.purge('cCont');$('contNote').textContent='Sin datos de tiempo entre lotes.';return;}
   barGroupSem('cCont','p7A','p7B',ac,2,H.pick,0.1);
-  $('contSub').textContent='analizado frente a referencia';
+  $('contSub').textContent=refSub('');
   let top=null;ac.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.gaps.p7!=null&&(!top||m.gaps.p7>top.gaps.p7))top=m;});
   const tot7=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).p7A||0),0),totT=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).tiempoA||0),0);
   const pct=totT>0?tot7/totT*100:null;
   let n='';if(pct!=null)n+='El tiempo entre lotes supone de media un <b>'+fmt(pct,1)+'%</b> del tiempo del lote en <b>'+ST.nameA+'</b>. ';
   if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
   n+='Es tiempo que no prepara producto: esperas, cambios de área o el carro del siguiente lote sin preparar.';
-  $('contNote').innerHTML=n+' '+legendSem;
+  $('contNote').innerHTML=n+' '+legSem();
 }
 
 /* ===== DÓNDE ACTUAR (diff con tendencia grande) ===== */
@@ -5063,7 +5096,10 @@ function renderTrend(){
 
 /* ===== RADIOGRAFÍA ===== */
 function renderFichaTabs(){$('fichaTabs').innerHTML=viewAreas().map(a=>{const m=MODEL.find(x=>x.area===a);let dc='';if(m&&m.disponible){if(m.estado==='crit'||m.estado==='revisar')dc='var(--bad)';else if(m.estado==='fuerte')dc='var(--good)';else if(m.estado==='estable')dc='var(--ref)';}const dot=dc?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+dc+';margin-right:5px;vertical-align:middle;flex-shrink:0"></span>':'';return '<button class="tab'+(a===ST.fichaArea?' on':'')+'" data-fa="'+a+'">'+dot+a+'</button>';}).join('');$('fichaTabs').querySelectorAll('[data-fa]').forEach(b=>b.addEventListener('click',()=>{ST.fichaArea=b.dataset.fa;renderFichaTabs();renderFicha();}));}
-function fk(label,a,b,d,lower,dec,eps,neutral){const cls=neutral?'':(d==null?'':(Math.abs(d)<=(eps||0)?'':((lower?d<0:d>0)?'down':'up')));return '<div class="fk '+cls+'"><div class="l">'+label+'</div><div class="v">'+fmt(a,dec)+'</div><div class="d"><span>ref '+fmt(b,dec)+'</span>'+(neutral?'':deltaChip(d,lower,dec,'',eps))+'</div></div>';}
+function fk(label,a,b,d,lower,dec,eps,neutral){
+  /* ficha individual: ni "ref" ni chip, que no hay contra que */
+  if(ST.single) return '<div class="fk"><div class="l">'+label+'</div><div class="v">'+fmt(a,dec)+'</div></div>';
+  const cls=neutral?'':(d==null?'':(Math.abs(d)<=(eps||0)?'':((lower?d<0:d>0)?'down':'up')));return '<div class="fk '+cls+'"><div class="l">'+label+'</div><div class="v">'+fmt(a,dec)+'</div><div class="d"><span>ref '+fmt(b,dec)+'</span>'+(neutral?'':deltaChip(d,lower,dec,'',eps))+'</div></div>';}
 const FASE2MK={p1:'arranque',p2:'picking',p3:'despl',p4:'pesaje',p5:'traslado',p6:'consol',p7:'entre',p23:'prep'};
 function renderFicha(){
   const m=MODEL.find(x=>x.area===ST.fichaArea),host=$('fichaBody');
@@ -5080,13 +5116,13 @@ function renderFicha(){
   h+=fk('Unidades/lote',m.udsA,m.udsB,m.dUds,false,1,0,true);
   h+=fk('Preparación',m.prepA,m.prepB,m.dPrep,true,2,0.05);
   h+='</div>';
-  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_subproceso">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada subproceso</div><div class="csub">min/lote, en el orden del proceso · impacto = diferencia × nº de lotes</div></div></div>'+
-    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Subproceso</th><th>'+ST.nameA+'</th><th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes</th><th class="spk">12 meses</th></tr></thead><tbody>';
+  h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_subproceso">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada subproceso</div><div class="csub">'+(ST.single?'min/lote, en el orden del proceso':'min/lote, en el orden del proceso · impacto = diferencia × nº de lotes')+'</div></div></div>'+
+    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Subproceso</th><th>'+ST.nameA+'</th>'+(ST.single?'':'<th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes</th>')+'<th class="spk">12 meses</th></tr></thead><tbody>';
   fcomp.forEach(f=>{const a=fval(m.ra,f),b=fval(m.rb,f),d=(a!=null&&b!=null)?a-b:null,imp=(d!=null&&m.lotesA!=null)?d*m.lotesA:null;
     const mk=f.mk||FASE2MK[f.k],sA=serie(curA.tienda,curA.shift,m.area,mk),sB=serie(curB.tienda,curB.shift,m.area,mk);
-    h+='<tr><td><span class="fdot" style="background:'+cssv(f.col)+'"></span>'+f.name+' <span class="micro">'+f.code+'</span></td><td class="an">'+fmt(a,2)+'</td><td>'+fmt(b,2)+'</td><td>'+deltaChip(d,true,2,'',0.05)+'</td><td>'+fmtImpact(imp)+'</td><td class="spk"><div class="tspark">'+svgSpark(sA,sB,96,26)+'</div></td></tr>';});
+    h+='<tr><td><span class="fdot" style="background:'+cssv(f.col)+'"></span>'+f.name+' <span class="micro">'+f.code+'</span></td><td class="an">'+fmt(a,2)+'</td>'+(ST.single?'':'<td>'+fmt(b,2)+'</td><td>'+deltaChip(d,true,2,'',0.05)+'</td><td>'+fmtImpact(imp)+'</td>')+'<td class="spk"><div class="tspark">'+svgSpark(sA,ST.single?sA.map(()=>null):sB,96,26)+'</div></td></tr>';});
   const impT=(m.dTiempo!=null&&m.lotesA!=null)?m.dTiempo*m.lotesA:null,stA=serie(curA.tienda,curA.shift,m.area,'tiempo'),stB=serie(curB.tienda,curB.shift,m.area,'tiempo');
-  h+='<tr class="totrow"><td>Tiempo total del lote</td><td class="an">'+fmt(m.tiempoA,2)+'</td><td>'+fmt(m.tiempoB,2)+'</td><td>'+deltaChip(m.dTiempo,true,2,'',0.05)+'</td><td>'+fmtImpact(impT)+'</td><td class="spk"><div class="tspark">'+svgSpark(stA,stB,96,26)+'</div></td></tr>';
+  h+='<tr class="totrow"><td>Tiempo total del lote</td><td class="an">'+fmt(m.tiempoA,2)+'</td>'+(ST.single?'':'<td>'+fmt(m.tiempoB,2)+'</td><td>'+deltaChip(m.dTiempo,true,2,'',0.05)+'</td><td>'+fmtImpact(impT)+'</td>')+'<td class="spk"><div class="tspark">'+svgSpark(stA,ST.single?stA.map(()=>null):stB,96,26)+'</div></td></tr>';
   h+='</tbody></table></div></div></div>';
   // (card "De dónde viene el tiempo de más" eliminado a petición: las barras eran poco estéticas y aportaban poco)
   const opts=[{v:'prod',l:'Productividad'},{v:'tiempo',l:'Tiempo por lote'}].concat(fcomp.map(f=>({v:f.mk||FASE2MK[f.k],l:f.name}))).concat((m.compat&&!GRP)?[{v:'despltot',l:'Desplazamiento total'},{v:'ratio',l:'Ratio despl/picking'}]:[]);
@@ -5095,7 +5131,7 @@ function renderFicha(){
      clase .png sin .dl-in). Antes iba en el flujo, empujado por el desplegable, y quedaba a media
      altura y descolgado del resto. El desplegable se queda en la cabecera, a la derecha del
      titulo, que es donde se busca un filtro. */
-  h+='<div class="cbox"><div class="cbox-in"><button class="png" data-png="cFevo" data-pngname="evolucion_area" data-pngtitle="'+esc1(((METRICS[ST.fichaFase]&&METRICS[ST.fichaFase].label)||ST.fichaFase)+' · '+ST.fichaArea)+'" data-pngsub="'+esc1([scnSub(),udName()].filter(Boolean).join(' · '))+'">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Evolución · '+ST.fichaArea+'</div><div class="csub">analizado frente a referencia</div></div><select id="fichaFaseSel" style="width:auto;min-width:150px;margin-right:92px">'+opts.map(o=>opt(o.v,o.l,o.v===ST.fichaFase)).join('')+'</select></div><div class="chart" id="cFevo"></div></div></div>';
+  h+='<div class="cbox"><div class="cbox-in"><button class="png" data-png="cFevo" data-pngname="evolucion_area" data-pngtitle="'+esc1(((METRICS[ST.fichaFase]&&METRICS[ST.fichaFase].label)||ST.fichaFase)+' · '+ST.fichaArea)+'" data-pngsub="'+esc1([scnSub(),udName()].filter(Boolean).join(' · '))+'">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Evolución · '+ST.fichaArea+'</div><div class="csub">'+refSub('')+'</div></div><select id="fichaFaseSel" style="width:auto;min-width:150px;margin-right:92px">'+opts.map(o=>opt(o.v,o.l,o.v===ST.fichaFase)).join('')+'</select></div><div class="chart" id="cFevo"></div></div></div>';
   h+='<div class="card" style="margin-top:15px"><div class="cpad"><div class="sec-n" style="margin-bottom:11px">Lectura automática</div><div class="fread">'+lecturaArea(m)+'</div>';
   if(!m.compat)h+='<div class="notice warn" style="margin-top:13px"><span class="ic">!</span><span>En <b>'+m.area+'</b> la preparación no separa picking y desplazamiento, así que se lee como un solo bloque y no hay ratio ni desplazamiento total comparables.</span></div>';
   h+='</div></div>';
@@ -5110,11 +5146,22 @@ function renderFevo(){
   const _all=[...sA,...sB].filter(v=>v!=null),_mn=_all.length?Math.min(..._all):0,_mx=_all.length?Math.max(..._all):1,_pad=((_mx-_mn)||_mx||1)*0.20;
   const lay=baseLayout({height:256,margin:{l:48,r:16,t:24,b:38},hovermode:'x unified',showlegend:true,legend:{orientation:'h',y:1.18,x:0,font:{size:11,color:cssv('--ink2')},bgcolor:'rgba(0,0,0,0)'},xaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:9},automargin:true},yaxis:{gridcolor:cssv('--line'),tickfont:{color:cssv('--ink2'),size:10},automargin:true,zeroline:false,range:[_mn-_pad,_mx+_pad]}});
   conModelo(lay,curA.tienda);
-  plot('cFevo',[{x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}},{x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}],lay);
+  const _fev=[];
+  if(!ST.single) _fev.push({x,y:sB,name:ST.nameB,type:'scatter',mode:'lines',connectgaps:false,line:{color:ref,width:2,dash:'dot',shape:'spline'}});
+  plot('cFevo',_fev.concat([{x,y:sA,name:ST.nameA,type:'scatter',mode:'lines+markers+text',connectgaps:false,line:{color:realC,width:2.8,shape:'spline'},marker:{size:6,color:realC,line:{width:1.5,color:cssv('--panel')}},text:sA.map((v,i)=>(v==null||(window.innerWidth<=560&&i%2===1))?'':fmt(v,M.dec)),textposition:'top center',textfont:{size:8,color:cssv('--ink2')}}]),lay);
 }
 function lecturaArea(m){
   const p=[],peor=m.dProd!=null&&m.dProd>UMBRAL.prod,mejor=m.dProd!=null&&m.dProd<-UMBRAL.prod;
   const _u=udName();
+  /* Sin referencia no se puede decir "mejor" ni "peor": se cuenta lo que hace la tienda, que es
+     justo lo que se viene a ver en una ficha individual. */
+  if(ST.single){
+    if(m.prodA!=null) p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce a <b>'+fmt(m.prodA,3)+' '+_u+'</b>'+((typeof objEscA==='function')?(' frente a un objetivo de '+fmt(objEscA(),3)):'')+'.');
+    if(m.tiempoA!=null) p.push('Cada lote tarda <b>'+fmt(m.tiempoA,1)+' min</b> y lleva '+fmt(m.udsA,1)+' unidades.');
+    if(m.compat&&m.ratioA!=null) p.push('De cada minuto de picking hay <b>'+fmt(m.ratioA,2)+'</b> de desplazamiento.');
+    if(m.lotesN!=null) p.push('Son <b>'+fmt(m.lotesN,0)+' lotes</b> al mes.');
+    return p.join(' ');
+  }
   if(peor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce a '+fmt(m.prodA,3)+' '+_u+' frente a '+fmt(m.prodB,3)+' de '+ST.nameB+' (peor por '+fmt(Math.abs(m.dProd),3)+').');
   else if(mejor)p.push('En <b>'+m.area+'</b>, <b>'+ST.nameA+'</b> produce mejor: '+fmt(m.prodA,3)+' '+_u+' frente a '+fmt(m.prodB,3)+' de '+ST.nameB+'.');
   else p.push('En <b>'+m.area+'</b>, '+ST.nameA+' produce casi como '+ST.nameB+' ('+fmt(m.prodA,3)+' vs '+fmt(m.prodB,3)+' '+_u+').');
@@ -8542,6 +8589,15 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   background:var(--panel)!important;border:1px solid var(--line)!important;border-radius:var(--r)!important;
   box-shadow:var(--sh-sm)!important;padding:18px 20px!important;
 }
+/* El titulo del ranking va DENTRO del bloque blanco, como en el resto de pestañas. Ahi dentro la
+   fila de filtros deja de ser una tarjeta: serian dos cajas, una dentro de otra. Lleva !important
+   porque la regla de arriba lo pone a proposito para cuando va suelta sobre el fondo. */
+.rk-box .rk-ctrl{
+  background:none!important;border:0!important;box-shadow:none!important;padding:0!important;
+  margin-bottom:0!important;border-radius:0!important;
+}
+.rk-box .sec-hd{margin-bottom:16px}
+.rk-box{margin-bottom:16px}
 .rk-ctrl{gap:18px 22px;margin-bottom:18px}
 #farolasTab .fa-bar{gap:18px 24px;margin-bottom:20px}
 #caudalTab .cd-groups{gap:18px 26px}
