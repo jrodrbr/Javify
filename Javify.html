@@ -160,7 +160,10 @@
         if(!el || el.isConnected===false || !el.parentNode){ pendientes.splice(i,1); continue; }
         if(el.clientWidth>10 && el.clientHeight>10){
           pendientes.splice(i,1);
-          try{ var p=Plotly.Plots.resize(el); if(p&&p.catch) p.catch(function(){}); }catch(e){}
+          /* por el coordinador, no a pelo: llamar aqui a Plots.resize cancelaba el redibujado
+             que otro de los ocho sitios tenia pendiente (ver window.__jvSize) */
+          if(window.__jvSize) window.__jvSize.pedir(el, true);
+          else { try{ var p=Plotly.Plots.resize(el); if(p&&p.catch) p.catch(function(){}); }catch(e){} }
         }
       }
       /* 2 minutos de vigilancia como maximo: si en ese tiempo no se ha mostrado, es que esa
@@ -191,6 +194,152 @@
     var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
   Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
     var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
+})();
+/* ==================================================================================================
+   UN SOLO COORDINADOR DE TAMANOS  ·  window.__jvSize
+   --------------------------------------------------------------------------------------------------
+   POR QUE HACE FALTA. Codigo fuente de Plotly 2.35, Plots.resize:
+
+       t._redrawTimer && clearTimeout(t._redrawTimer);   // cada llamada CANCELA la anterior
+       t._redrawTimer = setTimeout(function(){
+         if(!t.layout || (t.layout.width && t.layout.height) || isHidden(t)) resolver(t);  // NADA
+         else { delete t.layout.width; delete t.layout.height; relayout(t,{autosize:true}); }
+       }, 100);
+
+   Es decir: Plots.resize no redibuja, arma un temporizador de 100 ms por grafica; una llamada
+   nueva sobre la misma grafica se lleva por delante el redibujado pendiente; y si al saltar el
+   temporizador la grafica esta oculta, se descarta.
+
+   En este panel habia ocho sitios pidiendo resize sin hablarse (renderAll con pasadas a 220/900/
+   2000 ms, setMode, el orquestador con 130/340/700/1200 ms, el vigia de 250 ms del envoltorio, el
+   ResizeObserver, el MutationObserver, cdResize, faResize y el interruptor Simple/Experto).
+   Medido al cargar: 94 llamadas, 84 de ellas cancelando un redibujado pendiente y 26 a menos de
+   100 ms de la anterior de la MISMA grafica (cDesplTot y cCont, once llamadas cada una). Cada una
+   de esas parejas es un redibujado que no se hizo. Cuando la que se queda sin hacer es la ultima,
+   la grafica se queda con el ancho por defecto de Plotly (700 px) y, como .chart lleva
+   overflow:hidden, se ve el titulo y no se ve la grafica hasta que mueves la ventana.
+
+   QUE HACE ESTE MODULO
+     pedir(gd, forzado)   encola una grafica. Nunca se pide la misma dos veces dentro de la
+                          ventana de 100 ms de Plotly, asi que ninguna peticion cancela a otra.
+     barrer(forzado)      encola todas las graficas VISIBLES.
+     alMostrar(forzado)   para usar justo despues de dejar visible un contenedor: espera dos rAF,
+                          mide getBoundingClientRect() y, si la caja aun mide cero, reintenta por
+                          frames (12 como maximo). Sin esperas inventadas.
+   Para forzar se usa Plotly.relayout(gd,{autosize:true}), que es lo que acaba haciendo el
+   temporizador de Plots.resize, pero al momento y sin que se pueda cancelar.
+   Es idempotente: llamarlo mil veces no duplica graficas, ni oyentes, ni temporizadores.
+   ================================================================================================== */
+(function(){
+  if(window.__jvSize) return;
+  var ESPERA = 130;   /* ms minimos entre dos peticiones a la MISMA grafica (Plotly espera 100) */
+  var MARCOS = 12;    /* reintentos por frame como maximo mientras la caja mida cero */
+  var cola = (typeof Map !== 'undefined') ? new Map() : null;
+  var pedida = false;
+
+  function ahora(){ try{ return performance.now(); }catch(e){ return +new Date(); } }
+  function elem(d){ try{ return (typeof d === 'string') ? document.getElementById(d) : d; }catch(e){ return null; } }
+  function visible(gd){ return !!(gd && gd.offsetParent); }
+  function caja(gd){
+    try{ var r = gd.getBoundingClientRect(); return { w:Math.round(r.width), h:Math.round(r.height) }; }
+    catch(e){ return null; }
+  }
+  /* ¿hay algo dibujado de verdad? Una grafica que nacio oculta puede tener las medidas cuadradas
+     y estar completamente en blanco; comparar medidas no lo detecta. */
+  function pintada(gd){
+    try{
+      return gd.querySelectorAll('svg.main-svg .trace,svg.main-svg .point,svg.main-svg .slice,'
+        + 'svg.main-svg .bars,svg.main-svg .js-line,svg.main-svg .box,svg.main-svg .violin').length > 0;
+    }catch(e){ return true; }
+  }
+  function necesita(gd, forzado){
+    if(!gd || !gd.data || !visible(gd)) return false;
+    var c = caja(gd);
+    if(!c || c.w < 10 || c.h < 10) return false;      /* sin caja util: se queda pendiente */
+    if(forzado) return true;
+    var fl = gd._fullLayout;
+    if(!fl) return true;
+    if(gd.data.length && !pintada(gd)) return true;   /* medidas bien y lienzo vacio */
+    return Math.abs((fl.width|0) - c.w) > 2 || Math.abs((fl.height|0) - c.h) > 2;
+  }
+  function aplicar(gd){
+    gd.__jvAt = ahora();
+    gd.__oculta = 0;
+    try{
+      /* si Plots.resize tenia un redibujado pendiente, aqui se hace ya: el temporizador sobra.
+         Se resuelve su promesa al quitarlo (Plotly guarda el resolve en _resolveResize) para no
+         dejar promesas colgando de por vida. */
+      if(gd._redrawTimer){
+        try{ clearTimeout(gd._redrawTimer); }catch(e){}
+        gd._redrawTimer = null;
+        try{ if(gd._resolveResize){ var _r = gd._resolveResize; gd._resolveResize = null; _r(gd); } }catch(e){}
+      }
+      var p = window.Plotly.relayout(gd, { autosize:true });
+      if(p && p.catch) p.catch(function(){});
+    }catch(e){}
+  }
+  function vaciar(){
+    pedida = false;
+    if(!cola) return;
+    if(!window.Plotly || !window.Plotly.relayout){ cola.clear(); return; }
+    var t = ahora(), quedan = [];
+    cola.forEach(function(forzado, gd){
+      if(!gd || !gd.parentNode){ return; }
+      if(!visible(gd)){ gd.__oculta = 1; return; }               /* oculta: Plotly la descartaria */
+      if(!necesita(gd, forzado)) return;
+      if(!forzado && (t - (gd.__jvAt || 0)) < ESPERA){ quedan.push(gd); return; }
+      aplicar(gd);
+    });
+    cola.clear();
+    if(quedan.length){
+      for(var i=0;i<quedan.length;i++) cola.set(quedan[i], false);
+      setTimeout(programar, ESPERA);
+    }
+  }
+  function programar(){
+    if(pedida) return;
+    pedida = true;
+    if(window.requestAnimationFrame) requestAnimationFrame(function(){ requestAnimationFrame(vaciar); });
+    else setTimeout(vaciar, 32);
+  }
+  function pedir(d, forzado){
+    var gd = elem(d);
+    if(!gd || !cola) return;
+    cola.set(gd, !!cola.get(gd) || !!forzado);
+    programar();
+  }
+  function barrer(forzado){
+    if(!cola) return;
+    try{
+      var list = document.querySelectorAll('.js-plotly-plot');
+      for(var i=0;i<list.length;i++) cola.set(list[i], !!cola.get(list[i]) || !!forzado);
+    }catch(e){}
+    programar();
+  }
+  /* Justo despues de dejar visible un contenedor: dos rAF para que el navegador acabe la
+     maquetacion, se mide, y si todavia no hay caja se reintenta por frames. */
+  function alMostrar(forzado){
+    var n = 0;
+    function paso(){
+      n++;
+      var hay = false;
+      try{
+        var list = document.querySelectorAll('.js-plotly-plot');
+        for(var i=0;i<list.length;i++){
+          var gd = list[i];
+          if(!visible(gd)) continue;
+          var c = caja(gd);
+          if(c && c.w > 10 && c.h > 10){ hay = true; break; }
+        }
+      }catch(e){}
+      if(hay || n >= MARCOS){ barrer(forzado !== false); return; }
+      if(window.requestAnimationFrame) requestAnimationFrame(paso); else setTimeout(paso, 16);
+    }
+    if(window.requestAnimationFrame) requestAnimationFrame(function(){ requestAnimationFrame(paso); });
+    else setTimeout(paso, 32);
+  }
+  window.__jvSize = { pedir:pedir, barrer:barrer, alMostrar:alMostrar,
+                      necesita:necesita, pintada:pintada, visible:visible, caja:caja };
 })();
 /* Sin zoom en la PAGINA: ni pellizco, ni doble toque, ni ctrl+rueda (se comporta como una app) */
 (function(){
@@ -3904,7 +4053,12 @@ function setMode(m){ST.mode=m; try{ if(typeof saveCfg==='function') saveCfg(); }
   if(m==='rank'){initRank();renderRank();}
   /* la pestana que se acaba de mostrar puede traer graficas dimensionadas cuando estaba
      oculta (o de antes de girar): un barrido de tamanos sobre TODO lo visible. */
-  try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}
+  /* La pestana ya esta visible: ahora se espera a que el navegador acabe de maquetar (dos rAF
+     dentro de alMostrar) y se mide. La primera pasada va FORZADA a proposito: una grafica que
+     se pinto con la pestana oculta puede tener las medidas cuadradas y el lienzo vacio, y
+     entonces comparar medidas la descartaria. */
+  try{ if(window.__jvSize) window.__jvSize.alMostrar(true);
+       else if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}
 }
 /* Recordar la ultima configuracion entre sesiones (se guarda en este navegador) */
 function saveCfg(){ try{
@@ -4124,13 +4278,21 @@ function renderAll(){
   ['secDiff','secPareto'].forEach(id=>{const e=$(id);if(e)e.style.display=ST.single?'none':'';});
   ['secPick','secDesplTot','secCont','secFicha'].forEach(id=>{const e=$(id);if(e)e.style.display='';});
   /* red de seguridad: si alguna seccion estaba oculta al pintar, al aparecer hay que remedir */
-  requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
+  /* Antes: cuatro rondas a ciegas (rAF y 220/900/2000 ms) que se pisaban entre ellas. Ahora una
+     sola pasada forzada, y el coordinador espera a que haya caja de verdad antes de medir. */
+  if(window.__jvSize) window.__jvSize.alMostrar(true);
+  else requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
 }
 const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalPar','cCaudalDonut','cParetoDonut'];
 /* Plotly.Plots.resize RECHAZA una promesa si el div esta oculto (no lanza): sin el .catch
    quedaban "unhandled rejection" cada vez que se redimensionaba fuera del comparador.
    Ademas de CHARTS hay roscos (cf_r_*) en el resumen -> el barrido global los cubre. */
-function resizeCharts(){CHARTS.forEach(id=>{const el=$(id);if(!el||!el.data||!el.offsetParent)return;
+/* Mismo nombre y misma lista que antes; lo unico que cambia es que las peticiones van al
+   coordinador (window.__jvSize) en vez de a Plotly directamente. Antes, esta funcion sola
+   disparaba cuatro rondas (rAF y 220/900/2000 ms) que se cancelaban unas a otras. */
+function resizeCharts(){
+  if(window.__jvSize){ CHARTS.forEach(id=>window.__jvSize.pedir(id,false)); window.__jvSize.barrer(false); return; }
+  CHARTS.forEach(id=>{const el=$(id);if(!el||!el.data||!el.offsetParent)return;
   try{const p=Plotly.Plots.resize(el);if(p&&p.catch)p.catch(()=>{});}catch(e){}});
   try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}}
 /* el listener de 'resize' propio se ha unificado en el orquestador global del final */
@@ -7596,7 +7758,9 @@ function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by;
 }
 // Resize robusto del chart de Caudal: debounce + ResizeObserver del contenedor (evita que se quede "encogido" al agrandar/achicar la ventana)
 let _cdRT=null;
-function cdResize(){ if(!LOADED)return; const box=$('cd_chart'); if(!box||!box.data)return; if($('caudalTab')&&$('caudalTab').style.display==='none')return; if(box.clientWidth<10)return; try{Plotly.Plots.resize(box);}catch(e){} }
+function cdResize(){ if(!LOADED)return; const box=$('cd_chart'); if(!box||!box.data)return; if($('caudalTab')&&$('caudalTab').style.display==='none')return; if(box.clientWidth<10)return;
+  if(window.__jvSize){ window.__jvSize.pedir(box,true); return; }
+  try{Plotly.Plots.resize(box);}catch(e){} }
 function cdResizeSoon(){ clearTimeout(_cdRT); _cdRT=setTimeout(cdResize,140); }
 /* el tema cambia las variables CSS y aqui se leen al pintar (cssv) -> repintar la pestana */
 window.__cdTheme=function(){ if(!LOADED)return; try{ render(); }catch(e){} };
@@ -7624,8 +7788,14 @@ try{ if(window.ResizeObserver){ const _b=$('cd_chart'); if(_b)new ResizeObserver
     // PENDIENTES aparece/desaparece según el modo → re-pintar comparador y objetivos
     try{ if(window.__rerenderComp) window.__rerenderComp(); }catch(e){}
     try{ if(window.loRerender) window.loRerender(); }catch(e){}
-    setTimeout(function(){
-      try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+    /* Aqui se disparaba un 'resize' de ventana FALSO y, 120 ms despues, un Plots.resize sobre
+       TODAS las graficas (tambien las de las pestanas ocultas, que Plotly descarta). Las dos
+       cosas juntas eran la mayor fuente de redibujados cancelados: el 'resize' falso lanzaba
+       ademas el re-pintado de las 20 graficas de Farolas sin que el ancho hubiera cambiado.
+       Cambiar de Simple a Experto ensena y esconde secciones, asi que lo que hace falta es
+       exactamente lo mismo que al cambiar de pestana: medir cuando ya esta maquetado. */
+    if(window.__jvSize) window.__jvSize.alMostrar(true);
+    else setTimeout(function(){
       try{ if(window.Plotly) document.querySelectorAll('.js-plotly-plot').forEach(function(el){ try{ window.Plotly.Plots.resize(el); }catch(e){} }); }catch(e){}
     },120);
   });
@@ -7832,6 +8002,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
      OJO: mantener esta funcion AQUI (zona de helpers); si se pone entre la descarga y render()
      los reemplazos de esos bloques se la llevan por delante. */
   function faResize(){ if(!window.Plotly)return; var tab=$('farolasTab'); if(!tab||tab.style.display==='none')return;
+    /* por el coordinador: encolar las 20 no cuesta nada (el descarta las que no se ven y las
+       que ya estan bien) y asi ninguna cancela el redibujado de otra. Esto NO re-pinta nada:
+       el re-pintado de Farolas es __faOnWidth, y ese solo corre si cambia el ancho. */
+    if(window.__jvSize){
+      M.forEach(function(m){ var d=$('fa_ch_'+m.k); if(d&&d.data) window.__jvSize.pedir(d,false); });
+      GLOB.forEach(function(m){ var d=$('fa_r_'+m.k); if(d&&d.data) window.__jvSize.pedir(d,false); });
+      return; }
     M.forEach(function(m){ var d=$('fa_ch_'+m.k); if(d&&d.data){ try{ Plotly.Plots.resize(d); }catch(e){} } });
     GLOB.forEach(function(m){ var d=$('fa_r_'+m.k); if(d&&d.data){ try{ Plotly.Plots.resize(d); }catch(e){} } }); }
   window.__faResize=faResize;
@@ -8714,28 +8891,29 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
      llamada nueva CANCELA la anterior. Encadenando pasadas cada pocos ms el redibujado no
      llegaba nunca. Por eso se recuerda el tamano ya pedido y no se vuelve a pedir hasta
      que pasan 400 ms (si aun no ha cuadrado, se reintenta). */
-  function resizePass(){
+  /* Este barrido lo hace ahora el coordinador (window.__jvSize, junto al envoltorio de Plotly):
+     ahi esta la unica cola, con la guarda de los 100 ms de Plotly, la deteccion de la grafica que
+     tiene las medidas cuadradas pero el lienzo vacio, y el forzado con relayout({autosize:true}).
+     La version de aqui, que llamaba a Plots.resize por su cuenta, era uno de los ocho sitios que
+     se cancelaban el redibujado entre ellos. Se deja el camino antiguo por si el coordinador no
+     estuviera cargado. */
+  function resizePass(forzado){
+    if(window.__jvSize){ window.__jvSize.barrer(!!forzado); return; }
     if(!window.Plotly||!window.Plotly.Plots) return;
     var list, t=now();
     try{ list=document.querySelectorAll('.js-plotly-plot'); }catch(e){ return; }
     for(var i=0;i<list.length;i++){
       var gd=list[i];
-      /* Una grafica pintada mientras su seccion estaba oculta sale con el tamano por defecto
-         de Plotly (700x450) y al mostrarla se queda asi: se veia el titulo y el subtitulo pero
-         no la grafica, y solo se arreglaba al mover la ventana. Se marca mientras esta oculta
-         y en cuanto se ve se fuerza el redimensionado sin esperar la guarda de 400 ms. */
       if(!gd.offsetParent){ gd.__oculta=1; continue; }
       if(!gd.data) continue;
       var cw=gd.clientWidth, ch=gd.clientHeight;
       if(cw<10||ch<10) continue;
       var fl=gd._fullLayout;
-      if(gd.__oculta){ gd.__oculta=0; gd.__rsKey=null; gd.__rsAt=0; }
+      if(forzado || gd.__oculta){ gd.__oculta=0; gd.__rsKey=null; gd.__rsAt=0; }
       else if(fl && Math.abs((fl.width|0)-cw)<2 && Math.abs((fl.height|0)-ch)<2){ gd.__rsKey=null; continue; }
       var key=cw+'x'+ch;
-      /* que se salga por la derecha es lo peor que puede pasar (corta los ultimos meses):
-         en ese caso se reintenta ya, sin esperar la guarda de 400 ms. */
       var desborda=(fl && (fl.width|0) > cw+2);
-      if(!desborda && gd.__rsKey===key && (t-(gd.__rsAt||0))<400) continue;
+      if(!forzado && !desborda && gd.__rsKey===key && (t-(gd.__rsAt||0))<400) continue;
       gd.__rsKey=key; gd.__rsAt=t;
       try{ var p=window.Plotly.Plots.resize(gd); if(p&&p.catch) p.catch(function(){}); }catch(e){}
     }
@@ -8743,10 +8921,14 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* re-pintado de lo que depende del ancho para elegir cuantas etiquetas caben */
   function rerenderPass(){ try{ if(window.__faOnWidth) window.__faOnWidth(); }catch(e){} }
 
+  /* OJO CON force: antes forzaba el RE-PINTADO (las 20 graficas de Farolas, que es lo caro) y NO
+     forzaba el redimensionado, que era justo lo que hacia falta al mostrar una pestana. Ahora
+     force fuerza el redimensionado, y el re-pintado sigue atado a lo unico que lo justifica: que
+     el ancho haya cruzado un umbral y quepan mas o menos etiquetas. */
   function pass(force){
     var w=window.innerWidth||0, b=bucket(w);
-    if(force || b!==renderB || Math.abs(w-renderW)>=60){ renderW=w; renderB=b; rerenderPass(); }
-    resizePass();
+    if(b!==renderB || Math.abs(w-renderW)>=60){ renderW=w; renderB=b; rerenderPass(); }
+    resizePass(force);
   }
   function clearTimers(){ for(var i=0;i<timers.length;i++) clearTimeout(timers[i]); timers=[]; }
   /* iOS necesita reintentos: el primer frame tras girar aun trae medidas viejas */
@@ -8771,12 +8953,21 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       roDeb=setTimeout(function(){ pass(false); },70);
     });
   }
+  /* Se observa la grafica Y la tarjeta que la contiene: la caja que de verdad cambia de tamano
+     es la tarjeta (la grafica va al 100 % de ella), y cuando una pestana pasa de oculta a
+     visible el cambio se ve antes ahi. El WeakSet hace que observar sea idempotente: por
+     muchas veces que se llame, cada nodo se observa una sola vez. */
   function observeAll(){
     if(!ro||!seen) return 0;
     var nuevos=0;
     try{
       var list=document.querySelectorAll('.js-plotly-plot');
-      for(var i=0;i<list.length;i++){ if(!seen.has(list[i])){ seen.add(list[i]); ro.observe(list[i]); nuevos++; } }
+      for(var i=0;i<list.length;i++){
+        var gd=list[i];
+        if(!seen.has(gd)){ seen.add(gd); ro.observe(gd); nuevos++; }
+        var pa=gd.parentNode;
+        if(pa && pa.nodeType===1 && !seen.has(pa)){ seen.add(pa); ro.observe(pa); }
+      }
     }catch(e){}
     return nuevos;
   }
@@ -8805,7 +8996,11 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
 
   /* al mostrar una pestana sus graficas estaban ocultas y pueden traer el tamano de
      antes; cubre tambien los roscos del comparador, que no estan en la lista CHARTS. */
-  window.__resizeVisiblePlots=function(){ observeAll(); schedule(false); };
+  /* Se llama justo despues de dejar visible una pestana, asi que va FORZADO: es la primera
+     pasada tras mostrar una seccion y no se puede descartar comparando medidas. */
+  window.__resizeVisiblePlots=function(){ observeAll();
+    if(window.__jvSize){ window.__jvSize.alMostrar(true); return; }
+    schedule(true); };
   observeAll();
 })();
 </script>
