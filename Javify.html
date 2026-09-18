@@ -341,6 +341,220 @@
   window.__jvSize = { pedir:pedir, barrer:barrer, alMostrar:alMostrar,
                       necesita:necesita, pintada:pintada, visible:visible, caja:caja };
 })();
+/* ==================================================================================================
+   DESPLEGABLES CON EL DEDO  ·  window.__jvTap
+   --------------------------------------------------------------------------------------------------
+   POR QUE HACE FALTA. Los desplegables de centro tenian el manejador en 'pointerdown', y ahi
+   mismo hacian e.preventDefault() y elegian. En una pantalla tactil 'pointerdown' salta en cuanto
+   el dedo toca, antes de que el navegador pueda saber si es un toque o el arranque de un arrastre.
+   Medido en iPhone 393x852, arrastrando 150 px desde encima de una opcion:
+
+       desplegable                 filas   scrollTop   sigue abierto   valor
+       tApop  (tienda analizada)    322    0 -> 0      si -> NO        Veteranas -> LIEBRE_HIST
+       tBpop  (tienda o referencia) 322    0 -> 0      si -> NO        Todas -> LIEBRE_HIST
+       fa_refPop (comparar con)     312    0 -> 0      si -> NO        (vacio) -> Tiendas Liebre
+
+   Los tres sintomas de una sola causa: el preventDefault() del contacto inicial cancela el gesto
+   de scroll nativo, la eleccion cambia el valor de la fila donde apoyas el dedo, y al elegir se
+   cierra la lista y se suelta el foco, asi que la superficie que tenia que desplazarse desaparece
+   a mitad del gesto.
+
+   COMO SE DISTINGUE UN TOQUE DE UN ARRASTRE
+     pointerdown   se apunta donde empezo y cual era la fila. NI preventDefault NI seleccion.
+     pointermove   si se ha movido mas de UMBRAL px (9), queda marcado como arrastre.
+     scroll        si la lista se ha desplazado, tambien: cubre la inercia, donde los
+                   pointermove llegan sueltos o no llegan.
+     pointercancel el navegador se ha quedado el gesto (scroll): arrastre.
+     pointerup     si NO hubo arrastre y el dedo sigue sobre la misma fila, se elige.
+     click         respaldo para raton, teclado y los casos en que Safari no manda el pointerup.
+   La eleccion queda sellada con una marca de tiempo, asi que la pareja pointerup + click elige
+   EXACTAMENTE UNA VEZ. No se usa setPointerCapture: se lleva por delante el scroll nativo.
+
+   CIERRE. cerrarLuego() es el reemplazo de los setTimeout(close,120/140): si al saltar el
+   temporizador el dedo sigue dentro de la lista, se re-arma en vez de cerrar. La lista se cierra
+   al elegir, al pulsar fuera, con Escape o con una accion que cambia de vista, nunca a mitad de
+   un gesto.
+
+   TECLADO DE iOS. colocar() mide el hueco que de verdad se ve con window.visualViewport (que es
+   lo que se encoge al abrirse el teclado, sin que cambie innerHeight), limita la altura a ese
+   hueco y, si no cabe debajo del campo, pone la lista encima. No se bloquea el scroll de la
+   pagina ni se toca body.
+
+   Es idempotente: cada lista se engancha una sola vez (marca en el propio nodo), y los oyentes
+   compartidos (Escape y visualViewport) se anaden una sola vez para todo el documento.
+   ================================================================================================== */
+(function(){
+  if(window.__jvTap) return;
+  var UMBRAL = 9;     /* px de movimiento a partir de los cuales es un arrastre, no un toque */
+  var SELLO  = 700;   /* ms durante los que una eleccion ya hecha no se repite */
+  var GRACIA = 450;   /* ms tras soltar en los que el cierre por blur sigue bloqueado */
+  var listas = [];    /* {pop, cerrar, campo} de cada desplegable enganchado */
+
+  function ahora(){ try{ return performance.now(); }catch(e){ return +new Date(); } }
+  function dist(g, x, y){ var dx=x-g.x, dy=y-g.y; return Math.sqrt(dx*dx+dy*dy); }
+  function abierto(pop){ return !!(pop && pop.classList && pop.classList.contains('open')); }
+
+  /* ¿hay un gesto en marcha en esta lista (o acaba de terminar)? Lo usa el cierre por blur. */
+  function activo(pop){
+    var g = pop && pop.__jvG;
+    if(!g) return false;
+    if(!g.fin) return true;                       /* el dedo sigue apoyado */
+    return (ahora() - g.fin) < GRACIA;
+  }
+
+  /* -------- enganchar una lista ------------------------------------------------------------- */
+  function lista(pop, selFila, alElegir, opts){
+    if(!pop || pop.__jvTapOn) return;             /* idempotente: una sola vez por nodo */
+    pop.__jvTapOn = 1;
+    opts = opts || {};
+    listas.push({ pop:pop, cerrar:opts.cerrar||null, campo:opts.campo||null });
+
+    var fila = function(t){ return (t && t.closest) ? t.closest(selFila) : null; };
+
+    /* Solo se elige si el gesto EMPEZO en esa misma fila. Medido: al abrir la lista tocando el
+       campo, el navegador manda los eventos de raton de compatibilidad (mousedown/mouseup/click)
+       del mismo toque, y caen dentro de la lista que ese toque acaba de abrir -> se elegia la
+       primera fila sin que el dedo la hubiera tocado nunca. Ese click fantasma no trae gesto
+       propio, asi que aqui se descarta. Un click de teclado (detail 0) si se acepta. */
+    function elegir(el, ev, g){
+      if(!el) return;
+      var teclado = ev && ev.type === 'click' && ev.detail === 0;
+      if(!teclado){
+        if(!g || !g.fila) return;          /* el gesto no empezo en una fila de esta lista */
+        if(g.fila !== el) return;          /* empezo en otra fila */
+      }
+      var t = ahora();
+      if(pop.__jvSello && (t - pop.__jvSello) < SELLO) return;   /* ya elegido en este gesto */
+      pop.__jvSello = t;
+      try{ alElegir(el, ev); }catch(e){}
+    }
+
+    pop.addEventListener('pointerdown', function(ev){
+      /* NI preventDefault NI seleccion: aqui todavia no se sabe si es un toque o un arrastre */
+      pop.__jvG = { x:ev.clientX, y:ev.clientY, id:ev.pointerId, tipo:ev.pointerType||'mouse',
+                    fila:fila(ev.target), st:pop.scrollTop, ini:ahora(), fin:0, movido:0 };
+    });
+    pop.addEventListener('pointermove', function(ev){
+      var g = pop.__jvG; if(!g || g.fin) return;
+      if(dist(g, ev.clientX, ev.clientY) > UMBRAL) g.movido = 1;
+    });
+    /* la inercia desplaza sin pointermove: si la lista se ha movido, era un arrastre */
+    pop.addEventListener('scroll', function(){
+      var g = pop.__jvG; if(g && Math.abs(pop.scrollTop - g.st) > 2) g.movido = 1;
+    }, { passive:true });
+    pop.addEventListener('pointercancel', function(){
+      var g = pop.__jvG; if(g){ g.movido = 1; g.fin = ahora(); }
+    });
+    pop.addEventListener('pointerup', function(ev){
+      var g = pop.__jvG; if(!g) return;
+      g.fin = ahora();
+      if(g.movido) return;                                  /* era scroll: no se elige nada */
+      if(dist(g, ev.clientX, ev.clientY) > UMBRAL) return;
+      elegir(fila(ev.target), ev, g);
+    });
+    /* respaldo: raton, teclado, y Safari cuando no manda el pointerup */
+    pop.addEventListener('click', function(ev){
+      var g = pop.__jvG;
+      if(g && g.movido) return;
+      elegir(fila(ev.target), ev, g);
+    });
+    /* SOLO con raton: evita que el campo pierda el foco antes del click, que es lo que hacia el
+       preventDefault de antes. En tactil NUNCA se hace: es justo lo que mataba el scroll. */
+    pop.addEventListener('mousedown', function(ev){
+      var g = pop.__jvG;
+      if(g && g.tipo !== 'mouse') return;
+      if(fila(ev.target)) ev.preventDefault();
+    });
+  }
+
+  /* -------- cierre que respeta el gesto ----------------------------------------------------- */
+  function cerrarLuego(pop, cerrar, ms){
+    if(!pop) { try{ cerrar(); }catch(e){} return; }
+    if(pop.__jvT){ clearTimeout(pop.__jvT); pop.__jvT = 0; }   /* nunca dos temporizadores */
+    var vueltas = 0;
+    (function arma(){
+      pop.__jvT = setTimeout(function(){
+        pop.__jvT = 0;
+        if(activo(pop) && vueltas++ < 12){ arma(); return; }   /* el dedo sigue dentro */
+        try{ cerrar(); }catch(e){}
+      }, ms || 120);
+    })();
+  }
+  function noCerrar(pop){ if(pop && pop.__jvT){ clearTimeout(pop.__jvT); pop.__jvT = 0; } }
+
+  /* -------- colocacion: el hueco que de verdad se ve ---------------------------------------- */
+  function colocar(pop, campo){
+    if(!pop || !abierto(pop)) return;
+    try{
+      var inp = campo || pop.__jvCampo;
+      if(inp) pop.__jvCampo = inp; else inp = pop.parentNode;
+      if(!inp || !inp.getBoundingClientRect) return;
+      if(pop.__jvMax == null){
+        var mx = parseFloat(getComputedStyle(pop).maxHeight);
+        pop.__jvMax = (mx > 0 && isFinite(mx)) ? mx : 300;     /* el techo que puso el diseno */
+      }
+      var vv = window.visualViewport;
+      var topV = vv ? vv.offsetTop : 0;
+      var altoV = vv ? vv.height : (window.innerHeight || 600);
+      var r = inp.getBoundingClientRect();
+      var m = 8, hueco = 6;
+      var abajo  = (topV + altoV) - r.bottom - hueco - m;
+      var arriba = r.top - topV - hueco - m;
+      var techo = pop.__jvMax;
+      var MIN = 132;
+      if(abajo >= Math.min(techo, MIN) || abajo >= arriba){
+        pop.style.top = ''; pop.style.bottom = ''; pop.style.marginTop = ''; pop.style.marginBottom = '';
+        pop.style.maxHeight = Math.max(MIN, Math.min(techo, abajo)) + 'px';
+      } else {
+        /* no cabe debajo: encima del campo */
+        pop.style.top = 'auto'; pop.style.bottom = '100%';
+        pop.style.marginTop = '0px'; pop.style.marginBottom = hueco + 'px';
+        pop.style.maxHeight = Math.max(MIN, Math.min(techo, arriba)) + 'px';
+      }
+    }catch(e){}
+  }
+  /* al cerrar se quitan los estilos en linea y la lista vuelve a ser la del diseno */
+  function soltar(pop){
+    if(!pop || !pop.style) return;
+    pop.__jvG = null;                 /* que no quede un gesto viejo para la siguiente apertura */
+    pop.style.top = ''; pop.style.bottom = ''; pop.style.marginTop = '';
+    pop.style.marginBottom = ''; pop.style.maxHeight = '';
+  }
+
+  /* -------- oyentes compartidos, una sola vez para todo el documento ------------------------ */
+  /* Farolas reconstruye su barra de filtros al repintar, asi que aparecen nodos nuevos y los
+     viejos quedan desconectados: se podan al pasar por aqui para que la lista no crezca sin fin. */
+  function podar(){
+    for(var i=listas.length-1;i>=0;i--){
+      var p = listas[i].pop;
+      if(!p || (p.isConnected === false)) listas.splice(i,1);
+    }
+  }
+  function recolocarTodas(){
+    podar();
+    for(var i=0;i<listas.length;i++){ if(abierto(listas[i].pop)) colocar(listas[i].pop, listas[i].campo); }
+  }
+  try{
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', recolocarTodas);
+      window.visualViewport.addEventListener('scroll', recolocarTodas);
+    }
+  }catch(e){}
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    podar();
+    for(var i=0;i<listas.length;i++){
+      var L = listas[i];
+      if(!abierto(L.pop)) continue;
+      noCerrar(L.pop);
+      if(L.cerrar){ try{ L.cerrar(); }catch(x){} }
+      else L.pop.classList.remove('open');
+    }
+  });
+
+  window.__jvTap = { lista:lista, activo:activo, cerrarLuego:cerrarLuego, noCerrar:noCerrar,
+                     colocar:colocar, soltar:soltar, UMBRAL:UMBRAL };
+})();
 /* Sin zoom en la PAGINA: ni pellizco, ni doble toque, ni ctrl+rueda (se comporta como una app) */
 (function(){
   document.addEventListener('gesturestart',function(e){ e.preventDefault(); },{passive:false});
@@ -348,8 +562,11 @@
   document.addEventListener('gestureend',function(e){ e.preventDefault(); },{passive:false});
   document.addEventListener('wheel',function(e){ if(e.ctrlKey) e.preventDefault(); },{passive:false});
   document.addEventListener('keydown',function(e){ if((e.ctrlKey||e.metaKey)&&['+','-','=','0'].indexOf(e.key)>=0) e.preventDefault(); });
-  var t=0;
-  document.addEventListener('touchend',function(e){ var n=Date.now(); if(n-t<=320){ e.preventDefault(); } t=n; },{passive:false});
+  /* AQUI HABIA un bloqueo de doble toque: preventDefault() a cualquier segundo touchend en
+     menos de 320 ms, en cualquier parte de la pagina. Se cargaba el segundo de dos gestos de
+     scroll seguidos en una lista larga y podia comerse el click sintetizado de una opcion.
+     No hace falta: html{touch-action:manipulation} (ya en la hoja) es lo que desactiva el
+     zoom por doble toque, de forma declarativa y sin tocar ningun gesto de desplazamiento. */
 })();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -3797,13 +4014,20 @@ function makeCombo(id){
      pulsacion). Se escucha pointerdown Y mousedown: en tactil Safari no siempre sintetiza
      eventos de raton sobre un <div> normal, y si no llega el mousedown la opcion no se elige
      y te quedas con la lista abierta. El cerrojo evita elegir dos veces con el mismo toque. */
-  let eligiendo=false;
-  const onPop=ev=>{ const el=ev.target.closest&&ev.target.closest('[data-i]'); if(!el)return;
-    ev.preventDefault();                       // no mover el foco: pick() ya lo suelta
-    if(eligiendo)return; eligiendo=true; setTimeout(()=>{eligiendo=false;},500);
-    pick(+el.dataset.i); };
-  pop.addEventListener('pointerdown',onPop);
-  pop.addEventListener('mousedown',onPop);
+  /* Se elige por window.__jvTap: nunca en 'pointerdown' y sin preventDefault al apoyar el
+     dedo, que es lo que cancelaba el scroll de la lista y elegia la fila donde lo apoyabas
+     (medido: 322 filas, scrollTop 0 -> 0, la lista se cerraba y el valor cambiaba solo). */
+  if(window.__jvTap){
+    window.__jvTap.lista(pop,'[data-i]',el=>pick(+el.dataset.i),{cerrar:()=>close(),campo:inp});
+  } else {
+    let eligiendo=false;
+    const onPop=ev=>{ const el=ev.target.closest&&ev.target.closest('[data-i]'); if(!el)return;
+      ev.preventDefault();
+      if(eligiendo)return; eligiendo=true; setTimeout(()=>{eligiendo=false;},500);
+      pick(+el.dataset.i); };
+    pop.addEventListener('pointerdown',onPop);
+    pop.addEventListener('mousedown',onPop);
+  }
   function render(q){
     const items=comboItems(id.slice(-1));const nq=sNorm(q);
     shown=nq?items.filter(o=>sNorm(o.val).includes(nq)||sNorm(o.label).includes(nq)||(o.search&&o.search.includes(nq))):items;
@@ -3811,8 +4035,12 @@ function makeCombo(id){
     let h='',lastG=null;shown.forEach((o,i)=>{if(o.group!==lastG){h+='<div class="combo-grp">'+o.group+'</div>';lastG=o.group;}h+='<div class="combo-it'+(o.tag?' synth':'')+(i===hi?' hi':'')+'" data-i="'+i+'">'+o.label+(o.tag?'<span class="tag">referencia</span>':'')+'</div>';});
     pop.innerHTML=h;
   }
-  function open(){pop.classList.add('open');inp.setAttribute('aria-expanded','true');render(inp.value===fullStore(inp.dataset.val)?'':inp.value);}
-  function close(){pop.classList.remove('open');inp.setAttribute('aria-expanded','false');hi=-1;if(inp.dataset.val)inp.value=fullStore(inp.dataset.val);}
+  function open(){pop.classList.add('open');inp.setAttribute('aria-expanded','true');render(inp.value===fullStore(inp.dataset.val)?'':inp.value);
+    /* la altura se limita al hueco que de verdad se ve (con el teclado de iOS abierto,
+       visualViewport es lo unico que se encoge) y si no cabe debajo se pone encima */
+    try{ if(window.__jvTap) window.__jvTap.colocar(pop,inp); }catch(e){}}
+  function close(){pop.classList.remove('open');inp.setAttribute('aria-expanded','false');hi=-1;if(inp.dataset.val)inp.value=fullStore(inp.dataset.val);
+    try{ if(window.__jvTap){ window.__jvTap.noCerrar(pop); window.__jvTap.soltar(pop); } }catch(e){}}
   /* Al elegir se SUELTA el foco a proposito: en movil cierra el teclado y, sobre todo, evita
      que el navegador devuelva el scroll al campo enfocado cada vez que el teclado se oculta
      (era lo que "reenviaba" al selector de tienda al tocar una celda del mapa de calor). */
@@ -3839,7 +4067,10 @@ function makeCombo(id){
     if(e.key&&e.key.length===1&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&inp.dataset.val&&inp.value===fullStore(inp.dataset.val)){ inp.value=''; }
   });
   inp.addEventListener('input',()=>{hi=-1;open();render(inp.value);});
-  inp.addEventListener('blur',()=>setTimeout(close,120));
+  /* El blur de antes cerraba a los 120 ms, tambien con el dedo dentro de la lista (al apoyarlo
+     el campo pierde el foco). cerrarLuego re-arma el temporizador mientras haya gesto. */
+  inp.addEventListener('blur',()=>{ if(window.__jvTap) window.__jvTap.cerrarLuego(pop,close,120);
+                                    else setTimeout(close,120); });
 }
 
 /* ===== SELECTORES ===== */
@@ -7378,8 +7609,14 @@ function dimDropdown(d){
     chk.addEventListener('change',()=>{ if(chk.checked)SEL[d.k].add(v); else SEL[d.k].delete(v); syncBtn(d.k); render(); });
     list.appendChild(o); });
   const btn=f.querySelector('.cd-btn');
+  /* La eleccion de estos filtros ya iba por el 'change' de una casilla de verdad, no por
+     pointerdown, asi que un arrastre nunca marcaba nada. Lo que faltaba era el CSS tactil
+     (mas abajo) y que la lista quepa en el hueco visible cuando se abre el buscador y sale el
+     teclado de iOS: encajar() la mete por los lados, colocar() por arriba y abajo. */
   btn.addEventListener('click',e=>{ e.stopPropagation(); const isOpen=pop.classList.contains('open'); closePops();
-    if(!isOpen){ pop.classList.add('open'); encajar(pop); verSeleccion(pop,list); } });
+    if(!isOpen){ pop.classList.add('open'); encajar(pop); verSeleccion(pop,list);
+      try{ if(window.__jvTap) window.__jvTap.colocar(pop,btn); }catch(_){} }
+    else { try{ if(window.__jvTap) window.__jvTap.soltar(pop); }catch(_){} } });
   f.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
     /* "Todos" = todos los que se pueden elegir ahora; "Ninguno" deja el filtro sin marcar, que
        en filtered() significa "no filtra" (lo de siempre). */
@@ -7664,7 +7901,8 @@ function downloadTable(){ if(!LOADED)return; const {arr,dcols,mcols,T}=buildTabl
 }
 
 /* ---------- selector de columnas ---------- */
-function closePops(){ document.querySelectorAll('#caudalTab .cd-pop.open').forEach(x=>x.classList.remove('open')); }
+function closePops(){ document.querySelectorAll('#caudalTab .cd-pop.open').forEach(x=>{ x.classList.remove('open');
+  try{ if(window.__jvTap) window.__jvTap.soltar(x); }catch(e){} }); }
 function colsCnt(){ const el=$('cd_colsCnt'); if(el)el.textContent=VISM.size+'/'+MCOLS.length; }
 function buildColsUI(){ const pop=$('cd_colsPop'), btn=$('cd_colsBtn'); if(!pop||!btn||pop._b)return; pop._b=1;
   pop.innerHTML='<div class="cd-p-act"><button data-a="all">Todas</button><button data-a="none">Ninguna</button></div><div class="cd-list"></div>';
@@ -8223,20 +8461,34 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     /* Igual que el combo de tienda del comparador: NO se abre con 'focus'. Un foco que no venga
        de un toque (Safari al ocultar el teclado, autorrelleno, repintado) vaciaba el campo y
        desplegaba la lista, y parecia que el filtro se reiniciaba solo. */
-    var abrir=function(){ if(pop.classList.contains('open'))return; inp.value=''; renderCombo(''); pop.classList.add('open'); verElegido(pop); };
+    var abrir=function(){ if(pop.classList.contains('open'))return; inp.value=''; renderCombo(''); pop.classList.add('open'); verElegido(pop);
+      try{ if(window.__jvTap) window.__jvTap.colocar(pop,inp); }catch(_){} };
+    var cerrarV=function(){ pop.classList.remove('open'); if(ST.val)inp.value=valLabel(ST.dim,ST.val);
+      try{ if(window.__jvTap) window.__jvTap.soltar(pop); }catch(_){} };
     inp.addEventListener('pointerdown',abrir);
     inp.addEventListener('click',abrir);
     inp.addEventListener('keydown',function(e){ if(e.key&&e.key.length===1&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&ST.val&&inp.value===valLabel(ST.dim,ST.val)) inp.value=''; });
     inp.addEventListener('input',function(){ renderCombo(inp.value); pop.classList.add('open'); });
-    inp.addEventListener('blur',function(){ setTimeout(function(){ pop.classList.remove('open'); if(ST.val)inp.value=valLabel(ST.dim,ST.val); },140); });
-    var elg=false;
-    var onPop=function(e){ var el=e.target.closest&&e.target.closest('[data-v]'); if(!el)return; e.preventDefault();
-      if(elg)return; elg=true; setTimeout(function(){elg=false;},500);
-      ST.val=el.getAttribute('data-v'); inp.value=valLabel(ST.dim,ST.val); pop.classList.remove('open');
+    inp.addEventListener('blur',function(){ if(window.__jvTap) window.__jvTap.cerrarLuego(pop,cerrarV,140);
+      else setTimeout(cerrarV,140); });
+    /* OJO con el render(): antes salia de 'pointerdown', asi que al empezar a arrastrar se
+       repintaban las 20 graficas de Farolas (el tironcito). Ahora solo corre tras un toque
+       confirmado: un arrastre no repinta nada, no mueve filtros y no recalcula. */
+    var elegirV=function(el){
+      ST.val=el.getAttribute('data-v'); inp.value=valLabel(ST.dim,ST.val);
+      if(window.__jvTap){ window.__jvTap.noCerrar(pop); window.__jvTap.soltar(pop); }
+      pop.classList.remove('open');
       try{ inp.blur(); }catch(_){}
       render(); };
-    pop.addEventListener('pointerdown',onPop);
-    pop.addEventListener('mousedown',onPop); }
+    if(window.__jvTap){ window.__jvTap.lista(pop,'[data-v]',elegirV,{cerrar:cerrarV,campo:inp}); }
+    else {
+      var elg=false;
+      var onPop=function(e){ var el=e.target.closest&&e.target.closest('[data-v]'); if(!el)return; e.preventDefault();
+        if(elg)return; elg=true; setTimeout(function(){elg=false;},500);
+        elegirV(el); };
+      pop.addEventListener('pointerdown',onPop);
+      pop.addEventListener('mousedown',onPop);
+    } }
 
   function refItems(){ var it=[{kind:'vet',val:null,label:'Veteranas',grp:'Referencias'},{kind:'all',val:null,label:'Todas las tiendas',grp:'Referencias'}];
     if(liebreSet()) it.push({kind:'liebre',val:null,label:'Tiendas Liebre',grp:'Referencias'});
@@ -8252,21 +8504,32 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       h+='<div class="fa-it'+(puesta?' on':'')+'" data-k="'+o.kind+'" data-v="'+(o.val==null?'':String(o.val).replace(/"/g,'&quot;'))+'">'+o.label+'</div>'; });
     pop.innerHTML=h; }
   function wireRef(){ var inp=$('fa_ref'), pop=$('fa_refPop'); if(!inp||!pop||inp._w)return; inp._w=1;
-    var abrirR=function(){ if(pop.classList.contains('open'))return; inp.value=''; renderRefCombo(''); pop.classList.add('open'); verElegido(pop); };
+    var abrirR=function(){ if(pop.classList.contains('open'))return; inp.value=''; renderRefCombo(''); pop.classList.add('open'); verElegido(pop);
+      try{ if(window.__jvTap) window.__jvTap.colocar(pop,inp); }catch(_){} };
+    var cerrarR=function(){ pop.classList.remove('open'); inp.value=refLabel();
+      try{ if(window.__jvTap) window.__jvTap.soltar(pop); }catch(_){} };
     inp.addEventListener('pointerdown',abrirR);
     inp.addEventListener('click',abrirR);
     inp.addEventListener('keydown',function(e){ if(e.key&&e.key.length===1&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&inp.value===refLabel()) inp.value=''; });
     inp.addEventListener('input',function(){ renderRefCombo(inp.value); pop.classList.add('open'); });
-    inp.addEventListener('blur',function(){ setTimeout(function(){ pop.classList.remove('open'); inp.value=refLabel(); },140); });
-    var elgR=false;
-    var onPopR=function(e){ var el=e.target.closest&&e.target.closest('[data-k]'); if(!el)return; e.preventDefault();
-      if(elgR)return; elgR=true; setTimeout(function(){elgR=false;},500);
+    inp.addEventListener('blur',function(){ if(window.__jvTap) window.__jvTap.cerrarLuego(pop,cerrarR,140);
+      else setTimeout(cerrarR,140); });
+    var elegirR=function(el){
       ST.refKind=el.getAttribute('data-k'); var v=el.getAttribute('data-v'); ST.refVal=v===''?null:v;
-      inp.value=refLabel(); pop.classList.remove('open');
+      inp.value=refLabel();
+      if(window.__jvTap){ window.__jvTap.noCerrar(pop); window.__jvTap.soltar(pop); }
+      pop.classList.remove('open');
       try{ inp.blur(); }catch(_){}
       render(); };
-    pop.addEventListener('pointerdown',onPopR);
-    pop.addEventListener('mousedown',onPopR); }
+    if(window.__jvTap){ window.__jvTap.lista(pop,'[data-k]',elegirR,{cerrar:cerrarR,campo:inp}); }
+    else {
+      var elgR=false;
+      var onPopR=function(e){ var el=e.target.closest&&e.target.closest('[data-k]'); if(!el)return; e.preventDefault();
+        if(elgR)return; elgR=true; setTimeout(function(){elgR=false;},500);
+        elegirR(el); };
+      pop.addEventListener('pointerdown',onPopR);
+      pop.addEventListener('mousedown',onPopR);
+    } }
 
   function renderRings(rows,rrows,same){ var host=$('fa_rings'); if(!host)return;
     _lastRings={rows:rows,rrows:rrows,same:same};
@@ -9265,6 +9528,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* filas de los desplegables de Caudal y Farolas: 28 y 32 px medidos -> 44 */
   .cd-opt{min-height:44px}
   .fa-it{padding-top:13px;padding-bottom:13px}
+  /* .cd-opt y .fa-it ya estaban subidos; .combo-it se quedaba en 40 px medidos */
+  .combo-it{min-height:44px}
   /* el circulo de intercambio se queda en 34 px por diseno: se amplia solo la zona sensible */
   .pk-swap{position:relative}
   .pk-swap::after{content:"";position:absolute;top:-6px;right:-6px;bottom:-6px;left:-6px;border-radius:50%}
@@ -9414,6 +9679,29 @@ html.light .js-plotly-plot .hoverlayer rect.jv-tipbg{filter:drop-shadow(0 8px 16
   #cfgPanel .cfg-k{margin-bottom:2px}
   #cfgPanel .cfg-d{order:3}
 }
+
+/* ==================================================================================================
+   DESPLEGABLES · scroll con el dedo
+   --------------------------------------------------------------------------------------------------
+   Los tres contenedores desplazables llevan overflow:auto puesto por su CLASE, asi que la regla
+   que daba el desplazamiento tactil, [style*="overflow:auto"], no los cogia nunca: medido en
+   iPhone, touch-action=auto, overscroll-behavior=auto y sin -webkit-overflow-scrolling.
+     touch-action:pan-y            el gesto vertical es de la lista, no de la pagina
+     -webkit-overflow-scrolling    inercia nativa en Safari de iOS
+     overscroll-behavior:contain   al llegar al final no arrastra la pagina de detras
+   touch-action:manipulation en las FILAS: sin zoom por doble toque, que es lo que hacia a mano un
+   bloqueo global de touchend que se cargaba el segundo de dos gestos seguidos.
+   ================================================================================================== */
+.combo-pop,.fa-pop,.cd-pop{
+  overflow-x:hidden;
+  overflow-y:auto;
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
+.combo-it,.fa-it,.cd-opt,.combo-grp,.fa-grp{touch-action:manipulation}
+/* el buscador de un filtro de Caudal se queda arriba mientras la lista se desplaza */
+.cd-pop .cd-p-top{touch-action:manipulation}
 </style>
 <script>
 (function(){
