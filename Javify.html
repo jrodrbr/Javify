@@ -3816,12 +3816,19 @@ function applyObjetivos(){
    Si la referencia es "Objetivo" no se compara con nadie: solo se muestran los objetivos.
    El turno no aplica (las farolas son globales del centro). Se ve en modo simple y en experto. */
 function faLiebreList(){ try{ if(window.__liebreSet&&window.__liebreSet.size) return Array.from(window.__liebreSet).map(String); }catch(e){} return null; }
+/* ===== LABORATORIO DE CAUDAL =====
+   Los centros los publica el modulo del caudal en window.__labSet (son los que hay en su CSV).
+   LAB_KEY es la clave del grupo en el comparador, del mismo estilo que ZONE:: y REG::. */
+const LAB_KEY='LAB::CAUDAL', LAB_NOM='Laboratorio de Caudal';
+function labList(){ try{ if(window.__labSet&&window.__labSet.size) return Array.from(window.__labSet).map(String); }catch(e){} return null; }
+function faLabSel(){ var L=labList(); return L?{kind:'list',list:L,name:LAB_NOM}:null; }
 function faSelFromScenario(t){
   if(t==null) return null;
   if(t===OBJ_NAME) return null;                       // "Objetivo": no hay conjunto de tiendas
   if(t==='Todas las tiendas') return {kind:'all'};
   if(t==='Tiendas Veteranas') return {kind:'vet'};
   if(t===LIEBRE_HIST){ var L=faLiebreList(); return L?{kind:'list',list:L,name:'Tiendas Liebre'}:null; }
+  if(t===LAB_KEY) return faLabSel();                  // mismo camino que las liebres: lista de tiendas
   if(typeof t==='string'&&t.indexOf('ZONE::')===0){ var z=String(t.slice(6)).replace(/\D/g,''); return {kind:'Zona', val:'Z'+('0'+z).slice(-2)}; }
   if(typeof t==='string'&&t.indexOf('REG::')===0){ var g=String(t.slice(5)).replace(/\D/g,''); return {kind:'Region', val:'R'+('0'+g).slice(-2)}; }
   return {kind:'Tienda', val:String(t)};
@@ -3858,7 +3865,7 @@ function faTiendaDe(dim,val){
   if(dim==='Zona')   return 'ZONE::Z'+('0'+String(val).replace(/\D/g,'')).slice(-2);
   if(dim==='Region') return 'REG::R'+('0'+String(val).replace(/\D/g,'')).slice(-2);
   if(dim==='Global') return (val==='Veterana')?'Tiendas Veteranas':'Todas las tiendas';
-  if(dim==='Otros')  return LIEBRE_HIST;
+  if(dim==='Otros')  return (val===LAB_NOM)?LAB_KEY:LIEBRE_HIST;
   return null;
 }
 window.__compFromFa=function(dim,val,refKind,refVal){
@@ -3966,7 +3973,7 @@ function comboItems(side){const it=[];
   /* El objetivo tambien se puede ANALIZAR, no solo usar de referencia: es la unica forma de
      bajarse su mapa de calor por area y fase. Antes estaba vetado en el lado A. */
   ST.synthPresent.forEach(t=>{ it.push({val:t,label:shortStore(t),group:'Referencias',tag:'ref'}); });
-  (ST.geoAgg||[]).forEach(k=>{ const m=(ST.aggMeta||{})[k]; if(m)it.push({val:k,label:m.label,group:'Zonas y regiones',search:m.search}); });
+  (ST.geoAgg||[]).forEach(k=>{ const m=(ST.aggMeta||{})[k]; if(m)it.push({val:k,label:m.label,group:m.grupo||'Zonas y regiones',search:m.search}); });
   ST.realStores.forEach(t=>{const nm=genName(t);it.push({val:t,label:nm||('Tienda '+t),group:'Tiendas'});});
   return it;}
 function pad2(n){n=String(n).replace(/\D/g,'');return n?('0'+n).slice(-2):n;}
@@ -3974,14 +3981,18 @@ function zonaAggMeta(z,info){var lab='Zona '+z;
   return Object.assign({label:lab,search:sNorm(lab+' z'+z+' z'+pad2(z)+' '+z),kind:'zona',zona:z},info||{});}
 function regAggMeta(rc,info){var n=String(rc).replace(/\D/g,'');var lab='Región '+(n?String(+n):rc);
   return Object.assign({label:lab,search:sNorm(lab+' region '+n+' r'+n+' r'+pad2(n)+' '+rc),kind:'region',region:(n?String(+n):rc)},info||{});}
+/* El laboratorio va en su propio apartado del desplegable: no es una zona ni una region. */
+function labAggMeta(info){
+  return Object.assign({label:LAB_NOM,search:sNorm(LAB_NOM+' laboratorio caudal lab'),
+                        kind:'lab',grupo:'Grupos'},info||{});}
 function buildAggregates(){
   if(!ST.rows||!ST.rows.length||!ST.meses||!ST.meses.length)return;
   ST.aggMeta=ST.aggMeta||{};
-  Object.keys(ST.index).forEach(k=>{ if(k===LIEBRE_HIST||k.indexOf('ZONE::')===0||k.indexOf('REG::')===0) delete ST.index[k]; });
-  Object.keys(ST.gen).forEach(k=>{ if(k===LIEBRE_HIST||k.indexOf('ZONE::')===0||k.indexOf('REG::')===0) delete ST.gen[k]; });
+  Object.keys(ST.index).forEach(k=>{ if(k===LIEBRE_HIST||k===LAB_KEY||k.indexOf('ZONE::')===0||k.indexOf('REG::')===0) delete ST.index[k]; });
+  Object.keys(ST.gen).forEach(k=>{ if(k===LIEBRE_HIST||k===LAB_KEY||k.indexOf('ZONE::')===0||k.indexOf('REG::')===0) delete ST.gen[k]; });
   Object.keys(ST.aggMeta).forEach(k=>delete ST.aggMeta[k]);
   ST.synthPresent=ST.synthPresent.filter(t=>t!==LIEBRE_HIST);
-  ST.tiendas=ST.tiendas.filter(t=>t!==LIEBRE_HIST&&t.indexOf('ZONE::')!==0&&t.indexOf('REG::')!==0);
+  ST.tiendas=ST.tiendas.filter(t=>t!==LIEBRE_HIST&&t!==LAB_KEY&&t.indexOf('ZONE::')!==0&&t.indexOf('REG::')!==0);
   ST.geoAgg=[];
   /* TODAS las columnas numéricas, no solo NUMC. NUMC son las 25 del corte 20; en EXTRA_COLS están
      las otras 43: el corte efectivo ≤6', las paradas por fase y las tres de unidades Mdonadona.
@@ -3992,6 +4003,20 @@ function buildAggregates(){
   // Media de los datos GLOBALES del centro (CSV general) por mes → la usan el resumen ("Lo más importante"), la evolución 12 meses y la tendencia global (genRow/genSerie). Sin esto, los agregados no tenían histórico.
   const buildGen=(members,meta)=>{ const g={}; ST.meses.forEach(mk=>{ const rows=[]; members.forEach(m=>{const r=(ST.gen[m]||{})[mk]; if(r)rows.push(r);}); if(!rows.length)return; const o={center_name:meta.center_name,region:meta.region||'',zona:meta.zona||'',model:'',fase:'',estado:'Sintética: todas'}; GEN_NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});o[c]=n?s/n:null;}); g[mk]=o; }); return g; };
   if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); ordenaRefs(); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
+  /* ===== LABORATORIO DE CAUDAL =====
+     Mismo build() y mismo buildGen() que una Zona o una Region: la media de las tiendas del
+     grupo, columna a columna, para cada mes x turno x area. Lo unico propio es de que lista de
+     tiendas se parte (window.__labSet, que publica el modulo del caudal). */
+  { const L=labList();
+    if(L&&L.length){ const setL=new Set(L.map(String));
+      const mem=ST.realStores.filter(t=>setL.has(String(t)));
+      if(mem.length){ const idx=build(mem);
+        if(Object.keys(idx).length){
+          ST.index[LAB_KEY]=idx;
+          ST.aggMeta[LAB_KEY]=labAggMeta({nTiendas:mem.length, members:mem.slice()});
+          ST.geoAgg.push(LAB_KEY); ST.tiendas.push(LAB_KEY);
+          if(ST.genReady){ const g=buildGen(mem,{center_name:LAB_NOM}); if(Object.keys(g).length)ST.gen[LAB_KEY]=g; }
+        } } } }
   if(ST.genReady){ const zMem={},rMem={}; ST.realStores.forEach(t=>{ const o=ST.gen[t]; if(!o)return; let z=null,rg=null; for(const mk in o){ if(z==null&&o[mk].zona!=null&&o[mk].zona!=='')z=o[mk].zona; if(rg==null&&o[mk].region)rg=o[mk].region; } if(z!=null&&z!=='')(zMem[z]=zMem[z]||[]).push(t); if(rg)(rMem[rg]=rMem[rg]||[]).push(t); });
     /* de qué región es cada zona, y qué zonas tiene cada región: se sabe aquí, que es donde están
        los miembros. Luego la cabecera de la tienda analizada lo enseña en las pastillas. */
@@ -4656,7 +4681,7 @@ function renderSummary(){
     $('execSummary').innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-sm);padding:18px 22px;margin-bottom:14px">'+
       /* Veteranas, Todas y Tiendas Liebre TIENEN fila general (el SQL las publica como filas
          sinteticas), asi que caian aqui y salian rotuladas "Tienda analizada". Son conjuntos. */
-      '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(_agg?(_agg.kind==='region'?'Región analizada':'Zona analizada'):_synth?'Conjunto analizado':'Tienda analizada')+'</div>'+
+      '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(_agg?(_agg.kind==='region'?'Región analizada':_agg.kind==='lab'?'Grupo analizado':'Zona analizada'):_synth?'Conjunto analizado':'Tienda analizada')+'</div>'+
       '<div class="sthead-row"><span class="sthead-n">'+titulo+'</span>'+
         ((_agg||_synth)?chip('Media de sus tiendas')
              :chip(vetTxt,_fase?faseBg(_fase):(gA.estado==='Veterana'?'var(--brand-soft)':'')))+'</div>'+
@@ -4766,7 +4791,7 @@ function renderSummary(){
              :esAgg?(ST.aggMeta[_t].kind==='region'?'Media de las tiendas de la región':'Media de las tiendas de la zona')
                    :'Media de las tiendas del conjunto';
       $('execSummary').innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-sm);padding:18px 22px;margin-bottom:14px">'+
-        '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(esObj?'Objetivo analizado':esCentro?'Tienda analizada':esAgg?(ST.aggMeta[_t].kind==='region'?'Región analizada':'Zona analizada'):'Conjunto analizado')+'</div>'+
+        '<div style="flex:1;min-width:220px"><div class="sthead-k">'+(esObj?'Objetivo analizado':esCentro?'Tienda analizada':esAgg?(ST.aggMeta[_t].kind==='region'?'Región analizada':ST.aggMeta[_t].kind==='lab'?'Grupo analizado':'Zona analizada'):'Conjunto analizado')+'</div>'+
         '<div class="sthead-row"><span class="sthead-n">'+esc1(shortStore(curA.tienda))+'</span></div>'+
         '<div class="sthead-meta">'+sub+'</div></div>'+
         '<div style="text-align:right"><div style="font-size:11px;color:var(--ink3-txt);text-transform:uppercase;letter-spacing:1px">'+mesAA(curA.mesKey)+'</div></div>'+
@@ -7545,6 +7570,20 @@ function build(data){
     rr:numv(r.real_real), tiene:String(r.tiene_realreal).trim()==='1'
   }));
   try{window.__CENTRONOM=Object.fromEntries(ROWS.filter(r=>r.centro&&r.centro_nombre).map(r=>[r.centro,r.centro_nombre]));if(window.loRerenderStores)window.loRerenderStores();}catch(e){}
+  /* ===== LOS CENTROS DEL LABORATORIO =====
+     El laboratorio de caudal son, por definicion, los centros que hay en ESTE CSV (hoy 19).
+     Se publican en window.__labSet igual que Objetivos publica window.__liebreSet, y con eso
+     el comparador arma el grupo agregado y Farolas lo ofrece en "Otros". No hay ninguna lista
+     escrita a mano: si manana el laboratorio crece, el grupo crece con el. */
+  try{
+    var _lab=new Set(); ROWS.forEach(function(r){ if(r.centro) _lab.add(String(r.centro)); });
+    if(_lab.size){
+      window.__labSet=_lab;
+      if(window.__buildAgg) window.__buildAgg();
+      if(window.__rerenderComp) window.__rerenderComp();
+      if(window.__faLabSync) window.__faLabSync();
+    }
+  }catch(e){ console.warn('labSet',e); }
   OPTS={};
   FDIMS.forEach(d=>{ const s=new Set(); ROWS.forEach(r=>{ if(r[d.k]!=='')s.add(r[d.k]); });
     let arr=[...s];
@@ -8070,6 +8109,10 @@ try{ if(window.ResizeObserver){ const _b=$('cd_chart'); if(_b)new ResizeObserver
   go.addEventListener('click',function(e){ e.stopPropagation(); close(); var p=document.getElementById('cfgPanel'), u=document.getElementById('unitBtn'); if(p) p.classList.add('open'); if(u){ try{u.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){} u.classList.remove('pulse-hi'); void u.offsetWidth; u.classList.add('pulse-hi'); setTimeout(function(){ u.classList.remove('pulse-hi'); }, 2500); } });
 })();
 window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window.loInit) window.loInit(); }catch(e){} }, 800); });
+/* El CSV del caudal (1 MB) se bajaba solo al abrir su pestana, asi que el grupo "Laboratorio de
+   Caudal" no habria existido hasta entrar ahi una vez. Se precarga en segundo plano, igual que
+   la vista de Objetivos justo arriba, y de paso la pestana se abre al instante. */
+window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window.caudalInit) window.caudalInit(); }catch(e){} }, 1500); });
 </script>
 
 <script>
@@ -8089,9 +8132,14 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   var DIMS=[{k:'Global',lab:'Global'},{k:'Tienda',lab:'Tienda'},{k:'Zona',lab:'Zona'},{k:'Region',lab:'Región'},{k:'Modelo',lab:'Modelo'},{k:'Otros',lab:'Otros'}];
   /* GRUPOS PROPIOS de tiendas ("Otros"): aqui se iran anadiendo los grupos raros (laboratorio, etc.).
      'test' recibe una fila y decide si pertenece al grupo. */
-  var OTROS=[{name:'Tiendas liebre', test:function(r){ return isLiebre(r); }, need:function(){ return !!liebreSet(); }}];
+  var OTROS=[{name:'Tiendas liebre', test:function(r){ return isLiebre(r); }, need:function(){ return !!liebreSet(); }},
+             {name:'Laboratorio de Caudal', test:function(r){ return esLab(r); }, need:function(){ return !!labSet(); }}];
   function liebreSet(){ try{ return (window.__liebreSet&&window.__liebreSet.size)?window.__liebreSet:null; }catch(e){ return null; } }
   function isLiebre(r){ var s=liebreSet(); return s?s.has(String(r.Tienda)):false; }
+  /* Los centros del laboratorio los publica el modulo del caudal (son los de su CSV). El grupo
+     se promedia dia a dia por el mismo camino que una Zona o una Region: solo cambia el filtro. */
+  function labSet(){ try{ return (window.__labSet&&window.__labSet.size)?window.__labSet:null; }catch(e){ return null; } }
+  function esLab(r){ var s=labSet(); return s?s.has(String(r.Tienda)):false; }
   /* objetivo de productividad de LO QUE SE ESTA PINTANDO (null = el de flota) */
   var _objProdSel=null;
   var AZUL='#3b82c4', AMBAR='#d9932b';
@@ -8309,12 +8357,14 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(k==='vet')return r.Fase==='Veterana';
     if(k==='all')return true;
     if(k==='liebre')return isLiebre(r);
+    if(k==='lab')return esLab(r);
     return r[k]===ST.refVal && scopeOk(r); }
   function refRows(sel){ return ROWS.filter(function(r){ return refOk(r) && (sel?sel.test(r):true); }); }
   function refLabel(){ var k=ST.refKind;
     if(k==='vet')return 'Veteranas';
     if(k==='all')return 'Todas las tiendas';
     if(k==='liebre')return 'Tiendas Liebre';
+    if(k==='lab')return 'Laboratorio de Caudal';
     if(k==='Tienda')return valLabel('Tienda',ST.refVal);
     var d=DIMS.filter(function(x){return x.k===k;})[0]; return (d?d.lab:k)+' '+ST.refVal; }
   /* mismo conjunto -> no tiene sentido comparar: solo objetivo */
@@ -8401,6 +8451,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   }
   /* lo llama el modulo de objetivos en cuanto tiene la lista de tiendas liebre */
   window.__faLiebreSync=function(){ try{ if(syncOtros()) render(); }catch(e){} };
+  /* lo llama el modulo del caudal cuando ya sabe sus centros */
+  window.__faLabSync=function(){ try{ if(syncOtros()) render(); }catch(e){} };
   /* nombre corto para el titulo de la imagen: Veteranas / R08 / Z24 / 2004 · Nombre / NTC60 */
   function faEsc(x){ return String(x==null?'':x).replace(/&(?!middot;)/g,'&amp;').replace(/"/g,'&quot;')
     .replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -8492,6 +8544,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
 
   function refItems(){ var it=[{kind:'vet',val:null,label:'Veteranas',grp:'Referencias'},{kind:'all',val:null,label:'Todas las tiendas',grp:'Referencias'}];
     if(liebreSet()) it.push({kind:'liebre',val:null,label:'Tiendas Liebre',grp:'Referencias'});
+    if(labSet()) it.push({kind:'lab',val:null,label:'Laboratorio de Caudal',grp:'Referencias'});
     (DIMV['Region']||[]).forEach(function(v){ it.push({kind:'Region',val:v,label:'Región '+v,grp:'Regiones'}); });
     (DIMV['Zona']||[]).forEach(function(v){ it.push({kind:'Zona',val:v,label:'Zona '+v,grp:'Zonas'}); });
     (DIMV['Tienda']||[]).forEach(function(v){ it.push({kind:'Tienda',val:v,label:valLabel('Tienda',v),grp:'Tiendas'}); });
@@ -8902,7 +8955,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(!sel) return null;
     if(sel.kind==='all')    return {dim:'Global', val:TODAS};
     if(sel.kind==='vet')    return {dim:'Global', val:'Veterana'};
-    if(sel.kind==='list')   return {dim:'Otros',  val:'Tiendas liebre'};
+    if(sel.kind==='list')   return {dim:'Otros',
+      val:(sel.name&&OTROS.filter(function(g){return g.name===sel.name;}).length)?sel.name:'Tiendas liebre'};
     if(sel.kind==='Tienda') return {dim:'Tienda', val:String(sel.val)};
     if(sel.kind==='Zona')   return {dim:'Zona',   val:sel.val};
     if(sel.kind==='Region') return {dim:'Region', val:sel.val};
@@ -8912,7 +8966,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(!sel) return null;
     if(sel.kind==='all')    return {refKind:'all',    refVal:null};
     if(sel.kind==='vet')    return {refKind:'vet',    refVal:null};
-    if(sel.kind==='list')   return {refKind:'liebre', refVal:null};
+    if(sel.kind==='list')   return {refKind:(sel.name==='Laboratorio de Caudal')?'lab':'liebre', refVal:null};
     if(sel.kind==='Tienda') return {refKind:'Tienda', refVal:String(sel.val)};
     if(sel.kind==='Zona')   return {refKind:'Zona',   refVal:sel.val};
     if(sel.kind==='Region') return {refKind:'Region', refVal:sel.val};
