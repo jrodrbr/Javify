@@ -183,17 +183,68 @@
      entre medias se purga esa grafica para volver a pintarla, el ajuste se encuentra el div sin
      layout y la promesa revienta con "_redrawFromAutoMarginCount". Es ruido: la grafica siguiente
      se pinta bien. Se recoge ESE fallo y solo ese; cualquier otro se sigue viendo. */
-  function recoger(r){
+  function recoger(r,d){
     try{ if(r&&r.catch) r.catch(function(e){
       var m=(e&&e.message)||String(e||'');
       if(m.indexOf('_redrawFromAutoMarginCount')<0) console.warn('gr\u00e1fica:',m);
+      /* la promesa se rompio a mitad: la resta del contador de automargin no se ha hecho */
+      cero(d);
     }); }catch(e){}
     return r;
   }
-  Plotly.newPlot=function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
-    var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
-  Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d);
-    var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); return recoger(r); };
+  /* ------------------------------------------------------------------------------------
+     "Too many auto-margin redraws."  ·  EL AVISO QUE DEJABA GRAFICAS SIN PINTAR
+     Plotly 2.35, plots.js, doAutoMargin, al final de cada pintado:
+
+         "_redrawFromAutoMarginCount" in t ? t._redrawFromAutoMarginCount++ : ... = 1;
+         var Q = 3 * (1 + numero de cosas que empujan margenes);
+         if(t._redrawFromAutoMarginCount < Q) return _doPlot(gd);   // lo intenta otra vez
+         t._size = s;  Lib.warn("Too many auto-margin redraws.");   // SE RINDE
+
+     Dos cosas importantes de esas cuatro lineas:
+       1) cuando se rinde NO se queda con los margenes nuevos: DEVUELVE LOS DE ANTES
+          (t._size = s). Si los de antes son de cuando la tarjeta estaba oculta (Plotly usa
+          700x450) o de otro tamano de ventana, la grafica queda dibujada para un hueco que ya
+          no existe: se ve el titulo y no se ve la grafica, y se arregla moviendo la ventana.
+          Ese es exactamente el fallo que se veia.
+       2) el contador NO es de un pintado, es DEL DIV, y se resta al acabar cada pintado
+          (plot_api.js: t._redrawFromAutoMarginCount--). Si un pintado no llega a acabar -se
+          purga el div a mitad, o la promesa se rompe- la resta no ocurre y el contador se
+          queda arriba. Plotly.react no lo limpia: supplyDefaults copia al layout nuevo todas
+          las claves que empiezan por "_". Desde ese momento, un resize de esa grafica puede
+          salir rechazado por un bucle que paso hace media hora.
+
+     Aqui se le da a cada pintado explicito su presupuesto entero, que es lo que Plotly
+     pretende: el tope esta para cortar el bucle DENTRO de un pintado, no para toda la vida del
+     div. No hay riesgo de bucle infinito porque los repintados internos de doAutoMargin llaman
+     a _doPlot, no a Plotly.react, y no pasan por este envoltorio.
+     ------------------------------------------------------------------------------------ */
+  function cero(d){
+    try{ var el=(typeof d==='string')?document.getElementById(d):d;
+      var fl=el&&el._fullLayout;
+      if(fl && !fl._replotting) delete fl._redrawFromAutoMarginCount;
+    }catch(e){}
+  }
+  /* Si una grafica agota el presupuesto en UN solo pintado es que oscila de verdad (el caso
+     tipico: un rosco con los porcentajes por fuera y automargin, que al reservar margen se
+     hace mas pequeno, con lo que las etiquetas se mueven y hace falta otro margen). El aviso
+     de Plotly no dice cual es; este si, y una sola vez por grafica. */
+  var dichas={};
+  function revisar(d){
+    try{ var el=(typeof d==='string')?document.getElementById(d):d;
+      var fl=el&&el._fullLayout; if(!fl||!el.id||dichas[el.id]) return;
+      var n=fl._redrawFromAutoMarginCount||0;
+      var tope=3*(1+(fl._pushmarginIds?Object.keys(fl._pushmarginIds).length:0));
+      if(n>=tope){ dichas[el.id]=1;
+        console.warn('Javify \u00b7 '+el.id+' agota los m\u00e1rgenes autom\u00e1ticos ('
+          +n+'/'+tope+'): Plotly se queda con los anteriores'); }
+    }catch(e){}
+  }
+  window.__jvCeroAM=cero;
+  Plotly.newPlot=function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d); cero(d);
+    var r=_new.call(Plotly,d,data,f[0],f[1]); apuntar(d); revisar(d); return recoger(r,d); };
+  Plotly.react =function(d,data,lay,cfg){ var f=fix(lay,cfg,data,d); cero(d);
+    var r=_react.call(Plotly,d,data,f[0],f[1]); apuntar(d); revisar(d); return recoger(r,d); };
 })();
 /* ==================================================================================================
    UN SOLO COORDINADOR DE TAMANOS  ·  window.__jvSize
@@ -233,7 +284,8 @@
 (function(){
   if(window.__jvSize) return;
   var ESPERA = 130;   /* ms minimos entre dos peticiones a la MISMA grafica (Plotly espera 100) */
-  var MARCOS = 12;    /* reintentos por frame como maximo mientras la caja mida cero */
+  var MARCOS = 30;    /* reintentos por frame como maximo mientras la caja mida cero (~0,5 s) */
+  var INTENTOS = 24;  /* reintentos EN LA COLA de una grafica visible que aun no tiene caja (~3 s) */
   var cola = (typeof Map !== 'undefined') ? new Map() : null;
   var pedida = false;
 
@@ -255,7 +307,13 @@
   function necesita(gd, forzado){
     if(!gd || !gd.data || !visible(gd)) return false;
     var c = caja(gd);
-    if(!c || c.w < 10 || c.h < 10) return false;      /* sin caja util: se queda pendiente */
+    /* Visible pero sin caja util: una pestana que acaba de destaparse, una transicion de CSS, o
+       el hilo ocupado parseando el CSV. Se devuelve 'espera', NO false. ANTES devolvia false y
+       vaciar() la SACABA de la cola, asi que la grafica se quedaba con el tamano con el que
+       nacio -700x450, el de Plotly cuando el div no mide- hasta que pasara otra cosa: mover la
+       ventana, el ResizeObserver de la tarjeta o una de las pasadas de 130/340/700/1200 ms.
+       Eso era exactamente "no se pinta bien y al rato sale". */
+    if(!c || c.w < 10 || c.h < 10) return 'espera';
     if(forzado) return true;
     var fl = gd._fullLayout;
     if(!fl) return true;
@@ -274,6 +332,12 @@
         gd._redrawTimer = null;
         try{ if(gd._resolveResize){ var _r = gd._resolveResize; gd._resolveResize = null; _r(gd); } }catch(e){}
       }
+      /* El contador de margenes automaticos puede venir colgado de un pintado que no termino
+         (ver el envoltorio de newPlot/react al principio del fichero). Con el agotado,
+         doAutoMargin rechaza los margenes nuevos y devuelve los viejos: este resize no
+         serviria de nada, y es justo el caso de la grafica que no se pinta hasta que mueves la
+         ventana. */
+      if(window.__jvCeroAM) window.__jvCeroAM(gd);
       var p = window.Plotly.relayout(gd, { autosize:true });
       if(p && p.catch) p.catch(function(){});
     }catch(e){}
@@ -286,13 +350,22 @@
     cola.forEach(function(forzado, gd){
       if(!gd || !gd.parentNode){ return; }
       if(!visible(gd)){ gd.__oculta = 1; return; }               /* oculta: Plotly la descartaria */
-      if(!necesita(gd, forzado)) return;
-      if(!forzado && (t - (gd.__jvAt || 0)) < ESPERA){ quedan.push(gd); return; }
+      var q = necesita(gd, forzado);
+      if(q === 'espera'){          /* aun sin caja: se queda en la cola, no se pierde */
+        gd.__jvTry = (gd.__jvTry | 0) + 1;
+        if(gd.__jvTry <= INTENTOS) quedan.push([gd, forzado]);
+        return;
+      }
+      gd.__jvTry = 0;
+      if(!q) return;
+      if(!forzado && (t - (gd.__jvAt || 0)) < ESPERA){ quedan.push([gd, forzado]); return; }
       aplicar(gd);
     });
     cola.clear();
     if(quedan.length){
-      for(var i=0;i<quedan.length;i++) cola.set(quedan[i], false);
+      /* se vuelve a encolar CON su forzado: antes se reencolaba con false y una peticion forzada
+         (la de "acabo de destapar esta pestana") perdia el forzado al primer reintento */
+      for(var i=0;i<quedan.length;i++) cola.set(quedan[i][0], quedan[i][1]);
       setTimeout(programar, ESPERA);
     }
   }
@@ -332,7 +405,16 @@
           if(c && c.w > 10 && c.h > 10){ hay = true; break; }
         }
       }catch(e){}
-      if(hay || n >= MARCOS){ barrer(forzado !== false); return; }
+      if(hay){ barrer(forzado !== false); return; }
+      if(n >= MARCOS){
+        /* Medio segundo de frames y ninguna tiene caja todavia. NO se abandona: se barre igual
+           (por si alguna si la tiene) y se dejan dos pasadas forzadas mas tarde, que es cuando
+           acaba la maquetacion si el hilo estaba ocupado con el CSV. */
+        barrer(forzado !== false);
+        setTimeout(function(){ barrer(true); }, 300);
+        setTimeout(function(){ barrer(true); }, 900);
+        return;
+      }
       if(window.requestAnimationFrame) requestAnimationFrame(paso); else setTimeout(paso, 16);
     }
     if(window.requestAnimationFrame) requestAnimationFrame(function(){ requestAnimationFrame(paso); });
@@ -569,6 +651,79 @@
      zoom por doble toque, de forma declarativa y sin tocar ningun gesto de desplazamiento. */
 })();
 </script>
+<style>
+  /* ===== QUE TIENDAS COMPONEN EL CONJUNTO =====
+     El recuento de tiendas de una zona o una region pasa a ser pulsable y abre la lista
+     numerada. Mismo lenguaje visual que los desplegables .cd-pop: nada nuevo, solo pulsable. */
+  .memb{display:inline-flex;align-items:baseline;gap:5px;padding:1px 7px;border:1px solid var(--line2);border-radius:7px;background:var(--panel2);color:inherit;font:inherit;font-size:inherit;line-height:1.45;cursor:pointer}
+  .memb:hover{border-color:var(--brand-bd);color:var(--ink)}
+  .memb b{font-weight:800}
+  .memb-ar{font-size:9px;opacity:.5}
+  .memb[aria-expanded="true"]{border-color:var(--brand-bd);background:var(--brand-soft)}
+  /* El que scrollea es .memb-sc, NO el popup: un contenedor con scroll y border-radius cuadra
+     las esquinas del lado de la barra, y ahi se veian dos redondeadas y dos en pico. Asi el
+     popup recorta con overflow:hidden y el encabezado se queda fijo. */
+  .memb-pop{position:fixed;z-index:120;display:none;min-width:245px;max-width:min(350px,calc(100vw - 16px));overflow:hidden;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--sh);padding:0}
+  .memb-pop.open{display:block}
+  .memb-sc{max-height:min(340px,60vh);overflow-y:auto;overflow-x:hidden;padding:0 8px 8px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .memb-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px 8px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3-txt);background:var(--panel);border-bottom:1px solid var(--line)}
+  /* cabecera de zona dentro de una region: pulsable para plegar sus tiendas */
+  .memb-z{display:flex;align-items:center;gap:8px;margin:8px 0 3px;padding:4px 7px;border-radius:7px;background:var(--panel3);cursor:pointer;user-select:none}
+  .memb-z:hover{background:var(--panel2)}
+  .memb-zt{flex:1;min-width:0;font-size:11.5px;font-weight:800;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .memb-zn{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--ink3-txt)}
+  .memb-ar2{font-size:9px;opacity:.55;transition:transform .15s}
+  .memb-z.cerr .memb-ar2{transform:rotate(-90deg)}
+  .memb-z.cerr+.memb-l{display:none}
+  .memb-n{padding:1px 8px;border-radius:999px;background:var(--panel2);border:1px solid var(--line2);font-size:11px;letter-spacing:0;color:var(--ink2)}
+  .memb-l{list-style:none;margin:0;padding:0;counter-reset:memb}
+  .memb-l li{counter-increment:memb;display:flex;align-items:baseline;gap:8px;padding:5px 7px;border-radius:7px;font-size:12.5px;color:var(--ink)}
+  .memb-l li:nth-child(odd){background:var(--panel2)}
+  .memb-l li::before{content:counter(memb);flex:0 0 18px;text-align:right;font-family:ui-monospace,monospace;font-size:10.5px;color:var(--ink3-txt)}
+  .memb-c{font-family:ui-monospace,monospace;font-size:11.5px;font-weight:700;color:var(--ink2)}
+  .memb-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* ===== DETALLE DEL RANKING DE CAUDAL (la grafica de una sola fila) ===== */
+  #cd_rkTbl thead th[data-k]{cursor:pointer;user-select:none}
+  #cd_rkTbl thead th.cd-rkon{color:var(--brand-txt)}
+  #cd_rkTbl tbody tr[data-rk]{cursor:pointer}
+  #cd_rkTbl tbody tr[data-rk]:hover>td{background:var(--panel2)}
+  #cd_rkTbl tbody tr.cd-rksel>td{background:var(--brand-soft)}
+  #cd_rkTbl tbody tr.cd-rksel>td:first-child{box-shadow:inset 2px 0 0 0 var(--brand)}
+  /* Con todas las columnas puestas la tabla scrollea en horizontal y se perdia de vista de que
+     centro era cada fila. El numero y el centro se quedan fijos, cabecera incluida. El fondo va
+     opaco y explicito (si no, se transparenta lo que pasa por debajo) y el z-index sube en la
+     interseccion con la cabecera, que ya era sticky por su cuenta. */
+  #cd_rkTbl thead th:nth-child(1),#cd_rkTbl tbody tr[data-rk]>td:nth-child(1){position:sticky;left:0;z-index:4;width:34px;min-width:34px;background:var(--panel)}
+  #cd_rkTbl thead th:nth-child(2),#cd_rkTbl tbody tr[data-rk]>td:nth-child(2){position:sticky;left:34px;z-index:4;min-width:150px;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--panel);box-shadow:1px 0 0 0 var(--line)}
+  #cd_rkTbl thead th:nth-child(1),#cd_rkTbl thead th:nth-child(2){z-index:7;background:var(--panel3)}
+  #cd_rkTbl tbody tr[data-rk]:hover>td:nth-child(1),#cd_rkTbl tbody tr[data-rk]:hover>td:nth-child(2){background:var(--panel2)}
+  #cd_rkTbl tbody tr.cd-rksel>td:nth-child(1),#cd_rkTbl tbody tr.cd-rksel>td:nth-child(2){background:var(--brand-soft)}
+  /* la grafica parte la tabla justo debajo de la fila pulsada; la celda va sticky a la izquierda
+     para que no se vaya de la pantalla al scrollear en horizontal */
+  #cd_rkTbl tbody tr.cd-detrow>td{padding:0!important;border:0!important;background:var(--panel)!important;position:sticky;left:0;z-index:5}
+  #cd_rkTbl tbody tr.cd-detrow:hover>td{background:var(--panel)!important}
+  #cd_rkTbl tbody tr.cd-detrow .rkd{margin:10px 0 12px;box-shadow:var(--sh-sm)}
+  .cd-pop .cd-grp{padding:8px 8px 3px;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3-txt)}
+  .rkd{border:1px solid var(--line2);border-radius:12px;background:var(--panel);padding:14px 16px 8px;animation:fadein .2s}
+  .rkd-h{display:flex;align-items:center;gap:10px}
+  .rkd-t{flex:1;min-width:0;font-size:14px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rkd-x{flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer}
+  .rkd-x:hover{color:var(--ink)}
+  /* el panel de tendencia es un hermano mas de la columna flex de #rkList */
+  #rkList .rk-det,#diffList .rk-det{margin:0}
+  #rkList .rk-det .rkd-t,#diffList .rk-det .rkd-t{font-size:13.5px}
+  /* .png es absolute por defecto; con .dl-in vuelve al flujo, y el panel es su referencia */
+  .rkd{position:relative}
+  .rkd-h .png.dl-in{top:auto;right:auto;left:auto;flex:0 0 auto}
+  /* En movil la cabecera parte en dos lineas: el titulo arriba y los botones abajo, pero
+     ALINEADOS A LA DERECHA (antes se quedaban pegados a la izquierda). */
+  @media (max-width:700px){
+    .rkd-h{flex-wrap:wrap;justify-content:flex-end}
+    .rkd-t{flex:1 1 100%}
+  }
+  @media (max-width:700px){ .rkd{padding:12px 12px 6px} }
+  @media print{ .memb-pop{display:none!important} .memb{border:0;background:0;padding:0} .memb-ar{display:none} .rkd-x,#cd_rkChartDl{display:none!important} }
+</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <!-- Fuente del sistema (San Francisco en Apple) — sin webfont externa -->
 <style>
@@ -1114,6 +1269,11 @@ optgroup{font-weight:800;font-style:normal;color:var(--ink2)}
 /* En móvil, la cabecera de las cajas (título + subtítulo + su selector) se apila ordenada en vez de descentrarse */
 @media(max-width:640px){.cbox-hd{flex-wrap:wrap}.cbox-hd>div:first-child{flex:1 1 100%;min-width:0}.cbox-hd>select{width:100%!important;min-width:0!important;margin-top:8px}}
 .chart{width:100%;margin-top:8px}
+/* Cuando una grafica no tiene nada que dibujar se purga, y como .chart no lleva alto en CSS la
+   tarjeta se quedaba en el titulo y un hueco de cero: parecia rota. El hueco lo pone este
+   mensaje, que ademas le da altura a la caja para que el orquestador pueda medirla. */
+.chart-none{min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;
+  padding:18px;font-size:12.5px;line-height:1.5;color:var(--ink3-txt)}
 .png,.csv{position:absolute;top:15px;right:17px;z-index:4;padding:6px 11px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--ink2);font:inherit;font-size:10px;font-weight:750;cursor:pointer;transition:.15s}
 .png:hover,.csv:hover{color:var(--ink);border-color:var(--brand)}
 .png+.csv,.csv+.png{right:auto;left:17px}
@@ -2468,7 +2628,7 @@ body.simple #mObj{display:none!important}
     <div class="sec no-print" id="secCorte" style="margin-top:30px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-sm);padding:13px 18px">
         <div><div style="font-size:13px;font-weight:800">Cómo ver el detalle de abajo</div><div style="font-size:11.5px;color:var(--ink2);margin-top:1px">El resumen de arriba es global. Elige con qué corte de tiempo quieres ver las áreas y los subprocesos.</div></div>
-        <div class="modeswitch" id="corteSw" style="margin-left:auto" role="group" title="Corte de tiempo para el detalle"><button class="on" data-corte="util" aria-pressed="true">Tiempo total <span style="opacity:.6;font-weight:600">≤20'</span></button><button data-corte="efec" aria-pressed="false">Tiempo efectivo <span style="opacity:.6;font-weight:600">≤6'</span></button><button data-corte="par" aria-pressed="false">Tiempo de parada <span style="opacity:.6;font-weight:600">6–20'</span></button></div>
+        <div class="modeswitch" id="corteSw" style="margin-left:auto" role="group" title="Corte de tiempo para el detalle"><button class="on" data-corte="util" aria-pressed="true"><span class="jv-l">Tiempo total</span><span class="jv-s">Total</span> <span style="opacity:.6;font-weight:600">≤20'</span></button><button data-corte="efec" aria-pressed="false"><span class="jv-l">Tiempo efectivo</span><span class="jv-s">Efectivo</span> <span style="opacity:.6;font-weight:600">≤6'</span></button><button data-corte="par" aria-pressed="false"><span class="jv-l">Tiempo de parada</span><span class="jv-s">Paradas</span> <span style="opacity:.6;font-weight:600">6–20'</span></button></div>
       </div>
     </div>
 
@@ -2482,7 +2642,7 @@ body.simple #mObj{display:none!important}
       <div class="no-print faro-ctrls">
         <div class="faro-ctrl"><span class="faro-ctrl-l">Unidad</span>
           <div class="modeswitch" id="faroUnitSeg" role="group" title="Objetivo oficial (mixto), tiempo por lote, productividad por unidad, o % (de dónde sale la productividad: aporte de cada área y subproceso al total, con el desvío frente a la referencia)">
-            <button data-v="objof" class="on" aria-pressed="true">Objetivo oficial</button><button data-v="min" aria-pressed="false">Tiempo</button><button data-v="prod" aria-pressed="false">Prod (min/ud)</button><button data-v="pct" aria-pressed="false">%</button></div></div>
+            <button data-v="objof" class="on" aria-pressed="true"><span class="jv-l">Objetivo oficial</span><span class="jv-s">Objetivo</span></button><button data-v="min" aria-pressed="false">Tiempo</button><button data-v="prod" aria-pressed="false"><span class="jv-l">Prod (min/ud)</span><span class="jv-s">Prod</span></button><button data-v="pct" aria-pressed="false">%</button></div></div>
         <button class="btn btn-gh" id="faroPng" type="button" style="padding:8px 14px;font-size:12px">⤓ Descargar PNG</button>
       </div></div>
       <div class="matrix"><div class="mxgrid" id="matBody"></div><div class="mx-foot" id="matFoot"></div></div>
@@ -2674,7 +2834,7 @@ body.simple #mObj{display:none!important}
         <p class="lo-sec-s">Cuánto aporta cada área y subproceso a la productividad global objetivo de las tiendas liebre, según el tiempo medio diario y el nº de lotes (ponderado por lotes). En <b>%</b> es la parte del total (suman 100%); en <b>productividad</b>, los min/ud que aporta cada parte (suman el global). Sigue el corte y el modo agrupado/desglosado. Ejemplo: qué % del global viene de la preparación de Frescos.</p>
         <div class="lo-ctrls">
           <div class="lo-fld"><label>Ver como</label>
-            <div class="lo-seg lo-sm" id="lo_contribViewSeg"><button data-v="pct" class="lo-on">% del total</button><button data-v="prod">Productividad (min/ud)</button></div></div>
+            <div class="lo-seg lo-sm" id="lo_contribViewSeg"><button data-v="pct" class="lo-on"><span class="jv-l">% del total</span><span class="jv-s">%</span></button><button data-v="prod"><span class="jv-l">Productividad (min/ud)</span><span class="jv-s">Prod</span></button></div></div>
         </div>
         <div class="lo-calcsum" id="lo_contribSum" style="margin:6px 0 8px"></div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:6px"><button class="csv dl-in" data-pngtbl="lo_contribTbl" data-pngname="contribucion_objetivo">⤓ PNG</button><button class="csv dl-in" data-csv="lo_contribTbl" data-csvname="contribucion_objetivo">⤓ CSV</button></div>
@@ -2691,16 +2851,16 @@ body.simple #mObj{display:none!important}
         <div class="lo-ctrls">
           <div class="lo-fld"><label>Corte de tiempo</label>
             <div class="lo-seg" id="lo_corteSeg">
-              <button data-v="util" class="lo-on">Con paradas (≤20')</button>
-              <button data-v="efec">Efectivo (≤6')</button>
-              <button data-v="par">Solo paradas</button>
+              <button data-v="util" class="lo-on"><span class="jv-l">Con paradas (≤20')</span><span class="jv-s">Usado ≤20'</span></button>
+              <button data-v="efec"><span class="jv-l">Efectivo (≤6')</span><span class="jv-s">Efectivo ≤6'</span></button>
+              <button data-v="par"><span class="jv-l">Solo paradas</span><span class="jv-s">Paradas</span></button>
             </div></div>
           <div class="lo-fld"><label>Mostrar</label>
             <div class="lo-seg" id="lo_modeSeg">
-              <button data-v="objof" class="lo-on">Objetivo oficial</button>
-              <button data-v="min">Min / lote</button>
-              <button data-v="pct">% tiempo</button>
-              <button data-v="prod">Prod (min/ud)</button>
+              <button data-v="objof" class="lo-on"><span class="jv-l">Objetivo oficial</span><span class="jv-s">Obj. oficial</span></button>
+              <button data-v="min"><span class="jv-l">Min / lote</span><span class="jv-s">Min/lote</span></button>
+              <button data-v="pct"><span class="jv-l">% tiempo</span><span class="jv-s">%</span></button>
+              <button data-v="prod"><span class="jv-l">Prod (min/ud)</span><span class="jv-s">Prod</span></button>
             </div></div>
           <div class="lo-fld"><label>Periodo</label>
             <div class="lo-seg" id="lo_perSeg">
@@ -2723,7 +2883,7 @@ body.simple #mObj{display:none!important}
         <p class="lo-sec-s">La <b>base</b> es la productividad global actual (la de la tarjeta de arriba) para el corte elegido. Fijas tu <b>productividad objetivo</b> (en unidades MO o Mercadona) y la herramienta reduce/aumenta cada área y subproceso con el <b>mismo factor</b> (% de mejora del global), proporcional.</p>
         <div class="lo-ctrls">
           <div class="lo-fld"><label>Corte</label>
-            <div class="lo-seg lo-sm" id="lo_calcCorteSeg"><button data-v="util" class="lo-on">Con paradas ≤20'</button><button data-v="efec">Efectivo ≤6'</button></div></div>
+            <div class="lo-seg lo-sm" id="lo_calcCorteSeg"><button data-v="util" class="lo-on"><span class="jv-l">Con paradas ≤20'</span><span class="jv-s">Usado ≤20'</span></button><button data-v="efec">Efectivo ≤6'</button></div></div>
           <div class="lo-fld"><label for="lo_calcTarget">Productividad objetivo</label><input class="lo-tin lo-tin-num" id="lo_calcTarget" inputmode="decimal" title="Escribe aquí el objetivo, por ejemplo 0,33"></div>
           <div class="lo-fld"><label>Ver tabla como</label>
             <div class="lo-seg lo-sm" id="lo_calcViewSeg"><button data-v="objof" class="lo-on">Objetivo oficial</button><button data-v="min">Min / lote</button><button data-v="prod">Prod (min/ud)</button></div></div>
@@ -2953,7 +3113,7 @@ body.simple #mObj{display:none!important}
       <div class="card"><div class="cpad">
         <div class="cd-toolbar"><div class="h-c" style="font-size:15px;margin:0">Ranking</div>
           <button class="cd-dlbtn" id="cd_rkDl" type="button">⤓ Descargar ranking</button></div>
-        <div class="s-c" style="margin:-4px 0 12px">Ordena por la métrica elegida sobre todo el ámbito filtrado.</div>
+        <div class="s-c" style="margin:-4px 0 12px">Ordena por la métrica elegida sobre todo el ámbito filtrado. Pulsa una cabecera para ordenar por esa columna, y una fila para ver su caudal día a día. Usa «Columnas» para elegir qué ver (y qué se descarga).</div>
         <div class="cd-viewbar" style="margin-bottom:12px">
           <div class="cd-f"><label for="cd_rkBy">Rankear por</label>
             <select class="lo-tin" id="cd_rkBy" style="min-width:150px">
@@ -2964,8 +3124,12 @@ body.simple #mObj{display:none!important}
             <div class="lo-seg lo-sm" id="cd_rkOrder"><button data-v="desc" class="lo-on">Mayor→menor</button><button data-v="asc">Menor→mayor</button></div></div>
           <div class="cd-f"><label>Top</label>
             <div class="lo-seg lo-sm" id="cd_rkTop"><button data-v="10">10</button><button data-v="20" class="lo-on">20</button><button data-v="50">50</button><button data-v="0">Todas</button></div></div>
+          <div class="cd-f" style="position:relative"><label>Columnas</label>
+            <button class="cd-btn" id="cd_rkColsBtn" type="button" style="min-width:120px"><span class="cd-txt">Columnas</span><span class="cd-cnt" id="cd_rkColsCnt"></span></button>
+            <div class="cd-pop" id="cd_rkColsPop" style="right:0;left:auto"></div></div>
         </div>
-        <div class="lo-tbl-wrap" style="max-height:520px"><table class="cd-tbl" id="cd_rkTbl"></table></div>
+        <!-- la grafica de la fila pulsada se abre DENTRO de la tabla, partiendola bajo la fila -->
+        <div class="lo-tbl-wrap" style="max-height:620px"><table class="cd-tbl" id="cd_rkTbl"></table></div>
       </div></div>
 
     </div>
@@ -3329,17 +3493,17 @@ body.simple #mObj{display:none!important}
     <div class="cfg-row">
       <div class="cfg-k" id="cfgkModo">Modo</div>
       <div class="cfg-seg" id="simpleBtn" role="group" aria-labelledby="cfgkModo"><button type="button" data-v="a" class="on">Simple</button><button type="button" data-v="b">Experto</button></div>
-      <p class="cfg-d">Simple deja solo lo esencial. Experto añade el detalle, las tablas y el área de Pendientes.</p>
+      <p class="cfg-d">Simple deja solo lo esencial. Experto añade más detalle, el área de Pendientes y la definición de objetivos.</p>
     </div>
     <div class="cfg-row">
       <div class="cfg-k" id="cfgkSub">Subprocesos</div>
       <div class="cfg-seg" id="groupBtn" role="group" aria-labelledby="cfgkSub"><button type="button" data-v="a" class="on">Bloques</button><button type="button" data-v="b">Detalle</button></div>
-      <p class="cfg-d">En 4 bloques o uno a uno. Afecta al faro, a la composición, a los objetivos y a las tendencias.</p>
+      <p class="cfg-d">Bloques agrupa la preparación en 4 fases (preparación, pesaje, consolidación y entre lotes). El detalle los separa en 7.</p>
     </div>
     <div class="cfg-row">
       <div class="cfg-k" id="cfgkUnid">Unidad</div>
       <div class="cfg-seg" id="unitBtn" role="group" aria-labelledby="cfgkUnid"><button type="button" data-v="a" class="on">Mdona</button><button type="button" data-v="b">MO</button></div>
-      <p class="cfg-d">Mdona es la unidad oficial: una bolsa de plátanos cuenta como una unidad. MO cuenta cada pieza. Los tiempos y el caudal no cambian; cambia el denominador.</p>
+      <p class="cfg-d">Mdona (unidad oficial) cuenta una bolsa de plátanos como una unidad y MO cuenta cada pieza. Afecta a la productividad y caudal de Frescos y FyV.</p>
     </div>
   <!-- El objetivo NO se toca desde aqui: es el oficial del CSV. El campo de la calculadora de la
        pestana de objetivos solo afecta a esa tabla y a su CSV. -->
@@ -3440,16 +3604,20 @@ const tieneDesglose=a=>AREAS_DESGLOSE.includes(a);
 const _isSimple=()=>document.body.classList.contains('simple');
 function viewAreas(){ return _isSimple()?AREAS.filter(a=>a!=='PENDIENTES'):AREAS; }
 function viewAreasD(){ return _isSimple()?AREAS_DESGLOSE.filter(a=>a!=='PENDIENTES'):AREAS_DESGLOSE; }
+/* abbr = el nombre recortado a mano para cuando la columna es estrecha. ANTES en ese hueco se
+   ponia el codigo (P1..P7) y no se entendia, y en el tramo de en medio se ponia el nombre entero
+   en 32 px, que al ir centrado y con overflow:hidden se recortaba POR LOS DOS LADOS: "Arranque"
+   se leia "ranque" y "Picking" se leia "ickin". */
 const FASES=[
-  {k:'p1',col:'--f-arranque',name:'Arranque',code:'P1'},
-  {k:'p2',col:'--f-picking',name:'Picking',code:'P2'},
-  {k:'p3',col:'--f-despl',name:'Desplazamiento',code:'P3'},
-  {k:'p4',col:'--f-pesaje',name:'Pesaje',code:'P4'},
-  {k:'p5',col:'--f-traslado',name:'Traslado',code:'P5'},
-  {k:'p6',col:'--f-consol',name:'Consolidación',code:'P6'},
-  {k:'p7',col:'--f-entre',name:'Entre lotes',code:'P7'}
+  {k:'p1',col:'--f-arranque',name:'Arranque',code:'P1',abbr:'Arranq.'},
+  {k:'p2',col:'--f-picking',name:'Picking',code:'P2',abbr:'Picking'},
+  {k:'p3',col:'--f-despl',name:'Desplazamiento',code:'P3',abbr:'Despl.'},
+  {k:'p4',col:'--f-pesaje',name:'Pesaje',code:'P4',abbr:'Pesaje'},
+  {k:'p5',col:'--f-traslado',name:'Traslado',code:'P5',abbr:'Trasl.'},
+  {k:'p6',col:'--f-consol',name:'Consolidación',code:'P6',abbr:'Consol.'},
+  {k:'p7',col:'--f-entre',name:'Entre lotes',code:'P7',abbr:'E. lotes'}
 ];
-const PREP_SIN={k:'p23',col:'--f-prepsin',name:'Preparación (sin separar)',code:'P2·P3'};
+const PREP_SIN={k:'p23',col:'--f-prepsin',name:'Preparación (sin separar)',code:'P2·P3',abbr:'Prepa.'};
 const MINKEY={p1:'p1_min_medio',p2:'p2_min_medio',p3:'p3_min_medio',p4:'p4_min_medio',p5:'p5_min_medio',p6:'p6_min_medio',p7:'p7_min_medio',p23:'p23_min_medio',prep:'prep_min_medio'};
 const PCTKEY={p1:'p1_pct_medio',p2:'p2_pct_medio',p3:'p3_pct_medio',p4:'p4_pct_medio',p5:'p5_pct_medio',p6:'p6_pct_medio',p7:'p7_pct_medio',p23:'p23_pct_medio',prep:'prep_pct_medio'};
 function fasesComp(area){return tieneDesglose(area)?FASES:[FASES[0],PREP_SIN,FASES[3],FASES[4],FASES[5],FASES[6]];}
@@ -3612,6 +3780,133 @@ function nTiendasEsc(t,mk){
   }
   return (_nTCache[ck]=(n||1));
 }
+/* QUE tiendas hay detras del conjunto, no solo cuantas. Para zona, region y laboratorio la lista
+   ya viene hecha en ST.aggMeta[clave].members; para Veteranas, Todas y las liebres historicas hay
+   que recorrer ST.gen con el mismo criterio con el que nTiendasEsc las cuenta. */
+function miembrosDe(t,mk){
+  if(t==null) return [];
+  if(typeof aperturaDe==='function' && aperturaDe(t)) return [];     // es un centro, no un grupo
+  var mi=(ST.aggMeta&&ST.aggMeta[t])||null;
+  if(mi&&mi.members&&mi.members.length) return mi.members.slice();
+  var soloVet=(t==='Tiendas Veteranas'), todas=(t==='Todas las tiendas'), lie=(t===LIEBRE_HIST);
+  if(!soloVet&&!todas&&!lie) return [];
+  var out=[];
+  for(var st in ST.gen){
+    var r=(ST.gen[st]||{})[mk]; if(!r) continue;
+    if(typeof aperturaDe==='function' && !aperturaDe(st)) continue;  // salta las filas sinteticas
+    if(soloVet && r.estado!=='Veterana') continue;
+    if(lie && !(window.__liebreSet&&window.__liebreSet.has(String(st)))) continue;
+    out.push(st);
+  }
+  return out;
+}
+/* El recuento, pulsable. Si es una sola tienda o no se sabe la lista, se queda en texto. */
+function membChip(t,mk,n,uno,varios){
+  if(n==null||isNaN(n)) return '';
+  var lbl='<b>'+fmt(n,0)+'</b> '+(n===1?uno:varios);
+  if(n<=1 || !miembrosDe(t,mk).length) return lbl;
+  return '<button type="button" class="memb" data-memb="'+String(t).replace(/"/g,'&quot;')+
+         '" data-membmk="'+String(mk==null?'':mk).replace(/"/g,'&quot;')+
+         '" aria-expanded="false" title="Ver qué tiendas son">'+lbl+'<span class="memb-ar">&#9662;</span></button>';
+}
+/* UN solo desplegable, colgado del body: asi vale igual en la cabecera del comparador y en cada
+   fila del ranking, y sobrevive a los repintados sin volver a cablear nada. El oyente va en fase
+   de CAPTURA porque las filas del ranking ya tienen su propio clic (te lleva al comparador) y
+   se dispara antes que cualquier oyente del documento. */
+(function(){
+  var pop=null, abierto=null;
+  function crea(){
+    if(pop) return pop;
+    pop=document.createElement('div'); pop.className='memb-pop';
+    pop.addEventListener('click',function(e){ e.stopPropagation(); });
+    document.body.appendChild(pop);
+    return pop;
+  }
+  function cierra(){
+    if(!pop) return;
+    pop.classList.remove('open');
+    var sc=pop.querySelector('.memb-sc'); if(sc) sc.style.maxHeight='';
+    if(abierto){ try{ abierto.setAttribute('aria-expanded','false'); }catch(e){} abierto=null; }
+  }
+  var ordCod=function(a,b){ return String(a).localeCompare(String(b),'es',{numeric:true}); };
+  function listaHTML(mem){
+    var h='<ol class="memb-l">';
+    mem.forEach(function(c){
+      var nom=(window.stName&&window.stName(c))||'', cod=String(c);
+      /* stName suele venir ya como "3664 - Estadi Balear": el codigo tiene su propia columna,
+         asi que se le quita al nombre en vez de enseñarlo dos veces. */
+      if(nom.indexOf(cod)===0) nom=nom.slice(cod.length).replace(/^[\s\-·]+/,'');
+      h+='<li><span class="memb-c">'+cod+'</span>'+(nom?('<span class="memb-nm">'+nom+'</span>'):'')+'</li>';
+    });
+    return h+'</ol>';
+  }
+  function abre(btn){
+    var t=btn.getAttribute('data-memb'), mk=btn.getAttribute('data-membmk')||null;
+    var mem=miembrosDe(t,mk); if(!mem.length) return;
+    var am=(ST.aggMeta&&ST.aggMeta[t])||null;
+    var ttl=am?am.label:(t==='Tiendas Veteranas'?'Tiendas veteranas':t==='Todas las tiendas'?'Todas las tiendas':shortStore(t));
+    var cuerpo='';
+    /* De una REGION interesan las dos cosas: de que zonas se compone y que tiendas tiene cada
+       una. Las zonas se pliegan pulsandolas, que sesenta tiendas de un tiron no se leen. */
+    if(am&&am.kind==='region'){
+      var rn=geoNum(am.region||''), zs=[], queda={};
+      mem.forEach(function(c){ queda[String(c)]=1; });
+      (ST.geoAgg||[]).forEach(function(k){ var zm=(ST.aggMeta||{})[k];
+        if(zm&&zm.kind==='zona'&&geoNum(zm.region||'')===rn) zs.push(zm); });
+      zs.sort(function(a,b){ return ordCod(a.zona,b.zona); });
+      zs.forEach(function(zm){
+        var lst=(zm.members||[]).filter(function(c){ return queda[String(c)]; }).sort(ordCod);
+        if(!lst.length) return;
+        lst.forEach(function(c){ delete queda[String(c)]; });
+        cuerpo+='<div class="memb-z"><span class="memb-zt">'+zm.label+'</span><span class="memb-zn">'+
+                lst.length+'</span><span class="memb-ar2">&#9662;</span></div>'+listaHTML(lst);
+      });
+      var resto=Object.keys(queda).sort(ordCod);
+      if(resto.length) cuerpo+='<div class="memb-z"><span class="memb-zt">Sin zona</span><span class="memb-zn">'+
+                resto.length+'</span><span class="memb-ar2">&#9662;</span></div>'+listaHTML(resto);
+    }
+    if(!cuerpo) cuerpo=listaHTML(mem.slice().sort(ordCod));
+    var p=crea();
+    p.innerHTML='<div class="memb-h"><span>'+ttl+'</span><span class="memb-n">'+mem.length+'</span></div>'+
+                '<div class="memb-sc">'+cuerpo+'</div>';
+    p.classList.add('open');
+    /* la cabecera no scrollea, asi que el limite de altura va en .memb-sc y se calcula
+       descontandole lo que ocupa la cabecera. Se abre hacia el lado con mas hueco. */
+    var r=btn.getBoundingClientRect(), sc=p.querySelector('.memb-sc');
+    p.style.left=Math.max(8,Math.min(r.left,innerWidth-(p.offsetWidth||260)-8))+'px';
+    /* El boton puede estar fuera de la pantalla (lista larga sin haber hecho scroll): entonces su
+       getBoundingClientRect da valores muy por encima del alto de la ventana, el hueco salia de
+       miles de pixeles y la lista se estiraba hasta irse de la pantalla. Se acota todo a la
+       ventana, tanto la altura de la lista como la posicion final. */
+    var yTop=Math.max(0,Math.min(innerHeight,r.top)), yBot=Math.max(0,Math.min(innerHeight,r.bottom));
+    var hAb=innerHeight-yBot-14, hAr=yTop-14, debajo=hAb>=hAr;
+    var hueco=Math.max(140,Math.min(debajo?hAb:hAr, innerHeight-28));
+    if(sc){ var cabeza=Math.max(0,p.offsetHeight-sc.offsetHeight);
+      sc.style.maxHeight=Math.max(120,hueco-cabeza)+'px'; }
+    var top=debajo?(yBot+6):Math.max(8,yTop-p.offsetHeight-6);
+    p.style.top=Math.max(8,Math.min(top,innerHeight-p.offsetHeight-8))+'px';
+    abierto=btn; btn.setAttribute('aria-expanded','true');
+  }
+  document.addEventListener('click',function(e){
+    var b=(e.target&&e.target.closest)?e.target.closest('.memb'):null;
+    if(b){ e.stopPropagation(); e.preventDefault();
+      if(abierto===b) cierra(); else { cierra(); abre(b); }
+      return; }
+    /* plegar o desplegar una zona: ni cierra el popup ni deja pasar el clic */
+    var z=(e.target&&e.target.closest)?e.target.closest('.memb-z'):null;
+    if(z&&pop&&pop.contains(z)){ e.stopPropagation(); e.preventDefault(); z.classList.toggle('cerr'); return; }
+    if(pop&&e.target&&e.target.nodeType===1&&pop.contains(e.target)){ e.stopPropagation(); return; }
+    cierra();
+  },true);
+  addEventListener('keydown',function(e){ if(e.key==='Escape') cierra(); });
+  /* El scroll DENTRO de la lista no cierra nada: el oyente iba en captura y cualquier rueda
+     sobre el propio popup lo cerraba, que es por lo que la lista no se podia recorrer. */
+  addEventListener('scroll',function(e){
+    if(pop&&e.target&&e.target.nodeType===1&&(e.target===pop||pop.contains(e.target))) return;
+    cierra();
+  },true);
+  addEventListener('resize',function(){ cierra(); });
+})();
 function nTiendasA(){ return curA?nTiendasEsc(curA.tienda,curA.mesKey):1; }
 /* El impacto se mide sobre el volumen del analizado, salvo con el Objetivo (que no tiene): ahi
    el volumen lo pone la referencia, y es ella la que decide si la cifra es "por tienda". */
@@ -3977,10 +4272,19 @@ function comboItems(side){const it=[];
   ST.realStores.forEach(t=>{const nm=genName(t);it.push({val:t,label:nm||('Tienda '+t),group:'Tiendas'});});
   return it;}
 function pad2(n){n=String(n).replace(/\D/g,'');return n?('0'+n).slice(-2):n;}
-function zonaAggMeta(z,info){var lab='Zona '+z;
-  return Object.assign({label:lab,search:sNorm(lab+' z'+z+' z'+pad2(z)+' '+z),kind:'zona',zona:z},info||{});}
-function regAggMeta(rc,info){var n=String(rc).replace(/\D/g,'');var lab='Región '+(n?String(+n):rc);
-  return Object.assign({label:lab,search:sNorm(lab+' region '+n+' r'+n+' r'+pad2(n)+' '+rc),kind:'region',region:(n?String(+n):rc)},info||{});}
+/* Una zona se llama "Zona 22", no "Zona Z22": el codigo del CSV viene como 'Z22' y encadenarlo
+   detras de la palabra deja el prefijo a la vista. Lo mismo con 'R03'/'DR03' en las regiones.
+   geoNum deja solo el numero sin ceros a la izquierda; geoBusca indexa TODAS las formas en las
+   que uno escribe eso ("zona 5", "5", "z5", "z05", "Z05"), que es lo que fallaba al buscar. */
+function geoNum(v){ var n=String(v==null?'':v).replace(/\D/g,''); return n?String(+n):''; }
+function zonaNom(v){ var n=geoNum(v); return 'Zona '+(n||v); }
+function regNom(v){ var n=geoNum(v); return 'Región '+(n||v); }
+function geoBusca(pre,v){ var n=geoNum(v), l=pre.charAt(0);
+  return sNorm([pre+' '+n, l+n, l+pad2(v), n, String(v==null?'':v)].join(' ')); }
+function zonaAggMeta(z,info){
+  return Object.assign({label:zonaNom(z),search:geoBusca('zona',z),kind:'zona',zona:z},info||{});}
+function regAggMeta(rc,info){var n=geoNum(rc);
+  return Object.assign({label:regNom(rc),search:geoBusca('region',rc),kind:'region',region:(n||rc)},info||{});}
 /* El laboratorio va en su propio apartado del desplegable: no es una zona ni una region. */
 function labAggMeta(info){
   return Object.assign({label:LAB_NOM,search:sNorm(LAB_NOM+' laboratorio caudal lab'),
@@ -4026,7 +4330,9 @@ function buildAggregates(){
       if(z!=null&&z!==''&&rg&&!zReg[z]) zReg[z]=rg;
       if(rg&&z!=null&&z!=='') (rZon[rg]=rZon[rg]||new Set()).add(z); });
     const regNum=rc=>{var n=String(rc).replace(/\D/g,'');return n?String(+n):rc;};
-    Object.keys(zMem).sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})).forEach(z=>{ const idx=build(zMem[z]); if(!Object.keys(idx).length)return; const key='ZONE::'+z; ST.index[key]=idx; ST.aggMeta[key]=zonaAggMeta(z,{nTiendas:zMem[z].length, region:zReg[z]?regNum(zReg[z]):null, members:zMem[z].slice()}); ST.geoAgg.push(key); ST.tiendas.push(key); const g=buildGen(zMem[z],{center_name:'Zona '+z,zona:z}); if(Object.keys(g).length)ST.gen[key]=g; });
+    Object.keys(zMem).sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})).forEach(z=>{ const idx=build(zMem[z]); if(!Object.keys(idx).length)return; const key='ZONE::'+z; ST.index[key]=idx; ST.aggMeta[key]=zonaAggMeta(z,{nTiendas:zMem[z].length, region:zReg[z]?regNum(zReg[z]):null, members:zMem[z].slice()}); ST.geoAgg.push(key); ST.tiendas.push(key); /* MISMA etiqueta que aggMeta.label: el combo lee una por pick() y la otra por close(), y con
+   dos textos distintos el campo parpadeaba al elegir. */
+      const g=buildGen(zMem[z],{center_name:zonaNom(z),zona:z}); if(Object.keys(g).length)ST.gen[key]=g; });
     Object.keys(rMem).sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})).forEach(rc=>{ const idx=build(rMem[rc]); if(!Object.keys(idx).length)return; const key='REG::'+rc; ST.index[key]=idx; ST.aggMeta[key]=regAggMeta(rc,{nTiendas:rMem[rc].length, nZonas:(rZon[rc]?rZon[rc].size:0), members:rMem[rc].slice()}); ST.geoAgg.push(key); ST.tiendas.push(key); var rn=String(rc).replace(/\D/g,''); const g=buildGen(rMem[rc],{center_name:regAggMeta(rc).label,region:rn?String(+rn):rc}); if(Object.keys(g).length)ST.gen[key]=g; });
   }
 }
@@ -4538,6 +4844,9 @@ function renderAll(){
      sola pasada forzada, y el coordinador espera a que haya caja de verdad antes de medir. */
   if(window.__jvSize) window.__jvSize.alMostrar(true);
   else requestAnimationFrame(()=>{resizeCharts();[220,900,2000].forEach(ms=>setTimeout(resizeCharts,ms));});
+  /* Estas cuatro secciones se pintan OCULTAS y se destapan aqui, asi que es justo el momento en
+     el que una grafica puede quedarse con sus datos y el lienzo en blanco. */
+  vigilarLuego();
 }
 const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCaudal','cCaudalPar','cCaudalDonut','cParetoDonut'];
 /* Plotly.Plots.resize RECHAZA una promesa si el div esta oculto (no lanza): sin el .catch
@@ -4546,11 +4855,113 @@ const CHARTS=['cReal','cTrend','cPick','cDespl','cDesplTot','cCont','cFevo','cCa
 /* Mismo nombre y misma lista que antes; lo unico que cambia es que las peticiones van al
    coordinador (window.__jvSize) en vez de a Plotly directamente. Antes, esta funcion sola
    disparaba cuatro rondas (rAF y 220/900/2000 ms) que se cancelaban unas a otras. */
+/* ===== VIGILANTE DE LIENZOS EN BLANCO =====
+   Una grafica de Plotly puede quedarse con sus datos dentro y el lienzo vacio (nace oculta, o un
+   redibujado se queda a medias al cambiar el tamano de la ventana). Ni Plots.resize ni
+   Plotly.redraw la recuperan: hay que PURGARLA y volver a pintarla, y quien sabe pintarla es
+   renderAll(). Se comprueba despues de cada cambio de tamano y, como mucho, una vez cada 4 s. */
+var _vigAt=0, _vigN={}, _vigT=null;
+/* Devuelve '' si esta bien, o el MOTIVO por el que no se ve. Que sea texto y no un si/no es a
+   proposito: asi la consola dice cual es la grafica Y que le pasa, que es lo unico que sirve
+   cuando el fallo aparece en el Mac de Javier y no en el banco. */
+function graficaEnBlanco(gd){
+  if(!gd||!gd.data||!gd.data.length||!gd.offsetParent) return '';
+  try{
+    /* ancho impuesto a mano = lienzo de las descargas (1800 px) o similar: no es responsive y no
+       se juzga con la caja */
+    if(gd.layout && gd.layout.width > 10) return '';
+    if(gd.querySelectorAll('svg.main-svg .trace,svg.main-svg .bars,svg.main-svg .point,'
+        +'svg.main-svg .slice,svg.main-svg .js-line,svg.main-svg .box').length===0) return 'lienzo vacio';
+    var fl=gd._fullLayout, s=fl&&fl._size; if(!s) return '';
+    if((s.h|0)<16 || (s.w|0)<40) return 'area de dibujo aplastada ('+(s.w|0)+'x'+(s.h|0)+')';
+    var c=gd.getBoundingClientRect();
+    /* la tarjeta sin alto: .chart no lleva alto en CSS, el alto lo pone Plotly en el div. Si se
+       ha quedado a cero, la grafica esta ahi pero no se ve nada. */
+    if(c.height<12 && (fl.height|0)>40) return 'tarjeta sin alto (caja '+Math.round(c.height)+', layout '+(fl.height|0)+')';
+    /* 24 px de tolerancia: por debajo es el redondeo del navegador, no un desajuste */
+    if(c.width>40 && Math.abs((fl.width|0)-Math.round(c.width))>24)
+      return 'medida para otro ancho (caja '+Math.round(c.width)+', layout '+(fl.width|0)+')';
+    return '';
+  }catch(e){ return ''; }
+}
+/* TODAS las graficas pintadas y visibles, no solo la lista CHARTS. En el panel hay muchas mas
+   -el caudal (cd_chart), las seis de Farolas (fa_ch_*), los roscos, los paneles de tendencia del
+   ranking y del comparador- y si la que se quedaba mal era una de esas, nadie se enteraba. */
+function plotsVivas(){
+  var r=[];
+  try{ var l=document.querySelectorAll('.js-plotly-plot');
+    for(var i=0;i<l.length;i++){ var gd=l[i];
+      if(gd.data && gd.data.length && gd.offsetParent) r.push(gd); }
+  }catch(e){}
+  return r;
+}
+function vigilarGraficas(){
+  if(!ST.analyzed) return;
+  var t=Date.now(), puedeRepintar=(t-_vigAt>=4000);
+  var suave=[], duro=[], motivos=[];
+  plotsVivas().forEach(function(gd){
+    var id=gd.id||'(sin id)';
+    var m=graficaEnBlanco(gd);
+    if(!m){ _vigN[id]=0; return; }
+    var n=_vigN[id]||0, esCore=(CHARTS.indexOf(id)>=0);
+    if(n===0){ _vigN[id]=1; suave.push(gd); motivos.push(id+' \u2192 '+m); return; }
+    /* segundo intento: purgar y repintar solo tiene sentido en las de CHARTS, que son las que
+       renderAll() sabe pintar. A las demas se les insiste con el remedido. */
+    if(n===1){ _vigN[id]=2;
+      if(esCore && puedeRepintar){ duro.push(gd); motivos.push(id+' \u2192 '+m+' (repintar)'); }
+      else { suave.push(gd); motivos.push(id+' \u2192 '+m); }
+    }
+  });
+  if(!suave.length && !duro.length) return;
+  console.warn('Javify \u00b7 gr\u00e1ficas que no se ven:\n  '+motivos.join('\n  '));
+  /* PRIMER intento, barato: poner el alto si se ha perdido, cero al contador de margenes
+     automaticos y remedir. Importa el orden: renderAll() vuelve a entrar en renderCaudal y
+     compania, asi que no se llama si no hace falta de verdad. */
+  suave.forEach(function(gd){
+    try{
+      var fl=gd._fullLayout, c=gd.getBoundingClientRect();
+      if(fl && c.height<12 && (fl.height|0)>40) gd.style.height=(fl.height|0)+'px';
+    }catch(e){}
+    try{ if(window.__jvCeroAM) window.__jvCeroAM(gd); }catch(e){}
+    try{ var p=Plotly.relayout(gd,{autosize:true}); if(p&&p.catch) p.catch(function(){}); }catch(e){}
+  });
+  if(suave.length) vigilarLuego();   /* a comprobar si con remedir ha bastado */
+  /* SEGUNDO intento: sigue mal despues de remedirla. Purgar y repintar. Como mucho cada 4 s. */
+  if(duro.length){
+    _vigAt=t;
+    duro.forEach(function(gd){ try{ Plotly.purge(gd); }catch(e){} });
+    try{ renderAll(); }catch(e){ console.warn('vigilante',e); }
+  }
+}
+/* Diagnostico a mano, para cuando pase en su Mac y no en el banco: se escribe __jvDiag() en la
+   consola y suelta una linea por grafica, lista para pegar. */
+window.__jvDiag=function(){
+  var f=[];
+  try{
+    var l=document.querySelectorAll('.js-plotly-plot');
+    for(var i=0;i<l.length;i++){
+      var gd=l[i], fl=gd._fullLayout||{}, s=fl._size||{}, c=gd.getBoundingClientRect();
+      var pin=gd.querySelectorAll('svg.main-svg .trace,svg.main-svg .bars,svg.main-svg .point,'
+        +'svg.main-svg .slice,svg.main-svg .js-line,svg.main-svg .box').length;
+      f.push((gd.id||'(sin id)')+(gd.offsetParent?'':' [OCULTA]')
+        +' | caja '+Math.round(c.width)+'x'+Math.round(c.height)
+        +' | layout '+(fl.width|0)+'x'+(fl.height|0)
+        +' | dibujo '+(s.w|0)+'x'+(s.h|0)
+        +' | series '+((gd.data&&gd.data.length)||0)+' trazos '+pin
+        +' | '+(graficaEnBlanco(gd)||'ok'));
+    }
+  }catch(e){ f.push('fallo: '+e); }
+  var txt=f.join('\n');
+  console.log('Javify \u00b7 diagn\u00f3stico de gr\u00e1ficas ('+f.length+')\n'+txt);
+  return txt;
+};
+function vigilarLuego(){ clearTimeout(_vigT); _vigT=setTimeout(vigilarGraficas,700); }
 function resizeCharts(){
-  if(window.__jvSize){ CHARTS.forEach(id=>window.__jvSize.pedir(id,false)); window.__jvSize.barrer(false); return; }
+  if(window.__jvSize){ CHARTS.forEach(id=>window.__jvSize.pedir(id,false)); window.__jvSize.barrer(false); vigilarLuego(); return; }
   CHARTS.forEach(id=>{const el=$(id);if(!el||!el.data||!el.offsetParent)return;
   try{const p=Plotly.Plots.resize(el);if(p&&p.catch)p.catch(()=>{});}catch(e){}});
-  try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}}
+  try{ if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}
+  vigilarLuego(); }
 /* el listener de 'resize' propio se ha unificado en el orquestador global del final */
 // Re-pinta el comparador (y el ranking) al cambiar Simple/Experto → PENDIENTES aparece/desaparece
 window.__rerenderComp=function(){ try{ if(ST.analyzed){ MODEL=buildModel(curA,curB); renderAll(); } }catch(e){} try{ if(ST.mode==='rank'&&typeof renderRank==='function') renderRank(); }catch(e){} };
@@ -4687,12 +5098,15 @@ function renderSummary(){
              :chip(vetTxt,_fase?faseBg(_fase):(gA.estado==='Veterana'?'var(--brand-soft)':'')))+'</div>'+
       '<div class="sthead-meta">'+(_agg
         ? (_agg.kind==='region'
-            ? meta([num(_agg.nZonas,'zona','zonas'), num(_agg.nTiendas,'tienda','tiendas')])
-            : meta([dato('Región',_agg.region), num(_agg.nTiendas,'tienda','tiendas')]))
+            /* el recuento abre la lista de sus tiendas */
+            ? meta([num(_agg.nZonas,'zona','zonas'), membChip(curA.tienda,curA.mesKey,_agg.nTiendas,'tienda','tiendas')])
+            : meta([dato('Región',_agg.region), membChip(curA.tienda,curA.mesKey,_agg.nTiendas,'tienda','tiendas')]))
         /* DOS lineas, no una. Arriba lo que dice QUE centro es (region, zona, modelo y si es
            liebre); abajo su historia (apertura, veterania y el ultimo cambio de modelo). En una
            sola linea, en movil, "Liebre" caia junto a las fechas y se leia como una fecha mas. */
-        : (meta([dato('Región',gA.region), dato('Zona',gA.zona),
+        /* el rotulo ya dice "Región" y "Zona": el valor va solo con el numero, que si no se leia
+           "Región R03 · Zona Z22" */
+        : (meta([dato('Región',geoNum(gA.region)||gA.region), dato('Zona',geoNum(gA.zona)||gA.zona),
                 /* "NTC120" -> etiqueta "NTC" en gris y "120" en tinta fuerte, igual que Región y
                    Zona. Si el modelo no sigue ese patron, se deja tal cual. */
                 (function(){ var mo=String(gA.model||''); if(!mo)return '';
@@ -4748,12 +5162,20 @@ function renderSummary(){
     /* +6%, no +6,0%: el decimal solo cuando aporta algo (un mes con el escalon partido). */
     const _pct=Math.round((_facT-1)*1000)/10;
     const _pctDec=(Math.abs(_pct-Math.round(_pct))<0.05)?0:1;
-    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima'+(_pct>0.05?(' <span style="font-weight:700;color:var(--warn,#b8860b)">· con coef. de improd. +'+fmt(_pct,_pctDec)+'%</span>'):'')+'</div><div class="kpi-v">'+fmt(_objT,3)+' <small>'+udName()+'</small></div>'+
+    /* El coeficiente va en SU PROPIO chip, no dentro de .kpi-l. La etiqueta lleva
+       white-space:nowrap + text-overflow:ellipsis, asi que en el movil "· con coef. de improd.
+       +2,3%" se cortaba justo por el numero: se leia "CON COEF. DE IMPROD..." y el dato, que es
+       lo unico que importa, no se veia. */
+    k.push('<div class="kpi"><div class="kpi-l">Prod. óptima</div><div class="kpi-v">'+fmt(_objT,3)+' <small>'+udName()+'</small></div>'+
+      (_pct>0.05?('<div class="kpi-coef" title="Coeficiente de improductividad aplicado a este mes">coef. improd. ×'+fmt(_facT,3)+' · +'+fmt(_pct,_pctDec)+'%</div>'):'')+
       '<div class="kpi-r"><span class="ref-v">Obj. de ref. = '+equiv+'</span></div></div>');
     $('kpis').className='kpis'+(k.length===3?' k3':'');
     $('kpis').innerHTML=k.join('');
     // ---- CAUDAL: donut de composición + evolución 12 meses + tabla, con desplegable diario/mensual ----
+    /* La tabla de coeficientes va DELANTE del caudal y SIEMPRE, tenga o no coeficiente esta
+       tienda: es la referencia de los escalones, y en el movil no hay tooltip donde mirarla. */
     $('kpiWarn').innerHTML=
+      bloqueCoefs(curA.tienda,curA.mesKey)+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:18px 0 12px">'+
         '<div style="font-size:14px;font-weight:850">Caudal del centro (horas)</div>'+
         '<div class="modes" id="caudalView"><button class="mode'+(ST.caudalView!=='mes'?' on':'')+'" data-cv="dia">Diario · media</button><button class="mode'+(ST.caudalView==='mes'?' on':'')+'" data-cv="mes">Mensual · sumatorio</button></div>'+
@@ -4824,6 +5246,70 @@ function renderSummary(){
     $('kpiWarn').innerHTML='<div class="notice warn" style="margin-top:14px"><span class="ic">!</span><span>'+t2+'</span></div>';
   }else if(!gA)$('kpiWarn').innerHTML='';   // en modo general, kpiWarn lleva el caudal (no borrar)
 }
+/* ---------------------------------------------------------------------------------------------
+   TABLA DE COEFICIENTES DE IMPRODUCTIVIDAD
+   Los escalones NO se escriben a mano: se leen de RAMPA_AP y RAMPA_MO, que son los que usa el
+   calculo (facAp/facMo). Si algun dia cambia un escalon, la tabla cambia con el.
+   Se pinta siempre, con coeficiente o sin el, y se marca el escalon en el que esta la tienda el
+   ultimo dia del mes analizado (el mismo criterio que facDiaMs).
+   --------------------------------------------------------------------------------------------- */
+/* Se marcan los escalones que TOCAN el mes analizado, del primer dia al ultimo, no solo el del
+   ultimo dia: un mes que cruza un escalon sale con un coeficiente intermedio (x1,0852, no x1,06)
+   y marcar un solo escalon contradecia la cifra de arriba. */
+function _coefFilas(rampa, d0, d1){
+  var f='', prev=0, hay=(d0!=null&&d1!=null);
+  for(var i=0;i<rampa.length;i++){
+    var hasta=rampa[i][0], v=rampa[i][1];
+    var on=(hay && d1>=prev && d0<hasta);
+    /* en porcentaje, no en x1,23: es como se habla de ello */
+    f+='<tr'+(on?' class="coef-on"':'')+'><td>'+(prev===0?('primeros '+hasta+' días'):('días '+prev+' a '+(hasta-1)))+'</td><td>+'+fmt(Math.round((v-1)*1000)/10,0)+'%</td></tr>';
+    prev=hasta;
+  }
+  var onFin=(hay && d1>=prev);
+  f+='<tr'+(onFin?' class="coef-on"':'')+'><td>desde el día '+prev+'</td><td>sin coef.</td></tr>';  /* 0 %, y se dice con palabras */
+  return f;
+}
+function bloqueCoefs(t,mk){
+  try{
+    var fac=facEscenario(t,mk), pct=Math.round((fac-1)*1000)/10;
+    var dec=(Math.abs(pct-Math.round(pct))<0.05)?0:1;
+    /* dias de rampa el ULTIMO dia del mes analizado */
+    var dAp0=null, dAp1=null, dMo0=null, dMo1=null;
+    try{
+      var ap=aperturaDe(t), p=/^(\d{4})-(\d{2})/.exec(String(mk||''));
+      if(ap&&p){
+        var ini=new Date(+p[1],+p[2]-1,1).getTime();        // primer dia del mes
+        var fin=new Date(+p[1],+p[2],0).getTime();          // dia 0 del mes siguiente = ultimo del mes
+        var d=function(ms,ref){ return Math.max(0,Math.floor((ms-ref)/86400000)); };
+        if(fin>=ap.getTime()){ dAp0=d(ini,ap.getTime()); dAp1=d(fin,ap.getTime()); }
+        var amps=ampliacionesDe(t)||[];
+        for(var i=0;i<amps.length;i++) if(amps[i]<=fin){ dMo0=d(ini,amps[i]); dMo1=d(fin,amps[i]); }
+      }
+    }catch(e){}
+    /* Va DENTRO de un boton de informacion (details.metodo, el mismo que el aviso de unidades),
+       cerrado de partida: la referencia de los escalones no tiene que estar al aire ocupando
+       media pantalla. Lo que si se lee sin abrir nada es el coeficiente de ESTA tienda, que es
+       el dato que se busca. */
+    var resumen = (pct>0.05)
+      ? ('Coeficientes de improductividad \u00b7 <b>esta tienda, '+mesAA(mk)+': +'+fmt(pct,dec)+'%</b>')
+      : ('Coeficientes de improductividad \u00b7 <b>esta tienda, '+mesAA(mk)+': sin coeficiente</b>');
+    var ahora = (pct>0.05)
+      ? ('En '+mesAA(mk)+' le aplica <b>+'+fmt(pct,dec)+'%</b> sobre el objetivo de flota.')
+      : ('En '+mesAA(mk)+' no le aplica coeficiente: va con el objetivo de flota.');
+    return '<details class="metodo coefinfo no-print">'+
+      '<summary><span class="m-p"></span><span class="m-x">'+resumen+'</span></summary>'+
+      '<div class="m-body">'+
+        '<div class="coefbox-now">'+ahora+'</div>'+
+        '<div class="coefgrid">'+
+          '<div><div class="coefcol-h">Apertura del centro</div><table class="coef-t">'+_coefFilas(RAMPA_AP,dAp0,dAp1)+'</table></div>'+
+          '<div><div class="coefcol-h">Ampliación de modelo</div><table class="coef-t">'+_coefFilas(RAMPA_MO,dMo0,dMo1)+'</table></div>'+
+        '</div>'+
+        '<div class="coefbox-f">Se cuentan desde la implantación y desde cada ampliación, y si coinciden los dos <b>se aplican juntos</b>. '+
+        'Un mes en el que se cruza un escalón sale con un porcentaje intermedio, porque se calcula día a día.</div>'+
+      '</div>'+
+    '</details>';
+  }catch(e){ return ''; }
+}
 /* optimo' = optimo x (objetivo de la tienda / objetivo de flota). Es una proporcion pura: no hace
    falta reconstruirlo desde las unidades y no se arrastra el redondeo del CSV. */
 function kRampa(t,mk){ var o=objAct(); return (o>0)?(objEsc(t,mk)/o):1; }
@@ -4851,7 +5337,16 @@ function renderCaudal(){
   // ---- DONUT composición del real ----
   Plotly.react('cCaudalDonut',[{
     type:'pie',hole:0.66,labels:['Efectivas','Paradas'],values:[efec||0,par||0],
-    marker:{colors:[efc,pac],line:{color:cssv('--panel'),width:3}},automargin:true,
+    marker:{colors:[efc,pac],line:{color:cssv('--panel'),width:3}},
+    /* SIN automargin, y el hueco de las etiquetas reservado a mano con domain.
+       Medido: con automargin:true este rosco agotaba su presupuesto (6 repintados) en CADA
+       pasada de renderCaudal y acababa con el aviso "Too many auto-margin redraws", porque los
+       porcentajes van por fuera: reservar margen encoge el rosco, al encogerse las etiquetas se
+       mueven, y hace falta otro margen. Con domain el sitio esta reservado de antemano y no hay
+       nada que negociar: 0 avisos, y el rosco sale incluso un poco mas grande (188 px de
+       diametro contra 186). Comprobado con el reparto real y con 50/50, que es el peor caso
+       (las dos etiquetas a los lados), en escritorio y a 390 px. */
+    domain:{x:[0.12,0.88],y:[0.03,0.97]},
     textinfo:'percent',textposition:'outside',textfont:{size:12.5,color:ink2,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif'},
     hovertemplate:'%{label}: %{value:.'+dec+'f} h · %{percent}<extra></extra>',sort:false,direction:'clockwise',rotation:0
   }],baseLayout({height:224,margin:{l:22,r:22,t:12,b:12},showlegend:false,
@@ -4979,7 +5474,7 @@ function renderReal(){
   {const rs=$('realSub'); if(rs) rs.innerHTML=scnSub()+' · el número al final es el tiempo total del lote';}
   $('realLegend').innerHTML=STK.map(f=>'<span class="pl"><i style="background:'+cssv(f.col)+'"></i>'+f.name+'</span>').join('');
   const areas=[...viewAreas()].filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&(m.ra||m.rb);});
-  if(!areas.length){Plotly.purge('cReal');$('cReal').innerHTML='<div class="combo-none">Sin áreas comparables.</div>';return;}
+  if(!areas.length){sinGrafica('cReal','Sin áreas comparables.');return;}
   const totOf=row=>row?STK.reduce((s,f)=>s+(segVal(row,f)||0),0):null;
   const totMin=row=>row?STK.reduce((s,f)=>{ if(f.keys)return s+f.keys.reduce((x,k)=>x+(row[MINKEY[k]]||0),0); return s+(row[MINKEY[f.k]]||0); },0):null;
   let maxTot=0; areas.forEach(a=>{const m=MODEL.find(x=>x.area===a);maxTot=Math.max(maxTot,totOf(m.ra)||0,totOf(m.rb)||0);}); if(maxTot<=0)maxTot=1;
@@ -5121,12 +5616,20 @@ function cellHTML(val,dv,imp,cv,ref,name,area,faseK,span,isTot,dec){
   return '<div class="mxc'+(isTot?' tot':'')+inkCls+'" style="'+st+'" data-area="'+area+'" data-fase="'+faseK+'" title="'+name+' · '+area+': '+fmt(val,dec)+' '+faroUnitLbl()+(dv!=null?' ('+sg(dv)+fmt(dv,dec)+' vs ref · impacto '+fmtImpact(imp)+'/mes)':'')+'"><div class="mv">'+fmt(val,dec)+'</div>'+(mdtxt?'<div class="md '+mdcls+'">'+mdtxt+'</div>':'')+'</div>';
 }
 // Bloques del modo "Juntar": Preparación=P1+P2+P3 · Pesaje=P4 · Consolidación=P5+P6 · Entre lotes=P7
+/* abbr = como se lee en movil. Todas del mismo largo a proposito: con los nombres enteros
+   "Consolidación" se partia en tres lineas, cada cabecera media distinto y las barritas de color
+   quedaban a alturas diferentes. */
 const FGRUPOS=[
-  {k:'g_prep', name:'Preparación',        col:'--f-prep',   keys:['p1','p2','p3','p23']},
-  {k:'g_pes',  name:'Pesaje',             col:'--f-pesaje', keys:['p4']},
-  {k:'g_cons', name:'Consolidación',      col:'--f-consol', keys:['p5','p6']},
-  {k:'g_entre',name:'Entre lotes', col:'--f-entre',  keys:['p7']}
+  {k:'g_prep', name:'Preparación',        col:'--f-prep',   keys:['p1','p2','p3','p23'], abbr:'Prepa.'},
+  {k:'g_pes',  name:'Pesaje',             col:'--f-pesaje', keys:['p4'],                 abbr:'Pesaje'},
+  {k:'g_cons', name:'Consolidación',      col:'--f-consol', keys:['p5','p6'],            abbr:'Consol.'},
+  {k:'g_entre',name:'Entre lotes', col:'--f-entre',  keys:['p7'],                        abbr:'E. lotes'}
 ];
+/* Nombre corto de area para el movil. ANTES: a.slice(0,5), que dejaba CONGE y FRESC y aun asi
+   REFRIGERADO no cabia y se metia en la primera columna de datos. Ahora se abrevia solo lo que
+   hace falta, con palabras que se entienden. */
+const ACORTA={REFRIGERADO:'REFRI',CONGELADO:'CONGEL',PENDIENTES:'PEND'};
+function areaCorta(a){ return ACORTA[a]||a; }
 function sumKeys(row,keys){ if(!row)return null; let s=0,any=false; keys.forEach(k=>{const v=row[MINKEY[k]]; if(v!=null){s+=v;any=true;}}); return any?s:null; }
 function renderMatrix(){
   $('faroDetail').innerHTML='';
@@ -5185,16 +5688,16 @@ function renderMatrix(){
   // color por % de desviación frente a la referencia (cada celda con su propia referencia) → mismo criterio para todas las unidades
   const cols=grouped?FGRUPOS:FASES;
   const uStyle='display:block;font-size:8px;font-weight:600;color:var(--ink3-txt);text-transform:none;letter-spacing:0';
-  const uSub=k=>'<span style="'+uStyle+'">'+(ST.faroUnit==='pct'?'%':(ST.faroUnit==='min'?'min/lote':((ST.faroUnit==='prod'||PERUD_K1.has(k))?'min/ud':'min')))+'</span>';
+  const uSub=k=>'<span class="mxh-u" style="'+uStyle+'">'+(ST.faroUnit==='pct'?'%':(ST.faroUnit==='min'?'min/lote':((ST.faroUnit==='prod'||PERUD_K1.has(k))?'min/ud':'min')))+'</span>';
   const isMinV=(ST.faroUnit==='min'), isPctV=(ST.faroUnit==='pct');
   /* etiqueta larga + corta: en movil el CSS deja solo la corta (si no, "Productividad"
      se recortaba a "ODUCTIVID" al no caber en la columna) */
   const tailLong=isMinV?'Total lote':(isPctV?'Aporte al total':'Productividad');
   const tailShort=isMinV?'Total':(isPctV?'%':'Prod');
-  const tailLbl='<span class="mxh-l">'+tailLong+'</span><span class="mxh-c">'+tailShort+'</span>', tailUnit='<span style="'+uStyle+'">'+(isMinV?'min/lote':(isPctV?'%':udName()))+'</span>';
+  const tailLbl='<span class="mxh-l">'+tailLong+'</span><span class="mxh-c">'+tailShort+'</span>', tailUnit='<span class="mxh-u" style="'+uStyle+'">'+(isMinV?'min/lote':(isPctV?'%':('<span class="jv-l">'+udName()+'</span><span class="jv-s">min/ud</span>')))+'</span>';
   /* La cabecera lleva el nombre largo Y el codigo (P1, P2...). En movil, con el faro
      desglosado, el CSS esconde el largo y deja el codigo: 7 columnas caben sin arrastrar. */
-  let h='<div class="mxrow head"><div class="mxh"></div>'+cols.map(f=>'<div class="mxh"><i style="background:'+cssv(f.col)+'"></i><span class="mxh-l">'+f.name+'</span><span class="mxh-c">'+(f.code||f.name)+'</span>'+uSub(f.k)+'</div>').join('')+'<div class="mxh tot">'+tailLbl+tailUnit+'</div></div>';
+  let h='<div class="mxrow head"><div class="mxh"></div>'+cols.map(f=>'<div class="mxh" title="'+f.name+(f.code?(' \u00b7 '+f.code):'')+'"><i style="background:'+cssv(f.col)+'"></i><span class="mxh-l">'+f.name+'</span><span class="mxh-c">'+(f.abbr||f.code||f.name)+'</span>'+uSub(f.k)+'</div>').join('')+'<div class="mxh tot">'+tailLbl+tailUnit+'</div></div>';
   // LÓGICA INVERSA: cada fase por su aporte a la productividad (reparto por % de tiempo); columna resumen por el desvío de la prod. Σ aportes = desvío prod → prod roja ⇒ fase roja. _FMB=máx |aporte fase|, _FMP=máx |desvío prod área|.
   // Vista %: totales de minutos (ponderados por nº de lotes) del analizado y de la referencia, para repartir la contribución
   _PCTTA=0;_PCTTB=0;
@@ -5221,7 +5724,7 @@ function renderMatrix(){
     const m=MODEL.find(x=>x.area===a);
     /* nombre largo + abreviado (5 letras, igual que en Objetivos): en movil el CSS deja el
        corto, porque "REFRIGERADO" no cabia en la columna y se salia sobre la primera celda */
-    h+='<div class="mxrow"><div class="mxa" data-area="'+a+'"><span class="mxa-l">'+a+'</span><span class="mxa-s">'+(a==='PENDIENTES'?'PEND':a.slice(0,5))+'</span></div>';
+    h+='<div class="mxrow"><div class="mxa" data-area="'+a+'"><span class="mxa-l">'+a+'</span><span class="mxa-s">'+areaCorta(a)+'</span></div>';
     const cells=areaCells(m);
     cells.forEach(o=>{ var cv=(isMinV||isPctV)?o.c.dv:o.c.cD; h+=cellHTML(o.c.val,o.c.dv,o.c.imp,cv,o.c.ref,o.name,a,o.k,o.span,false,o.c.dec); });
     // columna resumen: color por el desvío de la productividad oficial (prodA-prodB). Como el color de cada fase es su aporte (reparto de la prod por % de tiempo) y Σ aportes = este desvío, si la prod sale roja hay sí o sí una fase roja.
@@ -5450,6 +5953,12 @@ function legSem(){ return ST.single?'':legendSem; }
 function refSub(base){
   if(ST.single) return base||(typeof shortStore==='function'?shortStore(curA.tienda):'');
   return base?(base+' · analizado frente a referencia'):'analizado frente a referencia'; }
+/* Purga la grafica y deja dicho EN SU SITIO por que esta vacia, en vez de dejar la tarjeta a
+   cero. El aviso de debajo se sigue poniendo: este es el que se ve sin bajar la vista. */
+function sinGrafica(id,msg){
+  try{ Plotly.purge(id); }catch(e){}
+  var el=$(id); if(el) el.innerHTML='<div class="chart-none">'+String(msg||'Sin datos para este escenario.')+'</div>';
+}
 function barGroupSem(id,kA,kB,areas,dec,h,eps){
   const yA=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kA];}),yB=areas.map(a=>{const m=MODEL.find(x=>x.area===a);return m[kB];});
   /* FICHA INDIVIDUAL: una sola barra por area. Dibujar dos series identicas (A contra A) no es
@@ -5479,7 +5988,11 @@ function barGroupSem(id,kA,kB,areas,dec,h,eps){
 /* ===== PICKING / DESPLAZAMIENTO + RATIOS ===== */
 function renderPickDespl(){
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
-  if(!ad.length){Plotly.purge('cPick');Plotly.purge('cDespl');$('ratioGrid').innerHTML='';$('pickNote').textContent='No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.';return;}
+  if(!ad.length){
+    sinGrafica('cPick','No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.');
+    sinGrafica('cDespl','No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.');
+    $('ratioGrid').innerHTML='';
+    $('pickNote').textContent='No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.';return;}
   // Picking = productividad (min/ud): escala con las unidades del lote. Desplazamiento = min/lote (depende del recorrido, no de las uds).
   ad.forEach(a=>{const m=MODEL.find(x=>x.area===a); m._pickAud=(m.p2A!=null&&m.udsA)?m.p2A/m.udsA:null; m._pickBud=(m.p2B!=null&&m.udsB)?m.p2B/m.udsB:null;});
   barGroupSem('cPick','_pickAud','_pickBud',ad,3,H.pick,0.005);   // min/ud: umbral fino para que salga verde/rojo (0,1 era de min/lote)
@@ -5502,7 +6015,7 @@ function renderPickDespl(){
 /* ===== DESPLAZAMIENTO TOTAL ===== */
 function renderDesplTot(){
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
-  if(!ad.length){Plotly.purge('cDesplTot');$('desplTotNote').textContent='Sin áreas con desplazamiento total comparable.';return;}
+  if(!ad.length){sinGrafica('cDesplTot','Sin áreas con desplazamiento total comparable.');$('desplTotNote').textContent='Sin áreas con desplazamiento total comparable.';return;}
   barGroupSem('cDesplTot','desplTotA','desplTotB',ad,2,H.pick,0.2);
   $('desplTotSub').textContent=refSub('');
   let top=null,sumDT=0,sumT=0;ad.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.dDesplTot!=null&&(!top||m.dDesplTot>top.dDesplTot))top=m;sumDT+=m.desplTotA||0;sumT+=m.tiempoA||0;});
@@ -5517,7 +6030,7 @@ function renderDesplTot(){
 /* ===== TIEMPO ENTRE LOTES ===== */
 function renderCont(){
   const ac=viewAreas().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible&&(m.p7A!=null||m.p7B!=null);}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
-  if(!ac.length){Plotly.purge('cCont');$('contNote').textContent='Sin datos de tiempo entre lotes.';return;}
+  if(!ac.length){sinGrafica('cCont','Sin datos de tiempo entre lotes.');$('contNote').textContent='Sin datos de tiempo entre lotes.';return;}
   barGroupSem('cCont','p7A','p7B',ac,2,H.pick,0.1);
   $('contSub').textContent=refSub('');
   let top=null;ac.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.gaps.p7!=null&&(!top||m.gaps.p7>top.gaps.p7))top=m;});
@@ -5552,6 +6065,7 @@ function renderDiff(){
      significa que el analizado mueve menos unidades por lote. La etiqueta lo dice. */
   const nd=MODEL.filter(m=>!m.disponible&&viewAreas().includes(m.area));
   const fmtUds=n=>(n==null||isNaN(n))?'—':(n>0?'+':n<0?'−':'')+fmt(Math.abs(n),0)+' ud';
+  let _selD=null;                       // area abierta, para pintar su tendencia debajo
   let html=rows.map(({m,imp})=>{
     const v=valoresDe(m,metric);
     // en 'uds' no hay juicio mejor/peor: es volumen, se muestra neutro
@@ -5564,17 +6078,35 @@ function renderDiff(){
     const lineColor=cls==='up'?cssv('--bad'):cls==='down'?cssv('--good'):null;
     const deltaHtml=isUds?('<span class="delta flat">'+(v.d==null?'N/D':(sg(v.d)+fmt(v.d,v.dec)+' ud'))+'</span>'):deltaChip(v.d,true,v.dec,'',v.eps);
     const impHtml=isUds?fmtUds(imp):fmtImpact(imp);
+    /* area abierta: las series son las MISMAS que dibuja la mini-tendencia de la fila */
+    const _abD=(ST.diffSel===m.area);
+    if(_abD) _selD={area:m.area,titulo:m.area,nomA:(ST.nameA||'Analizado'),ref:(ST.nameB||'Referencia'),
+                    sA:sA,sB:sB,esHora:false,unidad:v.unit,
+                    metrica:((typeof METRICS!=='undefined'&&METRICS[metric]&&METRICS[metric].label)||''),
+                    fmt:(x)=>(x==null||isNaN(x))?'—':fmt(x,v.dec)};
     return '<div class="drow '+cls+'" data-area="'+m.area+'">'+
       '<div class="dr-area">'+m.area+'<small>'+causa+'</small></div>'+
       '<div class="spark-wrap"><div style="flex:1;height:36px;min-width:0">'+svgSpark(sA,sB,130,36,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
       '<div class="dr-vals"><div class="dr-pair"><span class="k">Analizado</span><span class="v an">'+fmt(v.a,v.dec)+'</span></div><div class="dr-pair"><span class="k">Referencia</span><span class="v rf">'+fmt(v.b,v.dec)+'</span></div></div>'+
       '<div class="dr-dif">'+deltaHtml+'</div>'+
       '<div class="dr-imp"><div class="k">'+(isUds?'Dif. uds/mes':'Impacto/mes')+(nTiendasImp()>1?'<br><span style="font-weight:800">por tienda</span>':'')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
-      '</div>';
+      '</div>'+
+      /* la tendencia de 12 meses se abre AQUI, en un hueco justo debajo del area pulsada */
+      (_abD?diffTrendRow(_selD):'');
   }).join('');
   if(nd.length)html+='<div class="drow nd"><div class="dr-area">'+nd.map(m=>m.area).join(', ')+'<small>no está en uno de los escenarios</small></div><div></div><div class="dr-vals"></div><div></div><div class="dr-imp"></div></div>';
   $('diffList').innerHTML=html;
-  $('diffList').querySelectorAll('[data-area]').forEach(r=>r.addEventListener('click',()=>{ST.fichaArea=r.dataset.area;renderFichaTabs();renderFicha();$('secFicha').scrollIntoView({behavior:'smooth',block:'start'});}));
+  /* Si la vista ha cambiado y el area abierta ya no esta, se olvida. */
+  if(ST.diffSel&&!_selD) ST.diffSel=null;
+  /* El clic en el area abre su tendencia de 12 meses debajo, igual que en el ranking de tiendas.
+     El salto a la ficha del area sigue estando, en un boton dentro del panel. */
+  $('diffList').querySelectorAll('[data-area]').forEach(r=>r.addEventListener('click',()=>{
+    const a=r.dataset.area;
+    if(ST.diffSel===a){ ST.diffSel=null; renderDiff(); return; }
+    ST.diffSel=a; renderDiff();
+    try{ const h=$('diffDetIn'); if(h) h.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+  }));
+  if(_selD) paintDiffTrend(_selD);
   /* nota quitada a peticion de Javier: el contenedor esta oculto en el HTML.
      Se deja el hueco vacio para no tocar nada mas del render. */
   $('diffNote').innerHTML='';
@@ -5827,8 +6359,8 @@ function slopeBrecha(t,ref,area,shift){const sT=prodSerieT(t,area,shift),sR=prod
    suelto no dice ni la metrica ni el mes ni los filtros. */
 function rkSubtitulo(){
   const M=ST._rkMeta||{};
-  return [M.ambito, M.mes, 'Región '+(M.region||'Todas'),
-    (M.zonasFuera&&M.zonasFuera.length)?('sin '+M.zonasFuera.join(', ')):'',
+  return [M.ambito, M.mes, (M.region?regNom(M.region):'Región Todas'),
+    (M.zonasFuera&&M.zonasFuera.length)?('sin '+M.zonasFuera.map(zonaNom).join(', ')):'',
     M.veterania, M.modelo, M.orden,
     M.referencia?('Referencia: '+M.referencia):''].filter(Boolean).join(' · ');
 }
@@ -5875,7 +6407,7 @@ function rkZonaBtnSync(){
   const b=$('rkZonaBtn'); if(!b)return;
   const zs=rkZonasDe((($('rkRegion')||{}).value||'').trim());
   const dentro=zs.filter(rkZonaOk), n=dentro.length;
-  b.querySelector('.cd-txt').textContent = (n===zs.length)?'Todas' : n===0?'Ninguna' : n===1?dentro[0] : n+' de '+zs.length;
+  b.querySelector('.cd-txt').textContent = (n===zs.length)?'Todas' : n===0?'Ninguna' : n===1?zonaNom(dentro[0]) : n+' de '+zs.length;
   b.querySelector('.cd-cnt').textContent = n+'/'+zs.length;
   b.classList.toggle('cd-part', n>0&&n<zs.length);
 }
@@ -5885,7 +6417,7 @@ function rkZonasUI(){
   pop.innerHTML='<div class="cd-p-top"><div class="cd-p-act"><button data-a="all" type="button">Todas</button><button data-a="none" type="button">Ninguna</button></div></div><div class="cd-list"></div>';
   const list=pop.querySelector('.cd-list');
   zs.forEach(z=>{ const o=document.createElement('label'); o.className='cd-opt';
-    o.innerHTML='<input type="checkbox"><span></span>'; o.querySelector('span').textContent=z;
+    o.innerHTML='<input type="checkbox"><span></span>'; o.querySelector('span').textContent=zonaNom(z);
     const c=o.querySelector('input'); c.checked=rkZonaOk(z);
     c.addEventListener('change',()=>{ if(c.checked) rkZonaOut().delete(z); else rkZonaOut().add(z);
       rkZonaBtnSync(); renderRank(); });
@@ -5906,7 +6438,7 @@ function fillRankAttrs(){
   RK_ZON_ALL=[...zon].sort(ordZ);
   for(const k in RK_ZON_REG) RK_ZON_REG[k]=[...RK_ZON_REG[k]].sort(ordZ);
   {const el=$('rkRegion'); if(el){ const cur=el.value||'';
-     el.innerHTML='<option value="">Todas</option>'+[...reg].sort(ordZ).map(v=>opt(v,v,v===cur)).join('');
+     el.innerHTML='<option value="">Todas</option>'+[...reg].sort(ordZ).map(v=>opt(v,regNom(v),v===cur)).join('');
      if(cur&&[...el.options].some(o=>o.value===cur)) el.value=cur; }}
   try{ rkZonasUI(); }catch(e){ console.warn('rkZonas',e); }
   const MORD=['NTC15','NTC30','NTC60','NTC90','NTC120','NTC150'],ord=v=>{const i=MORD.indexOf(v);return i<0?99:i;};
@@ -6067,6 +6599,23 @@ function estadoVet(t,mes,shift,area){if(area==='__global'){const c={};AREAS.forE
 function lotesT(t,mes,shift,area){const list=area==='__global'?AREAS:[area];let s=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r.n_lotes!=null){s+=r.n_lotes;any=true;}});return any?s:null;}
 function unidadesEst(t,mes,shift,area){const list=area==='__global'?AREAS:[area];let s=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a);if(r&&r[UDSC()]!=null&&r.n_lotes!=null){s+=r[UDSC()]*r.n_lotes;any=true;}});return any?s:null;}
 function rkSerie(t,area,shift,mk){return ST.meses.map(k=>valorTienda(t,mk,area,shift,k));}
+/* Serie mensual de un indicador de Farolas para CUALQUIER escenario del ranking: una tienda, una
+   zona, una region, un conjunto. Antes solo sabia de tiendas (__faStoreSerie filtra por r.Tienda),
+   asi que una zona ensenaba su numero del mes y la tendencia salia vacia. El valor del mes si
+   sabia desagregar el grupo (recorre aggMeta.members); la serie no. Ahora van por el mismo sitio. */
+function faSerie(t,key){
+  const nul=()=>ST.meses.map(()=>null);
+  if(!window.__faGroupSerie||!window.__faStoreSerie) return nul();
+  const gs=f=>window.__faGroupSerie(f,ST.meses,key)||nul();
+  if(t==='Tiendas Veteranas') return gs(r=>r.Fase==='Veterana');
+  if(t==='Todas las tiendas') return gs(()=>true);
+  if(t===LIEBRE_HIST) return gs(r=>window.__faIsLiebre&&window.__faIsLiebre(r.Tienda));
+  const am=(ST.aggMeta||{})[t]||null;
+  if(am){ const mem=new Set((am.members||[]).map(String));
+    if(!mem.size) return nul();
+    return gs(r=>mem.has(String(r.Tienda))); }
+  return window.__faStoreSerie(t,ST.meses,key)||nul();
+}
 /* Catalogo de metricas del ranking. Los indicadores de FAROLAS se anaden con el prefijo
    "fa_" cuando el CSV de farolas (20 MB) ya ha aterrizado; hasta entonces el select va sin
    ellos y se vuelve a construir solo (window.__rkRefreshMetrics desde el modulo de farolas).
@@ -6095,6 +6644,147 @@ function rkFillMetrics(){
 /* lo llama el modulo de farolas en cuanto tiene los datos */
 window.__rkRefreshMetrics=function(){ try{ rkFillMetrics(); if(ST.mode==='rank')renderRank(); }catch(e){} };
 
+/* ===== TENDENCIA DE UNA FILA DEL RANKING =====
+   Se abre en un hueco justo debajo de la fila pulsada, no al final de la lista: con veinte filas
+   en pantalla, mandarte al final te hacia perder de vista por cual ibas. #rkList es una columna
+   flex, asi que un div hermano detras de la fila es otro elemento a ancho completo y no toca la
+   rejilla de las filas. */
+/* La cabecera del panel es una fila flex, asi que el boton de PNG tiene que ir EN el flujo:
+   la clase .png es position:absolute por defecto (flota sobre las tarjetas de graficas) y aqui
+   se escapaba del panel, empujaba a los demas botones y se perdia de vista. La clase .dl-in ya
+   existe justo para esto. */
+function trendHead(o,ids){
+  const ttl=esc1(o.titulo||o.nom)+(o.unidad?(' · '+esc1(o.unidad)):'');
+  return '<div class="rkd-h"><div class="rkd-t">'+ttl+'</div>'+
+    (ids.extra?('<button class="cd-dlbtn" id="'+ids.extra+'" type="button">'+ids.extraTxt+'</button>'):'')+
+    '<button class="png dl-in" data-png="'+ids.chart+'" data-pngname="'+ids.file+'"'+
+      ' data-pngtitle="'+esc1(o.titulo||o.nom)+'" data-pngsub="'+esc1([o.metrica,o.unidad].filter(Boolean).join(' · '))+'">⤓ PNG</button>'+
+    '<button class="rkd-x" id="'+ids.close+'" type="button" aria-label="Cerrar" title="Cerrar">✕</button></div>';
+}
+function rkTrendRow(o){
+  return '<div class="rkd rk-det" id="rkDetIn">'+
+    trendHead(o,{chart:'rkTrendChart',file:'tendencia',close:'rkDetClose',extra:'rkTrendComp',extraTxt:'Ver en el comparador'})+
+    '<div id="rkTrendChart" style="width:100%;height:300px"></div></div>';
+}
+function diffTrendRow(o){
+  return '<div class="rkd rk-det" id="diffDetIn">'+
+    trendHead(o,{chart:'diffTrendChart',file:'tendencia_area',close:'diffDetClose'})+
+    '<div id="diffTrendChart" style="width:100%;height:300px"></div></div>';
+}
+/* El valor de cada punto. Dos decimales para una productividad (0,23), pero las unidades van en
+   centenas y "123,40" no dice nada mas que "123" y ocupa el doble. Y si la metrica es una hora
+   fin, la hora. */
+function trendEtiq(o,v,dec){ if(v==null||isNaN(v))return '';
+  if(o.esHora) return window.__faHHMM?window.__faHHMM(v):String(v);
+  if(dec==null){ var a=Math.abs(v); dec=a>=100?0 : a>=10?1 : 2; }
+  return fmt(v,dec); }
+/* Los decimales se deciden UNA vez para toda la grafica, no valor a valor: si no, en una serie
+   de unidades salia "99,6" al lado de "104" y parecian dos escalas distintas. */
+function trendDec(o,hayB){
+  if(o.esHora) return 0;
+  var vs=o.sA.concat(hayB?o.sB:[]).filter(function(v){return v!=null&&!isNaN(v);});
+  if(!vs.length) return 2;
+  var mx=Math.max.apply(null,vs.map(function(v){return Math.abs(v);}));
+  return mx>=100?0 : mx>=10?1 : 2; }
+/* CUALES se escriben. Escribirlos todos ensucia la grafica, y en una serie casi plana -la media
+   de las veteranas, por ejemplo- salian doce veces los mismos tres numeros. Se queda:
+   el primero, el ultimo, el maximo y el minimo (los que se miran), mas los puntos en los que el
+   numero CAMBIA de verdad respecto al ultimo escrito. Si aun son muchos, se aclaran repartidos. */
+function trendMask(vals,txts,maxN){
+  var keep=vals.map(function(){return false;}), idx=[];
+  for(var i=0;i<vals.length;i++) if(vals[i]!=null&&!isNaN(vals[i])) idx.push(i);
+  if(!idx.length) return keep;
+  var first=idx[0], last=idx[idx.length-1], lo=first, hi=first;
+  idx.forEach(function(i){ if(vals[i]<vals[lo])lo=i; if(vals[i]>vals[hi])hi=i; });
+  /* El maximo y el minimo entran solo si se LEEN distintos de los extremos: en una serie plana
+     los cuatro son el mismo numero y se escribia cuatro veces lo mismo. */
+  var fijos=[first]; if(fijos.indexOf(last)<0) fijos.push(last);
+  [lo,hi].forEach(function(i){
+    if(fijos.indexOf(i)>=0) return;
+    if(txts[i]===txts[first]||txts[i]===txts[last]) return;
+    fijos.push(i); });
+  fijos.forEach(function(i){ keep[i]=true; });
+  var ult=null;
+  idx.forEach(function(i){ if(keep[i]){ ult=txts[i]; return; }
+    if(txts[i]!==ult){ keep[i]=true; ult=txts[i]; } });
+  var n=0; keep.forEach(function(k){ if(k)n++; });
+  if(n>maxN){
+    var sueltos=idx.filter(function(i){ return keep[i]&&fijos.indexOf(i)<0; });
+    var cupo=Math.max(0,maxN-fijos.length);
+    if(sueltos.length>cupo){
+      var paso=sueltos.length/(cupo||1), deja={};
+      for(var k=0;k<cupo;k++) deja[sueltos[Math.floor(k*paso)]]=1;
+      sueltos.forEach(function(i){ if(!deja[i]) keep[i]=false; });
+    }
+  }
+  return keep;
+}
+/* Pinta la tendencia de 12 meses: la misma para el ranking de tiendas y para las diferencias
+   del comparador. Dos series, el dato escrito en cada punto y el eje en horas cuando toca. */
+function pintaTendencia(boxId,o){
+  const box=$(boxId); if(!box||typeof Plotly==='undefined'||!o)return;
+  /* xMeses() es el formato del resto de las series de 12 meses ("Sep 25"): el nombre entero del
+     mes ocupa media grafica y no dice nada mas. */
+  const x=xMeses();
+  const brand=cssv('--brand'), ink3=cssv('--ink3'), line=cssv('--line'), ink2=cssv('--ink2');
+  const hf='.'+(o.esHora?0:2)+'f';
+  const hov=o.esHora?'%{customdata}<extra></extra>':('%{y:'+hf+'}<extra></extra>');
+  const hayB=!!(o.sB&&o.sB.some(v=>v!=null&&!isNaN(v)));
+  /* Con dos series, la etiqueta de la de arriba va arriba y la de abajo, abajo, para que no se
+     pisen. Con una sola se alternan, que doce seguidas no caben en una fila. */
+  const posA=[], posB=[];
+  for(var i=0;i<x.length;i++){ const a=o.sA[i], b=hayB?o.sB[i]:null;
+    if(hayB&&a!=null&&b!=null){ posA.push(a>=b?'top center':'bottom center'); posB.push(a>=b?'bottom center':'top center'); }
+    else { posA.push(i%2===0?'top center':'bottom center'); posB.push('bottom center'); } }
+  /* El texto completo de cada punto, y luego la criba: la serie de la tienda se queda con hasta
+     siete numeros y la referencia con cuatro, porque es la que suele ir plana. El valor exacto de
+     TODOS los puntos sigue estando en el hover. */
+  const decT=trendDec(o,hayB);
+  const txtA=o.sA.map(v=>trendEtiq(o,v,decT)), mA=trendMask(o.sA,txtA,7);
+  const txtB=hayB?o.sB.map(v=>trendEtiq(o,v,decT)):[], mB=hayB?trendMask(o.sB,txtB,4):[];
+  const tra=[{x:x,y:o.sA,name:(o.nomA||o.nom),type:'scatter',mode:'lines+markers+text',connectgaps:false,
+    line:{color:brand,width:2.6},marker:{size:6,color:brand},
+    text:txtA.map((t,i)=>mA[i]?t:''),textposition:posA,cliponaxis:false,
+    textfont:{size:10.5,color:ink2},
+    customdata:o.sA.map(v=>o.fmt(v)),hovertemplate:hov}];
+  if(hayB)
+    tra.push({x:x,y:o.sB,name:o.ref,type:'scatter',mode:'lines+markers+text',connectgaps:false,
+      line:{color:ink3,width:1.8,dash:'dash'},marker:{size:5,color:ink3},
+      text:txtB.map((t,i)=>mB[i]?t:''),textposition:posB,cliponaxis:false,
+      textfont:{size:10,color:ink3},
+      customdata:o.sB.map(v=>o.fmt(v)),hovertemplate:hov});
+  const lay={height:300,margin:{l:60,r:22,t:36,b:40},hovermode:'x unified',
+    xaxis:{gridcolor:'rgba(0,0,0,0)',automargin:true,tickfont:{size:11}},
+    yaxis:{gridcolor:line,zeroline:false,automargin:true,hoverformat:hf,tickfont:{size:11.5}},
+    legend:{orientation:'h',y:1.02,yanchor:'bottom',x:0,xanchor:'left'}};
+  const vv=o.sA.concat(hayB?o.sB:[]).filter(v=>v!=null&&!isNaN(v));
+  /* aire arriba y abajo: con las etiquetas escritas, un rango justo las recorta */
+  if(vv.length){ const lo=Math.min.apply(null,vv), hi=Math.max.apply(null,vv);
+    const p=Math.max((hi-lo)*0.20,Math.abs(hi)*0.03,0.2);
+    lay.yaxis.range=[lo-p,hi+p]; }
+  /* Hora fin va en minutos desde medianoche: el eje se reetiqueta en tramos de media hora con
+     hh:mm, igual que en Farolas. Va DESPUES del rango, porque lo pisa a proposito. */
+  if(o.esHora&&vv.length){ const lo=Math.min.apply(null,vv), hi=Math.max.apply(null,vv);
+    const q0=Math.floor((lo-14)/30)*30, q1=Math.ceil((hi+14)/30)*30, tv=[], tt=[];
+    for(var zz=q0;zz<=q1;zz+=30){ tv.push(zz); tt.push(window.__faHHMM?window.__faHHMM(zz):String(zz)); }
+    lay.yaxis.tickvals=tv; lay.yaxis.ticktext=tt; lay.yaxis.range=[q0,q1]; }
+  /* newPlot y no react: con react las etiquetas de texto no se pintan hasta que hay un resize */
+  try{ Plotly.newPlot(box,tra,baseLayout(lay),{displayModeBar:false,responsive:true}); }
+  catch(e){ console.warn('tendencia',e); }
+}
+function paintRkTrend(o){
+  pintaTendencia('rkTrendChart',o);
+  const cl=$('rkDetClose'); if(cl) cl.addEventListener('click',()=>{ const v=ST.rkSel; ST.rkSel=null; renderRank();
+    try{ const r=$('rkList').querySelector('[data-t="'+String(v).replace(/"/g,'')+'"]');
+      if(r) r.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){} });
+  const cp=$('rkTrendComp'); if(cp) cp.addEventListener('click',()=>{ if(window.__rkToComp) window.__rkToComp(o.t); });
+}
+function paintDiffTrend(o){
+  pintaTendencia('diffTrendChart',o);
+  const cl=$('diffDetClose'); if(cl) cl.addEventListener('click',()=>{ const a=ST.diffSel; ST.diffSel=null; renderDiff();
+    try{ const r=$('diffList').querySelector('[data-area="'+String(a).replace(/"/g,'')+'"]');
+      if(r) r.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){} });
+}
 function renderRank(){
   try{ if(window.__rkSyncScope) window.__rkSyncScope(); }catch(e){}
   const mk=$('rkMetric').value,area=$('rkArea').value,shift=$('rkShift').value,mes=$('rkMes').value,ref=$('rkRef').value;
@@ -6145,7 +6835,10 @@ function renderRank(){
     /* Modelo, fase y zona son atributos de TIENDA: en un ranking de zonas o regiones no
        significan nada y los controles se esconden. Lo único que sigue teniendo sentido es
        acotar a una región cuando se rankean zonas. */
-    if(scope==='zona'&&fReg) items=items.filter(o=>String(((ST.aggMeta||{})[o.t]||{}).region||'')===fReg);
+    /* aggMeta.region de una zona es el numero ('3') y fReg viene crudo del select ('R03'):
+       comparados tal cual NUNCA coincidian, asi que rankear zonas acotando a una region
+       devolvia siempre "ninguna zona cumple los filtros". Se comparan los numeros. */
+    if(scope==='zona'&&fReg) items=items.filter(o=>geoNum(((ST.aggMeta||{})[o.t]||{}).region||'')===geoNum(fReg));
     /* rankeando ZONAS, quitar una zona de la lista tiene el mismo sentido que quitarla cuando se
        rankean tiendas: se excluye del ranking entero. */
     if(scope==='zona') items=items.filter(o=>rkZonaOk(String(o.t).replace(/^ZONE::/,'')));
@@ -6197,10 +6890,16 @@ function renderRank(){
      0,340 Mdona, con su rampa por tienda) y el de las TIENDAS LIEBRE del trimestre, que es
      el que ensena la pestana de objetivos (medido: 0,324). Aqui es el de flota. */
   const refLbl=(ref===OBJ_NAME)?(isGen&&!G.isProd?'objetivo de flota (0)':'objetivo de flota'):shortStore(ref);
-  const metricLabel=isFa?(FA.unit||'valor'):(isProdMetric?udName():(isGen?G.unit:(special?(mk==='__imp'?'h / mes':mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
+  /* Hora fin TM/TT llega en minutos desde medianoche y su metrica trae isMin: 477 no es un valor,
+     son las 7:57. El ranking formateaba con fmt() y se comia el isMin; y como estas metricas no
+     traen unit, la columna se rotulaba "valor". */
+  const esHora=!!(isFa&&FA&&FA.isMin);
+  const fmtV=v=>(v==null||isNaN(v))?'-':(esHora?(window.__faHHMM?window.__faHHMM(v):fmt(v,0)):fmt(v,dec));
+  const metricLabel=isFa?(esHora?'hora':(FA.unit||'valor')):(isProdMetric?udName():(isGen?G.unit:(special?(mk==='__imp'?'h / mes':mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
   const _qLbl=esAgr?(scope==='zona'?'Zona':'Región'):'Tienda';
   const rkHead='<div class="difhead"><span>'+_qLbl+'</span><span>Tendencia 12 meses</span><span>'+_qLbl+' / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
   const _exp=[];
+  let _selTr=null;                      // datos de la fila abierta, para pintar su tendencia
   $('rkList').innerHTML=rkHead+top.map((o,i)=>{
     const isCur=curA&&String(o.t)===String(curA.tienda);
     let cls='flat',difTxt='';
@@ -6211,16 +6910,20 @@ function renderRank(){
       ? objEsc(o.t,mes)*(rf!==1?rf:1)
       : vRef;
     if(special){cls=o.val>0?'up':o.val<0?'down':'flat';}
-    else if(_refFila!=null){const d=o.val-_refFila;cls=Math.abs(d)<eps?'flat':(d*faSigno>0?'up':'down');difTxt=deltaChip(d,faSigno>0,dec,'',eps);}
+    else if(_refFila!=null){const d=o.val-_refFila;cls=Math.abs(d)<eps?'flat':(d*faSigno>0?'up':'down');
+      /* la diferencia entre dos horas son minutos, no una hora: "+31 min", no "0:31" */
+      difTxt=esHora?deltaChip(d,faSigno>0,0,'min',eps):deltaChip(d,faSigno>0,dec,'',eps);}
     const lineColor=cls==='up'?cssv('--bad'):cls==='down'?cssv('--good'):null;
-    const sA=isFa?(window.__faStoreSerie?window.__faStoreSerie(o.t,ST.meses,FA.k):ST.meses.map(()=>null))
+    const sA=isFa?faSerie(o.t,FA.k)
       :(isGen?genSerie(o.t,G.calc||G.prop):rkSerie(o.t,area,shift,special?'prod':mk));
     const _serObj=()=>ST.meses.map(k=>objEsc(o.t,k)*(rf!==1?rf:1));
-    const sB=isFa?(ref===OBJ_NAME&&FA&&FA.k==='Productividad_min_ud'?_serObj():ST.meses.map(()=>vRef))
+    /* La referencia tambien tiene historia: antes se replicaba su valor del mes elegido en los
+       doce y la raya de referencia salia plana. Solo el objetivo es una cifra sin serie. */
+    const sB=isFa?(ref===OBJ_NAME?(FA&&FA.k==='Productividad_min_ud'?_serObj():ST.meses.map(()=>vRef)):faSerie(ref,FA.k))
       :(isGen?(ref===OBJ_NAME?(G&&G.isProd?_serObj():ST.meses.map(()=>vRef)):genSerie(ref,G.calc||G.prop)):rkSerie(ref,area,shift,special?'prod':mk));
     const tr=sparkTrend(sA,true);
-    const valTxt=special?(sg(o.val)+fmt(o.val,dec)):fmt(o.val,dec);
-    const subTxt=isFa?(FA.unit||''):(isGen?G.unit:(mk==='__imp'?'h/mes':(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio')));
+    const valTxt=special?(sg(o.val)+fmt(o.val,dec)):fmtV(o.val);
+    const subTxt=isFa?(esHora?'hora':(FA.unit||'')):(isGen?G.unit:(mk==='__imp'?'h/mes':(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio')));
     const valCls=cls==='up'?'up':cls==='down'?'down':'flat';
     const _fR=faseTienda(o.t,o.gr);
     const vetTxt=faseTxt(o.t,o.gr,o.est)+(faseAunNo(_fR,o.est)?' · aún no ese mes':'');
@@ -6231,7 +6934,8 @@ function renderRank(){
     const attrs=_am
       ? [ (_am.kind==='region'&&_am.nZonas!=null)?(_am.nZonas+' '+(_am.nZonas===1?'zona':'zonas')):'',
           (_am.kind==='zona'&&_am.region)?('Región '+_am.region):'',
-          (_am.nTiendas!=null)?(_am.nTiendas+' '+(_am.nTiendas===1?'tienda':'tiendas')):'' ].filter(Boolean).join(' · ')
+          /* pulsable: abre la lista numerada de las tiendas del grupo */
+          (_am.nTiendas!=null)?membChip(o.t,mes,_am.nTiendas,'tienda','tiendas'):'' ].filter(Boolean).join(' · ')
       : [o.gr&&o.gr.region,o.gr&&o.gr.zona,o.gr&&o.gr.model,vetTxt?'<span style="white-space:nowrap">'+vetTxt+'</span>':''].filter(Boolean).join(' · ');
     const meStyle=isCur?' style="border-color:var(--brand-bd);background:var(--brand-soft)"':'';
     const nom=_am?_am.label:((o.gr&&o.gr.center_name)?o.gr.center_name:('Tienda '+o.t));
@@ -6240,18 +6944,37 @@ function renderRank(){
     _exp.push([ i+1, nom, _am?'':String(o.t),
       _am?'':String((o.gr&&o.gr.region)||''), _am?'':String((o.gr&&o.gr.zona)||''),
       _am?'':String((o.gr&&o.gr.model)||''), _am?String(_am.nTiendas||''):String(vetTxt||'').replace(/<[^>]*>/g,''),
-      _r3(o.val), _r3(_refFila), _r3(_refFila==null?null:(o.val-_refFila)) ]);
+      /* con horas se exporta el texto (7:57); la diferencia sigue siendo un numero, en minutos */
+      esHora?fmtV(o.val):_r3(o.val), esHora?fmtV(_refFila):_r3(_refFila), _r3(_refFila==null?null:(o.val-_refFila)) ]);
+    /* fila abierta: se guarda lo que hace falta para su grafica, incluido el formateador de
+       ESTA metrica (el que sabe pasar 477 a 7:57) */
+    const _ab=(ST.rkSel!=null&&String(ST.rkSel)===String(o.t));
+    if(_ab) _selTr={t:o.t,nom:nom,sA:sA,sB:sB,esHora:esHora,dec:dec,fmt:fmtV,unidad:metricLabel,
+                    ref:(ref===OBJ_NAME?'Objetivo':shortStore(ref)),metrica:(isFa?FA.label:(isGen?G.label:(M&&M.label)||''))};
     return '<div class="drow '+cls+'"'+meStyle+' data-t="'+String(o.t).replace(/"/g,'')+'">'+
       '<div class="dr-area"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3-txt);margin-right:5px">#'+(i+1)+'</span>'+nom+(isCur?' <span style="color:var(--brand-txt);font-size:10px">· activa</span>':'')+
         '<small>'+attrs+'</small></div>'+
       '<div class="spark-wrap" style="gap:8px"><div style="flex:1;height:40px;min-width:0">'+svgSpark(sA,sB,220,40,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
-      '<div class="dr-vals"><div class="dr-pair"><span class="k">'+_qLbl+'</span><span class="v an">'+fmt(o.val,dec)+'</span></div>'+(_refFila!=null?'<div class="dr-pair"><span class="k">'+((isGen&&!G.isProd&&ref!==OBJ_NAME)?'Media '+shortStore(ref):(ref===OBJ_NAME?'Objetivo':shortStore(ref)))+'</span><span class="v rf">'+fmt(_refFila,dec)+'</span></div>':'')+'</div>'+
+      '<div class="dr-vals"><div class="dr-pair"><span class="k">'+_qLbl+'</span><span class="v an">'+fmtV(o.val)+'</span></div>'+(_refFila!=null?'<div class="dr-pair"><span class="k">'+((isGen&&!G.isProd&&ref!==OBJ_NAME)?'Media '+shortStore(ref):(ref===OBJ_NAME?'Objetivo':shortStore(ref)))+'</span><span class="v rf">'+fmtV(_refFila)+'</span></div>':'')+'</div>'+
       '<div style="text-align:right">'+(difTxt||'<span class="delta na">—</span>')+'</div>'+
       '<div class="dr-imp"><div class="k">'+subTxt+'</div><div class="v '+valCls+'">'+valTxt+'</div></div>'+
-      '</div>';
+      '</div>'+
+      (_ab?rkTrendRow(_selTr):'');
   }).join('');
   ST._rkRows=_exp;
-  $('rkList').querySelectorAll('[data-t]').forEach(r=>r.addEventListener('click',()=>{setCombo('tA',r.dataset.t);$('mA').value=mes;$('sA').value=(isGen?'global':shift);preview();setMode('comp');analyze();}));
+  /* Si los filtros han dejado fuera la fila que estaba abierta, se olvida. */
+  if(ST.rkSel!=null&&!_selTr) ST.rkSel=null;
+  /* El salto al comparador ya no va en el clic de la fila: ahora la fila abre su tendencia aqui
+     mismo, y el salto es un boton dentro del panel. */
+  window.__rkToComp=function(t){ setCombo('tA',t); $('mA').value=mes; $('sA').value=(isGen?'global':shift);
+    preview(); setMode('comp'); analyze(); };
+  $('rkList').querySelectorAll('[data-t]').forEach(r=>r.addEventListener('click',()=>{
+    const t=r.dataset.t;
+    if(ST.rkSel!=null&&String(ST.rkSel)===String(t)){ ST.rkSel=null; renderRank(); return; }
+    ST.rkSel=t; renderRank();
+    try{ const h=$('rkDetIn'); if(h) h.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+  }));
+  if(_selTr) paintRkTrend(_selTr);
   const lbl=isFa?(FA.label+' · farolas oficiales'):isGen?G.label+' (centro)':mk==='__imp'?'horas de oportunidad frente a '+shortStore(ref):mk==='__worsen'?'tiendas que más empeoran frente a '+shortStore(ref)+' (12 meses)':mk==='__improve'?'tiendas que más mejoran frente a '+shortStore(ref)+' (12 meses)':M.label;
   /* La nota de debajo del ranking se ha quitado: repetia lo que ya dicen los selectores de
      arriba y la cabecera de la tabla. Lo que decia sigue haciendo falta para el pie de las
@@ -6263,7 +6986,7 @@ function renderRank(){
   ST._rkMeta={ metrica:lbl, ambito:ambito, mes:ST.mesLabel[mes], region:fReg||'Todas',
     zonasFuera:_zOut, modelo:(fMod!=='__all'?fMod:''), veterania:vetLbl,
     orden:(worst?'Peores primero':'Mejores primero'), unidad:metricLabel,
-    referencia:(vRef!=null?(refLbl+' '+fmt(vRef,dec)):''), cosa:_qCosa,
+    referencia:(vRef!=null?(refLbl+' '+fmtV(vRef)):''), cosa:_qCosa,
     cabecera:[_qLbl, _qLbl+' / Referencia', 'Diferencia', metricLabel] };
 }
 
@@ -7111,7 +7834,7 @@ function renderCalc(){
   const perUdC=d=>(ST.calcView==='prod')||(ST.calcView==='objof'&&PERUD_KEYS.has(d));
   const colUC=d=>ST.calcView==='min'?'min/lote':(perUdC(d)?(merc?'min/ud Mdona':'min/ud MO'):'min/lote');
   let head='<thead><tr><th class="lo-area">Área</th>';
-  cs.forEach(d=>head+=`<th>${d.s}<span class="lo-sub">${colUC(d.k)}</span></th>`);
+  cs.forEach(d=>head+=`<th title="${d.s} · ${d.name}"><span class="jv-l">${d.s}</span><span class="jv-s">${d.name}</span><span class="lo-sub">${colUC(d.k)}</span></th>`);
   head+=(ST.calcView==='min'?`<th class="lo-colgrp">Total<span class="lo-sub">min/lote</span></th>`:'')+`<th class="lo-colgrp">Prod obj<span class="lo-sub">${udName()}</span></th></tr></thead>`;
   let body='<tbody>';
   viewAreas().forEach(a=>{ const r=ST.objTrim[a]; if(!r)return;
@@ -7154,7 +7877,7 @@ function renderContrib(){
   document.getElementById('lo_contribSum').innerHTML=
     `<div class="lo-cs"><div class="lo-cs-l">Productividad de las tiendas liebre · ${cName}</div><div class="lo-cs-v">${es(glob*mf,3)}<small> ${udName()}</small></div></div>`;
   let head='<thead><tr><th class="lo-area">Área</th>';
-  cs.forEach(d=>head+=`<th>${d.s}<span class="lo-sub">${uni}</span></th>`);
+  cs.forEach(d=>head+=`<th title="${d.s} · ${d.name}"><span class="jv-l">${d.s}</span><span class="jv-s">${d.name}</span><span class="lo-sub">${uni}</span></th>`);
   head+=`<th class="lo-colgrp">Total área<span class="lo-sub">${uni}</span></th></tr></thead>`;
   let body='<tbody>'; const colTot={}; let grand=0;
   AR.forEach(a=>{ const r=src[a]; if(!r)return;
@@ -7237,7 +7960,7 @@ function renderMatrix(){
   const showTot=(ST.mode==='min'||ST.mode==='pct');   // Total (min/lote) solo en Tiempo y %; en Prod y Objetivo oficial NO
   const totUnit=isPct?'%':'min/lote';
   let head='<thead><tr><th class="lo-area">Área</th>';
-  cs.forEach(d=>head+=`<th>${d.s}<span class="lo-sub">${cvColUnit(d.k)}</span></th>`);
+  cs.forEach(d=>head+=`<th title="${d.s} · ${d.name}"><span class="jv-l">${d.s}</span><span class="jv-s">${d.name}</span><span class="lo-sub">${cvColUnit(d.k)}</span></th>`);
   if(showTot)head+=`<th class="lo-colgrp">Total<span class="lo-sub">${totUnit}</span></th>`;
   head+=`<th class="lo-colgrp">Prod<span class="lo-sub">${udName()} · oficial</span></th>`;
   head+='</tr></thead>';
@@ -7413,14 +8136,15 @@ function renderDet(){
   let h=`<button class="lo-detClose" onclick="loCloseDet()" aria-label="Cerrar" title="Cerrar">✕</button><div class="lo-det-h"><div class="lo-nm">${window.stName(t)||('Tienda '+t)}<small>${esInt(gDias)} días · global ${es(gReal,3)}${!isNaN(gEfec)?' / '+es(gEfec,3)+' ef.':''} ${udName()}</small></div>
     <div class="lo-seg lo-sm" id="lo_detPerSeg">${pers}</div></div>`;
   h+='<div class="lo-tbl-wrap"><table class="lo-mx"><thead><tr><th class="lo-area">Área</th>';
-  cs.forEach(d=>h+=`<th>${d.s}</th>`); h+=`<th class="lo-colgrp">Total</th><th>Prod</th><th>vs obj área</th></tr></thead><tbody>`;
+  cs.forEach(d=>h+=`<th title="${d.s} · ${d.name}"><span class="jv-l">${d.s}</span><span class="jv-s">${d.name}</span></th>`); h+=`<th class="lo-colgrp">Total</th><th>Prod</th><th class="lo-colvsobj">vs obj área</th></tr></thead><tbody>`;
   viewAreas().forEach(a=>{ const r=m[a]; if(!r)return; const o=objSrc[a];
     h+=`<tr><td class="lo-area"><span class="lo-adot" style="background:${ACOL[a]}"></span>${aName(a)}</td>`;
     cs.forEach(d=>h+=`<td class="lo-cell"><span>${es(mmin(r,C,d.k),2)}</span></td>`);
     h+=`<td class="lo-cell lo-tot lo-colgrp">${es(r[C.tot],2)}</td>`;
     const v=C.prod?r[C.prod]:NaN, ov=o&&C.prod?o[C.prod]:NaN, dd=v-ov;
-    h+= C.prod? `<td class="lo-cell lo-prod ${v<=objAct()?'lo-ok':'lo-bad'}"><span>${es(v,3)}</span></td><td><span class="lo-delta ${isNaN(dd)?'lo-flat':(dd<=0?'lo-down':'lo-up')}">${dd<=0?'▼':'▲'} ${es(Math.abs(dd),3)}</span></td>`
-              : `<td class="lo-cell lo-na"><span>—</span></td><td class="lo-cell lo-na"><span>—</span></td>`;
+    const _dcls=isNaN(dd)?'lo-flat':(dd<=0?'lo-down':'lo-up');
+    h+= C.prod? `<td class="lo-cell lo-prod ${v<=objAct()?'lo-ok':'lo-bad'}"><span>${es(v,3)}</span><small class="lo-dsub ${_dcls}">${dd<=0?'▼':'▲'} ${es(Math.abs(dd),3)}</small></td><td class="lo-colvsobj"><span class="lo-delta ${_dcls}">${dd<=0?'▼':'▲'} ${es(Math.abs(dd),3)}</span></td>`
+              : `<td class="lo-cell lo-na"><span>—</span></td><td class="lo-cell lo-na lo-colvsobj"><span>—</span></td>`;
     h+='</tr>';
   });
   if(!Object.keys(m).length)h+=`<tr><td class="lo-area">—</td><td class="lo-cell lo-na" colspan="${cs.length+3}"><span>Sin datos en ${fmtMes(per)}</span></td></tr>`;
@@ -7428,8 +8152,41 @@ function renderDet(){
   host.innerHTML=h;
   /* ancho del desglose = ancho visible del contenedor, no el de la tabla (que puede ser mucho
      mas ancho y sacar el desglose fuera de pantalla al scrollear) */
-  try{ var wrap=host.closest('.lo-tbl-wrap'); if(wrap) host.style.width=(wrap.clientWidth-2)+'px'; }catch(e){}
+  loDetAncho();
 }
+/* Ese ancho se fijaba en PIXELES una sola vez, al abrir la tienda: si luego cambiabas el tamano
+   de la ventana, el panel se quedaba con el ancho de cuando lo abriste y la tabla salia
+   descuadrada. Ahora se recalcula al cambiar el tamano (y con un ResizeObserver sobre el hueco,
+   que es lo que de verdad cambia cuando se abre o se cierra otra cosa). */
+function loDetAncho(){
+  try{
+    var host=document.getElementById('lo_stDetIn'); if(!host) return;
+    var wrap=host.closest('.lo-tbl-wrap'); if(!wrap) { host.style.width=''; return; }
+    host.style.width=(wrap.clientWidth-2)+'px';
+  }catch(e){}
+}
+window.__loDetAncho=loDetAncho;
+(function(){
+  var t=null;
+  function luego(){ clearTimeout(t); t=setTimeout(loDetAncho,80); }
+  window.addEventListener('resize',luego,{passive:true});
+  try{ if(window.visualViewport) window.visualViewport.addEventListener('resize',luego,{passive:true}); }catch(e){}
+  try{
+    if(window.ResizeObserver){
+      var ro=new ResizeObserver(luego), vistos=(typeof WeakSet!=='undefined')?new WeakSet():null;
+      var engancha=function(){
+        try{ var l=document.querySelectorAll('#lo_stBox .lo-tbl-wrap, #lo_rkBox .lo-tbl-wrap');
+          for(var i=0;i<l.length;i++){ if(vistos&&!vistos.has(l[i])){ vistos.add(l[i]); ro.observe(l[i]); } }
+        }catch(e){}
+      };
+      engancha();
+      if(window.MutationObserver){
+        var mo=new MutationObserver(function(){ engancha(); });
+        mo.observe(document.body,{childList:true,subtree:true});
+      }
+    }
+  }catch(e){}
+})();
 
 /* ---------- FOOT ----------
    Era un parrafo de metodologia (nombre del SQL, ventana, modelo, y un objetivo cableado a 0,306
@@ -7487,7 +8244,10 @@ const GROUPS=[
 ];
 const FDIMS=GROUPS.reduce((a,x)=>a.concat(x.dims),[]);
 let ROWS=null, OPTS={}, SEL={}, TIME='dia', GEO='total', SPLIT=false, ONLY_RR=false, MEDIA='dia', LOADED=false, LOADING=false, WIRED=false, MESDEF=null, SEMDEF=null;
-let VISM=new Set(), VISD=new Set(), SORT={k:null,dir:-1}, RK={by:'centro',metric:'real',dir:'desc',top:20};
+let VISM=new Set(), VISD=new Set(), SORT={k:null,dir:-1}, RK={by:'centro',metric:'real',dir:'desc',top:20,sel:null};
+/* Columnas visibles del RANKING. Por defecto los cuatro caudales, como hasta ahora; el
+   desplegable "Columnas" deja anadir las seis restas y los seis desvios en porcentaje. */
+let VISR=new Set(['ancla','horario','real','rrv']);
 const DOW=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const DOWORD=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 function dowOf(d){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m?DOW[new Date(+m[1],+m[2]-1,+m[3]).getDay()]:''; }
@@ -7524,8 +8284,11 @@ function buildSemMes(){ SEMMES={};
     SEMMES[sm]=ms.map(mm=>MES_ES[+mm.slice(5,7)-1]||mm).join('–'); }); }
 function semLabelMes(k){ const base=semLabel(k), m=SEMMES[String(k)]; return m?(base+' ('+m+')'):base; }
 function procLabel(p){ return /^prepar/i.test(p)?'Preparar' : /^repart/i.test(p)?'Repartir' : p; }
-function regLabel(v){ return String(v).replace(/^DR/i,'R'); }   // DR03 -> R03
-function zonaLabel(v){ return v===''?'':'Z'+v; }                 // 22 -> Z22
+/* Aqui la zona llega desnuda ('22') y la region con DR delante ('DR03'). Se escriben con
+   palabra y numero, igual que en el resto del panel: "Zona 22", "Región 3". */
+function cdNum(v){ var n=String(v==null?'':v).replace(/\D/g,''); return n?String(+n):''; }
+function regLabel(v){ if(v===''||v==null)return ''; var n=cdNum(v); return 'Región '+(n||v); }
+function zonaLabel(v){ if(v===''||v==null)return ''; var n=cdNum(v); return 'Zona '+(n||v); }
 function optLabel(k,v){ if(k==='mes')return mesLabel(v); if(k==='semana')return semLabelMes(v); if(k==='dia')return diaLabel(v);
   if(k==='proceso')return procLabel(v);
   if(k==='region')return regLabel(v);
@@ -7757,11 +8520,25 @@ function wireControls(){
   buildColsUI(); buildDevColsUI();
   // ranking
   $('cd_rkBy').addEventListener('change',e=>{RK.by=e.target.value;renderRank();});
-  const rms=$('cd_rkMetric'); if(rms){ rms.innerHTML=MCOLS.map(c=>`<option value="${c[1]}">${c[0]}</option>`).join(''); rms.value=RK.metric;
+  const rms=$('cd_rkMetric'); if(rms){ const og=(l,cs)=>'<optgroup label="'+l+'">'+cs.map(c=>'<option value="'+c[1]+'">'+c[0]+'</option>').join('')+'</optgroup>';
+    rms.innerHTML=og('Caudales (h)',MCOLS.slice(0,4))+og('Diferencias (h)',MCOLS.slice(4))+og('Desvío (%)',PCTCOLS);
+    rms.value=RK.metric;
     rms.addEventListener('change',e=>{RK.metric=e.target.value;renderRank();}); }
   seg('cd_rkOrder',v=>{RK.dir=v;renderRank();});
   seg('cd_rkTop',v=>{RK.top=+v;renderRank();});
   $('cd_rkDl').addEventListener('click',downloadRank);
+  buildRkColsUI();
+  /* pulsar una cabecera del ranking ordena por esa columna; volver a pulsarla invierte el orden */
+  $('cd_rkTbl').addEventListener('click',e=>{ const th=e.target.closest&&e.target.closest('th[data-k]'); if(!th)return;
+    const k=th.dataset.k;
+    if(RK.metric===k) RK.dir=(RK.dir==='asc'?'desc':'asc'); else { RK.metric=k; RK.dir='desc'; }
+    const sel=$('cd_rkMetric'); if(sel&&[...sel.options].some(o=>o.value===k)) sel.value=k;
+    const seg=$('cd_rkOrder'); if(seg) seg.querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('lo-on',b.dataset.v===RK.dir));
+    renderRank(); });
+  /* y pulsar una fila abre debajo su grafica de caudal; volver a pulsarla la cierra */
+  $('cd_rkTbl').addEventListener('click',e=>{ const tr=e.target.closest&&e.target.closest('tr[data-rk]'); if(!tr)return;
+    const k=tr.getAttribute('data-rk');
+    if(RK.sel!=null&&String(RK.sel)===String(k)) closeRkDetail(); else openRkDetail(k); });
 }
 
 /* ---------- cálculo ---------- */
@@ -7838,8 +8615,10 @@ function render(){ if(!LOADED)return;
   safe(()=>renderChart(chartAgg(rows)),'chart'); safe(()=>renderTable(rows),'table');
   safe(()=>renderDev(rows),'dev'); safe(()=>renderRank(),'rank'); }
 
-function renderChart(agg){
-  const box=$('cd_chart');
+/* boxId: por defecto la grafica grande de arriba. El detalle del ranking la reutiliza tal cual
+   para pintar un solo centro en su propio contenedor. */
+function renderChart(agg,boxId){
+  const box=$(boxId||'cd_chart');
   if(typeof Plotly==='undefined'){ box.dataset.empty='1'; box.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--ink3-txt)">No se pudo cargar Plotly.</div>'; return; }
   if(!agg.length){ try{Plotly.purge(box);}catch(e){} box.dataset.empty='1'; box.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--ink3-txt);font-size:13px">Sin datos para los filtros elegidos.</div>'; return; }
   // si venía del estado vacío (o de un mensaje), limpia el nodo para que Plotly.react no herede el texto
@@ -7853,11 +8632,15 @@ function renderChart(agg){
   // margen por debajo de 0 para que los puntos en cero (p.ej. domingos) no queden pegados al eje
   let maxY=0; agg.forEach(b=>['ancla','horario','real','rrv'].forEach(k=>{const v=b[k]; if(v!=null&&v>maxY)maxY=v;}));
   const pad=Math.max(maxY*0.06,0.6);
-  const lay={margin:{l:56,r:16,t:8,b:(x[0]&&x[0].length>5)?70:44},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
+  /* La leyenda iba en y:1.15 con solo 8px de margen arriba: el sitio se lo tenia que buscar
+     Plotly con automargin, y en el primer pintado (fuentes aun sin medir) se quedaba metida entre
+     las lineas; cualquier repintado posterior la recolocaba. Anclada a 'bottom' justo encima del
+     area y con margen reservado, sale bien a la primera y siempre en el mismo sitio. */
+  const lay={margin:{l:56,r:16,t:38,b:(x[0]&&x[0].length>5)?70:44},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
     font:{color:ink,family:'-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Helvetica,Arial,sans-serif',size:12},
     xaxis:{type:'category',tickmode:'array',tickvals:tv,ticktext:tv,tickangle:n>14?-45:0,automargin:true,showgrid:false,fixedrange:true},
     yaxis:{title:{text:'Horas'},gridcolor:line,zeroline:false,range:[-pad,maxY*1.10],fixedrange:true},
-    legend:{orientation:'h',y:1.15,x:0},hovermode:'x unified',dragmode:false};
+    legend:{orientation:'h',y:1.02,yanchor:'bottom',x:0,xanchor:'left'},hovermode:'x unified',dragmode:false};
   Plotly.react(box,traces,lay,{displayModeBar:false,responsive:true,scrollZoom:false,doubleClick:false});
 }
 /* La grafica se baja con su titulo: "Caudal" y debajo, solo el proceso. */
@@ -7958,6 +8741,13 @@ function buildColsUI(){ const pop=$('cd_colsPop'), btn=$('cd_colsBtn'); if(!pop|
 
 /* ---------- desvíos entre caudales (%) ---------- */
 const DEVCOLS=MCOLS.filter(c=>DELTAS.has(c[1]));   // los 6 pares, mismo orden que el Detalle
+/* Las mismas seis parejas en PORCENTAJE, para el ranking: por horas gana siempre el centro
+   pequeno, y lo que compara centros de tamanos distintos es el desvio relativo.
+   Clave: 'pct_' + la clave del par. */
+const PCTCOLS=DEVCOLS.map(c=>['% '+c[0],'pct_'+c[1]]);
+const RKCOLS=MCOLS.concat(PCTCOLS);
+const RKLABEL=Object.fromEntries(RKCOLS.map(c=>[c[1],c[0]]));
+const PCTSET=new Set(PCTCOLS.map(c=>c[1]));
 const MRANK={dia:0,semana:1,mes:2,anio:3};
 function mediaKey(r){ return MEDIA==='dia'?r.dia : MEDIA==='semana'?r.semana : MEDIA==='mes'?r.mes : r.anio; }
 // FILAS = mismo desglose que el Detalle (Proceso + Geografía + Agrupación temporal).
@@ -8013,29 +8803,134 @@ const RKBY_LAB={centro:'Centro',zona:'Zona',region:'Región',proceso:'Proceso',d
 function rankLabel(by,v){ return by==='zona'?zonaLabel(v) : by==='region'?regLabel(v) : by==='proceso'?procLabel(v)
   : by==='mes'?mesLabel(v) : by==='semana'?semLabel(v) : by==='centro'?optLabel('centro',v) : v; }
 function rankData(){ const rows=filtered(), by=RK.by, m=new Map();
-  rows.forEach(r=>{ const key=r[by]; if(key==null||key==='')return; let b=m.get(key); if(!b){b=newB();b.key=key;m.set(key,b);} addRow(b,r); });
-  let arr=[...m.values()].map(finish).filter(b=>b[RK.metric]!=null);
+  /* Cada fila lleva su total (las horas y las restas) y, ademas, sus sub-periodos, que son los
+     que hacen falta para el %: un porcentaje es una division, no una suma, asi que se saca el de
+     cada sub-periodo y se PROMEDIA, exactamente igual que en la tabla de Desvios. El grano del
+     sub-periodo es el del segmentado "Media" (MEDIA). */
+  rows.forEach(r=>{ const key=r[by]; if(key==null||key==='')return; let g=m.get(key);
+    if(!g){ g={key:key,tot:newB(),sub:new Map()}; m.set(key,g); }
+    addRow(g.tot,r);
+    const sk=mediaKey(r); if(sk==null||sk==='')return;
+    let b=g.sub.get(sk); if(!b){b=newB();g.sub.set(sk,b);} addRow(b,r); });
+  let arr=[...m.values()].map(g=>{ const b=finish(g.tot); b.key=g.key;
+    DEVCOLS.forEach(c=>{ const k=c[1]; let sm=0,n=0;
+      g.sub.forEach(sb=>{ finish(sb); const v=sb[k], base=sb[DEVBASE[k]];
+        if(v==null||base==null||base===0)return; sm+=v/base*100; n++; });
+      b['pct_'+k]=n?sm/n:null; });
+    return b; }).filter(b=>b[RK.metric]!=null);
   arr.sort((a,b)=>(a[RK.metric]-b[RK.metric])*(RK.dir==='asc'?1:-1));
   return RK.top>0?arr.slice(0,RK.top):arr; }
-function renderRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by, mk=RK.metric, isD=DELTAS.has(mk), t=$('cd_rkTbl');
-  if(!arr.length){ t.innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3-txt)">Sin datos para el ranking con estos filtros.</td></tr></tbody>'; return; }
+function renderRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by, mk=RK.metric, t=$('cd_rkTbl');
+  if(!arr.length){ t.innerHTML='<tbody><tr><td style="padding:14px;color:var(--ink3-txt)">Sin datos para el ranking con estos filtros.</td></tr></tbody>'; closeRkDetail(); return; }
+  const esPct=k=>PCTSET.has(k), esDif=k=>DELTAS.has(k)||PCTSET.has(k);
+  const val=(k,v)=>esPct(k)?devFmt(v):fmt(v);
+  /* El color verde/rojo vive en "table.cd-tbl td.cd-pos/.cd-neg", asi que la clase va en el TD.
+     Puesta en un span de dentro no pintaba nada. */
+  const cel=(k,v)=>'<td'+(esDif(k)?deltaCls(v):'')+'>'+val(k,v)+'</td>';
+  /* La metrica elegida va primero y con barra. Antes, ademas, se pintaban siempre las cuatro
+     columnas de caudal cableadas, asi que con metrica "Estimado" la columna salia DOS veces.
+     Ahora el resto de columnas son las marcadas en "Columnas", menos la que ya va de metrica. */
+  const resto=RKCOLS.filter(c=>c[1]!==mk&&VISR.has(c[1]));
   const maxAbs=Math.max(1,...arr.map(b=>Math.abs(b[mk]||0)));
-  let h='<thead><tr><th class="cd-dim">#</th><th class="cd-dim">'+RKBY_LAB[by]+'</th><th>'+MLABEL[mk]+'</th><th>Estimado</th><th>Planificado</th><th>Óptimo</th><th>Usado</th></tr></thead><tbody>';
-  arr.forEach((b,i)=>{ const v=b[mk], w=Math.round(Math.abs(v||0)/maxAbs*100), bc=isD?(v<0?'#12b5a5':v>0?'#e5484d':'var(--ink3)'):'var(--brand)';
-    h+=`<tr><td class="cd-dim" style="color:var(--ink3-txt);font-weight:800">${i+1}</td><td class="cd-dim">${rankLabel(by,b.key)}</td>`
-      +`<td><div class="cd-rkcell"><div class="cd-rkwrap"><div class="cd-rkbar" style="width:${w}%;background:${bc}"></div></div><span${isD?deltaCls(v):''}>${fmt(v)}</span></div></td>`
-      +`<td>${fmt(b.ancla)}</td><td>${fmt(b.horario)}</td><td>${fmt(b.real)}</td><td>${fmt(b.rrv)}</td></tr>`; });
+  let h='<thead><tr><th class="cd-dim">#</th><th class="cd-dim">'+RKBY_LAB[by]+'</th>'+
+    '<th class="cd-rkon" data-k="'+mk+'">'+RKLABEL[mk]+'</th>'+
+    resto.map(c=>'<th data-k="'+c[1]+'">'+c[0]+'</th>').join('')+'</tr></thead><tbody>';
+  arr.forEach((b,i)=>{ const v=b[mk], w=Math.round(Math.abs(v||0)/maxAbs*100),
+      bc=esDif(mk)?(v<0?'#12b5a5':v>0?'#e5484d':'var(--ink3)'):'var(--brand)';
+    h+='<tr data-rk="'+String(b.key).replace(/"/g,'&quot;')+'"'+
+         ((RK.sel!=null&&String(RK.sel)===String(b.key))?' class="cd-rksel"':'')+'>'+
+       '<td class="cd-dim" style="color:var(--ink3-txt);font-weight:800">'+(i+1)+'</td>'+
+       '<td class="cd-dim">'+rankLabel(by,b.key)+'</td>'+
+       '<td'+(esDif(mk)?deltaCls(v):'')+'><div class="cd-rkcell"><div class="cd-rkwrap"><div class="cd-rkbar" style="width:'+w+'%;background:'+bc+'"></div></div>'+
+         '<span>'+val(mk,v)+'</span></div></td>'+
+       resto.map(c=>cel(c[1],b[c[1]])).join('')+'</tr>';
+    /* la grafica se abre AQUI, partiendo la tabla justo debajo de la fila pulsada */
+    if(RK.sel!=null&&String(RK.sel)===String(b.key)) h+=rkDetRow(3+resto.length); });
   t.innerHTML=h+'</tbody>';
+  /* el detalle se mantiene si su fila sigue en el ranking; si los filtros la han dejado fuera se
+     olvida, en vez de quedarse ensenando la grafica de otra cosa */
+  if(RK.sel!=null){ if(arr.some(b=>String(b.key)===String(RK.sel))) paintRkDetail(); else RK.sel=null; }
 }
-function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by;
-  const lines=[['#',RKBY_LAB[by]].concat(MCOLS.map(c=>c[0])).join(';')];
-  arr.forEach((b,i)=>{ lines.push([i+1,String(rankLabel(by,b.key)).replace(/;/g,',')].concat(MCOLS.map(c=>{const v=b[c[1]];return v==null?'':String(v).replace('.',',');})).join(';')); });
+function rkCols(){ return [RKCOLS.find(c=>c[1]===RK.metric)].concat(RKCOLS.filter(c=>c[1]!==RK.metric&&VISR.has(c[1]))).filter(Boolean); }
+function downloadRank(){ if(!LOADED)return; const arr=rankData(), by=RK.by, cols=rkCols();
+  /* Se baja lo que se ve: la metrica elegida y las columnas marcadas en "Columnas". Con "Todas"
+     se llevan los 16 valores de cada centro: 4 caudales + 6 restas + 6 desvios en porcentaje. */
+  const nump=v=>(v==null||isNaN(v))?'':String(Math.round(v*1e4)/1e4).replace('.',',');
+  const lines=[['#',RKBY_LAB[by]].concat(cols.map(c=>c[0]+(PCTSET.has(c[1])?' (%)':' (h)'))).join(';')];
+  arr.forEach((b,i)=>{ lines.push([i+1,String(rankLabel(by,b.key)).replace(/;/g,',')].concat(cols.map(c=>nump(b[c[1]]))).join(';')); });
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   window.__deliver('caudal_ranking.csv', blob, false);
+}
+/* ---------- columnas del ranking ---------- */
+function rkColsCnt(){ const el=$('cd_rkColsCnt'); if(el)el.textContent=VISR.size+'/'+RKCOLS.length; }
+function buildRkColsUI(){ const pop=$('cd_rkColsPop'), btn=$('cd_rkColsBtn'); if(!pop||!btn||pop._b)return; pop._b=1;
+  pop.innerHTML='<div class="cd-p-top"><div class="cd-p-act"><button data-a="all">Todas</button><button data-a="none">Ninguna</button></div></div><div class="cd-list"></div>';
+  pop.addEventListener('click',e=>e.stopPropagation());
+  const list=pop.querySelector('.cd-list');
+  const grupo=txt=>{ const d=document.createElement('div'); d.className='cd-grp'; d.textContent=txt; list.appendChild(d); };
+  const opt=c=>{ const o=document.createElement('label'); o.className='cd-opt'; o.innerHTML='<input type="checkbox"><span></span>';
+    o.querySelector('span').textContent=c[0]; const chk=o.querySelector('input'); chk.checked=VISR.has(c[1]);
+    chk.addEventListener('change',()=>{ if(chk.checked)VISR.add(c[1]); else VISR.delete(c[1]); rkColsCnt(); renderRank(); });
+    list.appendChild(o); };
+  grupo('Caudales (h)');    MCOLS.slice(0,4).forEach(opt);
+  grupo('Diferencias (h)'); MCOLS.slice(4).forEach(opt);
+  grupo('Desvío (%)');      PCTCOLS.forEach(opt);
+  pop.querySelectorAll('.cd-p-act button').forEach(b=>b.addEventListener('click',()=>{ const all=b.dataset.a==='all';
+    VISR=all?new Set(RKCOLS.map(c=>c[1])):new Set(); list.querySelectorAll('input').forEach(i=>i.checked=all); rkColsCnt(); renderRank(); }));
+  btn.addEventListener('click',e=>{ e.stopPropagation(); const o=pop.classList.contains('open'); closePops();
+    if(!o){ pop.classList.add('open'); try{ if(window.__jvTap) window.__jvTap.colocar(pop,btn); }catch(_){} } });
+  rkColsCnt();
+}
+
+/* ---------- detalle del ranking: la grafica de UNA fila ----------
+   Igual que el faro del comparador: al pulsar una fila se abre debajo su grafica de caudal. Sale
+   de filtered(), asi que hereda los filtros y la franja temporal de arriba sin sincronizar nada. */
+/* El titulo ya dice de quien es la grafica, asi que no lleva subtitulo. */
+function rkDetRow(cols){
+  const nom=String(rankLabel(RK.by,RK.sel));
+  return '<tr class="cd-detrow"><td colspan="'+cols+'"><div class="rkd" id="cd_rkDetIn">'+
+    '<div class="rkd-h"><div class="rkd-t">'+nom+'</div>'+
+    '<button class="cd-dlbtn" id="cd_rkChartDl" type="button">⤓ PNG</button>'+
+    '<button class="rkd-x" id="cd_rkDetClose" type="button" aria-label="Cerrar" title="Cerrar">✕</button></div>'+
+    '<div id="cd_rkChart" style="width:100%;height:320px"></div></div></td></tr>';
+}
+function paintRkDetail(){
+  const host=$('cd_rkDetIn'); if(!host||RK.sel==null)return;
+  /* ancho = el VISIBLE del contenedor, no el de la tabla: con todas las columnas es mucho mas
+     ancha y la grafica se iba de la pantalla al scrollear */
+  try{ const wrap=host.closest('.lo-tbl-wrap'); if(wrap) host.style.width=(wrap.clientWidth-2)+'px'; }catch(e){}
+  const nom=String(rankLabel(RK.by,RK.sel));
+  const rows=filtered().filter(r=>String(r[RK.by])===String(RK.sel));
+  try{ renderChart(chartAgg(rows),'cd_rkChart'); }catch(e){ console.error('caudal render rkDetail',e); }
+  const x=$('cd_rkDetClose'); if(x) x.addEventListener('click',e=>{ e.stopPropagation(); closeRkDetail(); });
+  const dl=$('cd_rkChartDl'); if(dl) dl.addEventListener('click',e=>{ e.stopPropagation();
+    const box=$('cd_rkChart'); if(typeof Plotly==='undefined'||!box||!box.data)return;
+    const fin=(window.btnBusy?window.btnBusy(dl):null); if(window.btnBusy&&!fin)return;
+    try{ window.__pngPlotly(box,'Caudal · '+nom,cdSubtitulo(),'caudal_'+String(nom).replace(/[^A-Za-z0-9]+/g,'_').slice(0,50)+'.png')
+           .then(fin||function(){},fin||function(){}); }
+    catch(err){ if(fin)fin(); } });
+}
+function closeRkDetail(){ if(RK.sel==null)return;
+  try{ const c=$('cd_rkChart'); if(c&&typeof Plotly!=='undefined') Plotly.purge(c); }catch(e){}
+  const vuelve=RK.sel; RK.sel=null; renderRank();
+  /* al cerrar, de vuelta a la fila desde la que se abrio */
+  try{ const t=$('cd_rkTbl'); if(t){ const r=t.querySelector('tr[data-rk="'+String(vuelve).replace(/"/g,'\\"')+'"]');
+    if(r) r.scrollIntoView({behavior:'smooth',block:'nearest'}); } }catch(e){}
+}
+function openRkDetail(key){
+  try{ const c=$('cd_rkChart'); if(c&&typeof Plotly!=='undefined') Plotly.purge(c); }catch(e){}
+  RK.sel=key; renderRank();
+  /* y al abrir, a la grafica: antes se quedaba donde estaba y habia que buscarla */
+  try{ const h=$('cd_rkDetIn'); if(h) h.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
 }
 // Resize robusto del chart de Caudal: debounce + ResizeObserver del contenedor (evita que se quede "encogido" al agrandar/achicar la ventana)
 let _cdRT=null;
 function cdResize(){ if(!LOADED)return; const box=$('cd_chart'); if(!box||!box.data)return; if($('caudalTab')&&$('caudalTab').style.display==='none')return; if(box.clientWidth<10)return;
+  /* Si se pinto con otro ancho (oculta, o antes de que la pestana tuviera su tamano), Plotly se
+     quedo con el de entonces y la leyenda con el sitio calculado para ese ancho. Plotly.Plots.resize
+     estira el dibujo pero NO recoloca la leyenda: hay que volver a pintar la grafica. */
+  try{ const fl=box._fullLayout;
+    if(fl && Math.abs(fl.width-box.clientWidth)>3){ renderChart(chartAgg(filtered())); return; } }catch(e){}
   if(window.__jvSize){ window.__jvSize.pedir(box,true); return; }
   try{Plotly.Plots.resize(box);}catch(e){} }
 function cdResizeSoon(){ clearTimeout(_cdRT); _cdRT=setTimeout(cdResize,140); }
@@ -8204,6 +9099,17 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var acc=[];
     for(var i=0;i<ROWS.length;i++){ var r=ROWS[i]; if(r.mk===mk && filtro(r)) acc.push(r); }
     return acc.length?dayIgual(acc,key):null; };
+  /* Serie mensual de un GRUPO (una zona, una region, cualquier filtro de filas). Es lo que le
+     faltaba al ranking: __faStoreSerie filtra por r.Tienda y una clave de agregado ("ZONE::15")
+     no coincide con ninguna fila, asi que la tendencia salia vacia aunque el numero del mes si
+     estuviera. */
+  window.__faGroupSerie=function(filtro,mks,key){ if(!LOADED)return null;
+    var byM={};
+    for(var i=0;i<ROWS.length;i++){ var r=ROWS[i]; if(!r.mk||!filtro(r))continue; (byM[r.mk]=byM[r.mk]||[]).push(r); }
+    return mks.map(function(mk){ return byM[mk]?dayIgual(byM[mk],key):null; }); };
+  /* El ranking vive en otro <script> y no alcanza a hhmm(): sin esto las horas fin salen en
+     minutos desde medianoche (477 en vez de 7:57). */
+  window.__faHHMM=function(x){ return (x==null||isNaN(x))?'-':hhmm(x); };
   window.__faIsLiebre=function(t){ try{ return isLiebre({Tienda:String(t)}); }catch(e){ return false; } };
   window.__faFase=function(t){ try{ for(var i=0;i<ROWS.length;i++) if(ROWS[i].Tienda===String(t)) return ROWS[i].Fase; }catch(e){} return null; };
   /* faView: 'tabla' (todos los indicadores en una pantalla) o 'cards' (los roscos y las graficas
@@ -8298,6 +9204,19 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     M.forEach(function(m){ var d=$('fa_ch_'+m.k); if(d&&d.data){ try{ Plotly.Plots.resize(d); }catch(e){} } });
     GLOB.forEach(function(m){ var d=$('fa_r_'+m.k); if(d&&d.data){ try{ Plotly.Plots.resize(d); }catch(e){} } }); }
   window.__faResize=faResize;
+  /* Como los roscos llevan width/height explicitos, ya no se redimensionan solos: este
+     observador los repinta cuando su rejilla cambia de ancho de verdad (girar el movil,
+     cambiar el tamano de la ventana, aparecer la barra de scroll). */
+  try{ if(window.ResizeObserver){
+    var _roT=null;
+    var _ro=new ResizeObserver(function(){ clearTimeout(_roT); _roT=setTimeout(function(){
+      var h=$('fa_rings'); if(!h||!LOADED)return;
+      var tab=$('farolasTab'); if(tab&&tab.style.display==='none')return;
+      var w=h.clientWidth||0;
+      if(w>0 && _lastRings && w!==_lastRings.w){ try{ renderRings(_lastRings.rows,_lastRings.rrows,_lastRings.same); }catch(e){} }
+    },160); });
+    var _rt=setInterval(function(){ var h=$('fa_rings'); if(h){ clearInterval(_rt); try{ _ro.observe(h); }catch(e){} } },400);
+  } }catch(e){}
   /* El listener propio de 'resize' que habia aqui lo lleva ahora el orquestador global
      del final del fichero (cubre tambien orientationchange y visualViewport, que en iOS
      son los que de verdad llegan al girar). Este es el enganche que usa: re-pinta las
@@ -8314,8 +9233,12 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var tab=$('farolasTab');
     if(tab&&tab.style.display!=='none'){
       /* los roscos PRIMERO y con newPlot: Plots.resize tarda >1 s cuando detras van
-         16 graficas repintandose, y se veia el salto. Repintarlos cuesta nada. */
-      if(_lastRings){ try{ renderRings(_lastRings.rows,_lastRings.rrows,_lastRings.same); }catch(e){} }
+         16 graficas repintandose, y se veia el salto. Repintarlos cuesta nada.
+         Pero SOLO si el ancho ha cambiado de verdad: al abrir la pestana este enganche salta
+         justo despues de que render() los haya pintado bien, y ese segundo newPlot redundante
+         es el que se veia moverse. */
+      var _rh=$('fa_rings'), _rw=_rh?(_rh.clientWidth||0):0;
+      if(_lastRings && _rw>0 && _rw!==_lastRings.w){ try{ renderRings(_lastRings.rows,_lastRings.rrows,_lastRings.same); }catch(e){} }
       try{ renderCharts(); }catch(e){}
     }
     faResize(); };
@@ -8366,6 +9289,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(k==='liebre')return 'Tiendas Liebre';
     if(k==='lab')return 'Laboratorio de Caudal';
     if(k==='Tienda')return valLabel('Tienda',ST.refVal);
+    if(k==='Zona'||k==='Region')return valLabel(k,ST.refVal);
     var d=DIMS.filter(function(x){return x.k===k;})[0]; return (d?d.lab:k)+' '+ST.refVal; }
   /* mismo conjunto -> no tiene sentido comparar: solo objetivo */
   function sameSet(){
@@ -8428,7 +9352,18 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* meses ofrecidos: desde enero del año anterior al del ultimo mes cerrado */
   function mesesSel(){ var lc=lastClosed(); if(!lc)return []; var y=+lc.split('-')[0]; var min=(y-1)+'-01';
     return MESES.filter(function(mk){ return mk>=min && mk<=lc; }); }
-  function valLabel(dim,v){ if(dim==='Tienda'){ var nm=NAMES[v]; return nm?(v+' · '+nm):v; } return v; }
+  /* Las zonas y regiones llegan como 'Z22' y 'R03'. En pantalla van con palabra y numero
+     ("Zona 22", "Región 3"), que es como se llaman, no como vienen en el CSV. */
+  function faNum(v){ var n=String(v==null?'':v).replace(/\D/g,''); return n?String(+n):''; }
+  function valLabel(dim,v){ if(dim==='Tienda'){ var nm=NAMES[v]; return nm?(v+' · '+nm):v; }
+    if(dim==='Zona'){ var z=faNum(v); return 'Zona '+(z||v); }
+    if(dim==='Region'){ var r=faNum(v); return 'Región '+(r||v); }
+    return v; }
+  /* Buscar "zona 5" tiene que encontrar la Z05: se indexan todas las formas de escribirlo. */
+  function faKeyOf(dim,v){
+    if(dim==='Zona'||dim==='Region'){ var n=faNum(v), l=(dim==='Zona'?'z':'r'), w=(dim==='Zona'?'zona':'region');
+      return sNorm([w+' '+n, l+n, l+('0'+n).slice(-2), String(v==null?'':v), n].join(' ')); }
+    return sNorm(String(valLabel(dim,v))+' '+String(v==null?'':v)); }
   function defVal(dim){ var arr=DIMV[dim]||[]; if(dim==='Global'&&arr.indexOf('Veterana')>=0)return 'Veterana'; return arr.length?arr[0]:null; }
   function dimAvail(d){ return (DIMV[d]||[]).length>0; }
   /* "Otros" (hoy solo "Tiendas liebre") depende de window.__liebreSet, que publica el
@@ -8463,6 +9398,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   function groupName(){ if(ST.dim==='Tienda')return valLabel('Tienda',ST.val);
     if(ST.dim==='Otros')return ST.val;
     if(ST.dim==='Global')return ST.val===TODAS?TODAS:(ST.val==='Veterana'?'Tiendas veteranas':ST.val);
+    /* valLabel ya mete la palabra: encadenarla otra vez daba "Zona Zona 22" */
+    if(ST.dim==='Zona'||ST.dim==='Region')return valLabel(ST.dim,ST.val);
     var d=DIMS.filter(function(x){return x.k===ST.dim;})[0]; return (d?d.lab:ST.dim)+' '+(ST.val||''); }
 
   function renderDim(){ var el=$('fa_dim'); if(!el)return;
@@ -8495,8 +9432,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     el.querySelectorAll('[data-p]').forEach(function(b){ b.addEventListener('click',function(){ ST.per=b.getAttribute('data-p');
       el.querySelectorAll('[data-p]').forEach(function(x){x.classList.toggle('on',x===b);}); render(); requestAnimationFrame(faResize); }); }); }
 
-  function renderCombo(q){ var pop=$('fa_valPop'); if(!pop)return; var arr=DIMV[ST.dim]||[]; q=(q||'').trim().toLowerCase();
-    var sh=arr.filter(function(v){ return !q||valLabel(ST.dim,v).toLowerCase().indexOf(q)>=0; });
+  function renderCombo(q){ var pop=$('fa_valPop'); if(!pop)return; var arr=DIMV[ST.dim]||[]; q=sNorm((q||'').trim());
+    var sh=arr.filter(function(v){ return !q||faKeyOf(ST.dim,v).indexOf(q)>=0; });
     pop.innerHTML=sh.length?sh.slice(0,400).map(function(v){ return '<div class="fa-it'+(v===ST.val?' on':'')+'" data-v="'+String(v).replace(/"/g,'&quot;')+'">'+valLabel(ST.dim,v)+'</div>'; }).join('')
       :'<div class="fa-it" style="color:var(--ink3-txt);cursor:default">Sin resultados</div>'; }
   /* ===== AL ABRIR, IR A LO QUE YA ESTA PUESTO =====
@@ -8545,12 +9482,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   function refItems(){ var it=[{kind:'vet',val:null,label:'Veteranas',grp:'Referencias'},{kind:'all',val:null,label:'Todas las tiendas',grp:'Referencias'}];
     if(liebreSet()) it.push({kind:'liebre',val:null,label:'Tiendas Liebre',grp:'Referencias'});
     if(labSet()) it.push({kind:'lab',val:null,label:'Laboratorio de Caudal',grp:'Referencias'});
-    (DIMV['Region']||[]).forEach(function(v){ it.push({kind:'Region',val:v,label:'Región '+v,grp:'Regiones'}); });
-    (DIMV['Zona']||[]).forEach(function(v){ it.push({kind:'Zona',val:v,label:'Zona '+v,grp:'Zonas'}); });
-    (DIMV['Tienda']||[]).forEach(function(v){ it.push({kind:'Tienda',val:v,label:valLabel('Tienda',v),grp:'Tiendas'}); });
+    (DIMV['Region']||[]).forEach(function(v){ it.push({kind:'Region',val:v,label:valLabel('Region',v),skey:faKeyOf('Region',v),grp:'Regiones'}); });
+    (DIMV['Zona']||[]).forEach(function(v){ it.push({kind:'Zona',val:v,label:valLabel('Zona',v),skey:faKeyOf('Zona',v),grp:'Zonas'}); });
+    (DIMV['Tienda']||[]).forEach(function(v){ it.push({kind:'Tienda',val:v,label:valLabel('Tienda',v),skey:faKeyOf('Tienda',v),grp:'Tiendas'}); });
     return it; }
-  function renderRefCombo(q){ var pop=$('fa_refPop'); if(!pop)return; q=(q||'').trim().toLowerCase();
-    var sh=refItems().filter(function(o){ return !q||o.label.toLowerCase().indexOf(q)>=0; });
+  function renderRefCombo(q){ var pop=$('fa_refPop'); if(!pop)return; q=sNorm((q||'').trim());
+    /* sin acentos y contra la clave ampliada: antes "region r03" no encontraba "Región R03" */
+    var sh=refItems().filter(function(o){ return !q||(o.skey||sNorm(o.label)).indexOf(q)>=0||sNorm(o.label).indexOf(q)>=0; });
     if(!sh.length){ pop.innerHTML='<div class="fa-it" style="color:var(--ink3-txt);cursor:default">Sin resultados</div>'; return; }
     var h='',lg=null; sh.slice(0,400).forEach(function(o){ if(o.grp!==lg){ h+='<div class="fa-grp">'+o.grp+'</div>'; lg=o.grp; }
       var puesta=(o.kind===ST.refKind) && (String(o.val==null?'':o.val)===String(ST.refVal==null?'':ST.refVal));
@@ -8585,11 +9523,16 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     } }
 
   function renderRings(rows,rrows,same){ var host=$('fa_rings'); if(!host)return;
-    _lastRings={rows:rows,rrows:rrows,same:same};
+    _lastRings={rows:rows,rrows:rrows,same:same,w:(host.clientWidth||0)};
     /* purgar antes de reemplazar el HTML: si no, Plotly deja colgado su listener de
        'resize' apuntando a divs ya desconectados y se van acumulando en cada repintado. */
     GLOB.forEach(function(m){ var old=$('fa_r_'+m.k); if(old&&old.data){ try{ Plotly.purge(old); }catch(e){} } });
     host.innerHTML=GLOB.map(function(m){ return '<div class="fa-ring"><div class="rl">'+labHTML(m)+'</div><div class="rc" id="fa_r_'+m.k+'"></div><div class="rdel" id="fa_rd_'+m.k+'"></div><div class="rref" id="fa_rr_'+m.k+'"></div></div>'; }).join('');
+    /* Sin ancho (pestana oculta) Plotly pinta con su ancho por defecto de 700 y el rosco queda
+       centrado en 700; al abrir la pestana se recoloca al centro de su celda y se ve como si
+       entrase desde la derecha. Se deja el hueco y se pinta al abrirla, que es cuando render()
+       vuelve a pasar por aqui. */
+    if((host.clientWidth||0)<40){ PENDING=true; return; }
     var line=cvar('--line2'), ink=cvar('--ink');
     GLOB.forEach(function(m){ var v=dayIgual(rows,m.k), ref=same?null:dayIgual(rrows,m.k);
       var box=$('fa_r_'+m.k), col=ringColor(m), pct=(v==null||isNaN(v))?0:Math.max(0,Math.min(100,v));
@@ -8600,10 +9543,16 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
           data.push({type:'pie',domain:{x:[0,1],y:[0,1]},hole:.6,sort:false,direction:'clockwise',textinfo:'none',hoverinfo:'skip',
             values:[Math.max(0,rp-w/2), w, Math.max(0,100-rp-w/2)],
             marker:{colors:['rgba(0,0,0,0)',cvar('--ink'),'rgba(0,0,0,0)']}}); }
+        /* Medidas EXPLICITAS. Sin ellas Plotly se dimensiona en una segunda pasada y el rosco
+           aparece en un sitio y salta al definitivo. Con width/height puestos, el primer
+           fotograma ya es el bueno. Del ancho se encarga despues el ResizeObserver de
+           #fa_rings, que repinta cuando cambia de verdad. */
+        var rcw=box.clientWidth||0, rch=box.clientHeight||138;
         var lay={margin:{l:6,r:6,t:6,b:6},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',showlegend:false,
           transition:{duration:0},
           annotations:[{text:(v==null?'—':fmtN(v,m.dec)+'%'),x:.5,y:.5,showarrow:false,font:{size:19,color:ink,family:FONT}}]};
-        try{ Plotly.newPlot(box,data,lay,{displayModeBar:false,responsive:true}); }catch(e){} }
+        if(rcw>0){ lay.width=rcw; lay.height=rch; }
+        try{ Plotly.newPlot(box,data,lay,{displayModeBar:false,responsive:false}); }catch(e){} }
       var d=$('fa_rd_'+m.k), rr=$('fa_rr_'+m.k);
       if(d) d.innerHTML=(same||v==null||ref==null)?'':('<span style="color:'+clsColor(cmpClass(m,v,ref))+'">'+((v-ref)>0?'+':'')+fmtN(v-ref,m.dec)+' pp</span>');
       if(rr) rr.textContent=(same||ref==null)?'':(refLabel()+' '+fmtN(ref,m.dec)+'%');
@@ -9054,8 +10003,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(s.kind==='vet')return 'Veteranas';
     if(s.kind==='all')return 'Todas las tiendas';
     if(s.kind==='Tienda'){ var nm=NAMES[s.val]; return nm?(s.val+' · '+nm):('Tienda '+s.val); }
-    if(s.kind==='Region')return 'Región '+s.val;
-    if(s.kind==='Zona')return 'Zona '+s.val;
+    if(s.kind==='Region')return valLabel('Region',s.val);
+    if(s.kind==='Zona')return valLabel('Zona',s.val);
     return String(s.val||''); }
   function selKey(s){ if(!s)return 'none';
     return s.kind+'|'+(s.kind==='list'?((s.list||[]).slice().sort().join(',')):(s.val||'')); }
@@ -9118,10 +10067,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
           if(rv!=null&&!isNaN(rv)){ var rp=Math.max(0,Math.min(100,rv)), w=0.9;
             data.push({type:'pie',domain:{x:[0,1],y:[0,1]},hole:.6,sort:false,direction:'clockwise',textinfo:'none',hoverinfo:'skip',
               values:[Math.max(0,rp-w/2), w, Math.max(0,100-rp-w/2)], marker:{colors:['rgba(0,0,0,0)',inkC,'rgba(0,0,0,0)']}}); }
+          /* mismas medidas explicitas que en los roscos de Farolas, por lo mismo */
+          var ccw=box.clientWidth||0, cch=box.clientHeight||138;
           var lay={margin:{l:6,r:6,t:6,b:6},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',showlegend:false,
             transition:{duration:0},
             annotations:[{text:(v==null?'—':fmtN(v,m.dec)+'%'),x:.5,y:.5,showarrow:false,font:{size:19,color:inkC,family:FONT}}]};
-          try{ Plotly.newPlot(box,data,lay,{displayModeBar:false,responsive:true}); }catch(e){} }
+          if(ccw>0){ lay.width=ccw; lay.height=cch; }
+          try{ Plotly.newPlot(box,data,lay,{displayModeBar:false,responsive:false}); }catch(e){} }
         var d=document.getElementById('cf_rd_'+m.k), rr=document.getElementById('cf_rr_'+m.k);
         if(d) d.innerHTML=(v==null||rv==null)?'':('<span style="color:'+clsColor(cmpClass(m,v,rv))+'">'+((v-rv)>0?'+':'')+fmtN(v-rv,m.dec)+' pp</span>');
         if(rr) rr.textContent=(rv==null)?'':(selName(ref)+' '+fmtN(rv,m.dec)+'%');
@@ -9757,6 +10709,266 @@ html.light .js-plotly-plot .hoverlayer rect.jv-tipbg{filter:drop-shadow(0 8px 16
 /* el buscador de un filtro de Caudal se queda arriba mientras la lista se desplaza */
 .cd-pop .cd-p-top{touch-action:manipulation}
 </style>
+
+<style>
+/* =================================================================================================
+   RETOQUES DE MOVIL  ·  ronda 26
+   Va al final del documento a proposito: las media queries NO suman especificidad, asi que para
+   ganar a una regla base (.kpi-l, .lo-adot...) hace falta ir despues.
+   ================================================================================================= */
+
+/* --- el punto de color de un area NO se encoge ---------------------------------------------------
+   .lo-fname es flex y .lo-adot no llevaba flex-shrink:0, asi que con el nombre largo el navegador
+   le quitaba anchura al punto: medido a 390 px, Refrigerado y Congelado salian con el punto a
+   0 px de ancho, es decir, desaparecido. */
+.lo-adot{flex:0 0 auto;min-width:9px}
+
+/* --- etiqueta larga / corta de los segmentados -------------------------------------------------- */
+.jv-s{display:none}
+/* la desviacion dentro de la celda de Prod: solo en el movil (en escritorio va en su columna) */
+.lo-dsub{display:none}
+
+/* --- el coeficiente de improductividad, en su chip ---------------------------------------------- */
+.kpi-coef{display:inline-flex;align-items:center;gap:5px;margin:0 0 6px;padding:3px 9px;border-radius:999px;
+  background:var(--warn-soft,rgba(184,134,11,.13));color:var(--warn-txt,#8a6508);
+  font-size:11px;font-weight:800;font-family:ui-monospace,monospace;white-space:nowrap;max-width:100%}
+
+/* --- tabla de coeficientes ---------------------------------------------------------------------- */
+.coefbox{margin:18px 0 4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--sh-sm);padding:14px 16px}
+.coefbox-h{font-size:13px;font-weight:850;color:var(--ink)}
+.coefbox-now{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.coefbox-now b{font-family:ui-monospace,monospace;color:var(--ink)}
+.coefgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:12px}
+.coefcol-h{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3-txt);margin-bottom:5px}
+table.coef-t{width:100%;border-collapse:collapse;font-size:11.5px}
+table.coef-t td{padding:5px 7px;border-bottom:1px solid var(--line);color:var(--ink2)}
+table.coef-t tr:last-child td{border-bottom:0}
+table.coef-t td:last-child{text-align:right;font-family:ui-monospace,monospace;font-weight:750;color:var(--ink);white-space:nowrap}
+table.coef-t tr.coef-on td{background:var(--brand-soft);color:var(--ink);font-weight:800}
+table.coef-t tr.coef-on td:first-child::after{content:" ← aquí";font-size:9.5px;font-weight:700;color:var(--brand)}
+.coefbox-f{font-size:10.5px;color:var(--ink3-txt);margin-top:10px;line-height:1.45}
+
+@media(max-width:430px){
+  /* corto fuera, largo dentro */
+  .jv-l{display:none}
+  .jv-s{display:inline}
+
+  /* la etiqueta de un KPI puede ocupar dos lineas antes que perder el dato por el ellipsis */
+  .kpi-l{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+
+  /* --- FARO EN BLOQUES: nombre corto, una sola linea, barritas a la misma altura --------------
+     Antes: en bloques el CSS solo cambiaba el ancho de la rejilla. Los nombres enteros se
+     partian ("CONSOL/IDACIÓ/N"), cada cabecera media distinto y las barritas de color salian a
+     4, 13 y 22 px del borde. Medido a 390 px. */
+  .mxgrid.grouped .mxh .mxh-l{display:none}
+  .mxgrid.grouped .mxh .mxh-c{display:block}
+  .mxgrid.grouped .mxh{white-space:nowrap;overflow-wrap:normal;font-size:8.5px;letter-spacing:-.1px;
+    justify-content:flex-end;gap:3px;padding:2px 0}
+  .mxgrid.grouped .mxh i{width:14px;height:4px}
+  .mxgrid.grouped .mxa .mxa-l{display:none}
+  .mxgrid.grouped .mxa .mxa-s{display:inline}
+  .mxgrid.grouped .mxa{font-size:9.5px;padding-left:2px;gap:3px;overflow:hidden;white-space:nowrap}
+  .mxgrid.grouped .mxa small{display:none}
+  .mxgrid.grouped .mxrow{grid-template-columns:62px repeat(4,1fr) 58px;gap:3px}
+
+  /* --- FARO EN DETALLE: siete columnas en 390 px ----------------------------------------------
+     Se quita la linea de unidades (min / min/ud), que en 30 px se solapaba con la de al lado y
+     ya esta dicha en el titulo de la seccion, y se le roba ancho a la primera columna y a la de
+     productividad, que es lo que pidio Javier. Quedan ~37 px por celda en vez de 30. */
+  .mxgrid:not(.grouped) .mxh .mxh-u{display:none}
+  .mxgrid:not(.grouped) .mxrow{grid-template-columns:52px repeat(7,1fr) 40px;gap:2px}
+  .mxgrid:not(.grouped) .mxh{font-size:8px}
+  .mxgrid:not(.grouped) .mxc .mv{font-size:10.5px}
+  .mxgrid:not(.grouped) .mxc .md{font-size:8px}
+  .mxgrid:not(.grouped) .mxa{font-size:9px}
+
+  /* --- segmentados de la pestana de objetivos --------------------------------------------------
+     "Con paradas (≤20')" no cabia en su pastilla: se partia en tres lineas y el "(≤20')" se
+     salia por debajo del verde. Con la etiqueta corta cabe en una linea. */
+  .lo-seg{width:100%}
+  .lo-seg button{font-size:11px;padding:8px 6px;flex:1 1 0;min-width:0}
+  #lo_modeSeg button,#lo_corteSeg button{font-size:10.5px;padding:8px 4px}
+  /* la especificidad de la regla base es #faroUnitSeg>button (un id): para ganarle hay que
+     repetir el id, el orden no basta */
+  #faroUnitSeg>button{font-size:10.5px;padding:10px 2px}
+  #corteSw>button{font-size:11px;padding:10px 3px}
+
+  /* --- cada tienda frente al objetivo: que se vea la distancia -------------------------------
+     La tabla llevaba min-width:620px y la columna del nombre se quedaba con 320 px, asi que en
+     el movil solo se veian "#" y "Tienda": los tres numeros, la distancia y su color quedaban
+     fuera de la pantalla, a la derecha. Medido: tabla 620 px dentro de un hueco de 321 px. */
+  table.lo-mx.lo-rktbl{min-width:0;font-size:11.5px}
+  table.lo-mx.lo-rktbl th,table.lo-mx.lo-rktbl td{padding:8px 5px}
+  table.lo-mx.lo-rktbl th:nth-child(1),table.lo-mx.lo-rktbl td:nth-child(1){width:22px}
+  table.lo-mx.lo-rktbl th:nth-child(2),table.lo-mx.lo-rktbl td:nth-child(2){font-size:11px;line-height:1.15}
+  table.lo-mx.lo-rktbl th:nth-child(3),table.lo-mx.lo-rktbl td:nth-child(3){width:54px}
+  table.lo-mx.lo-rktbl th:nth-child(4),table.lo-mx.lo-rktbl td:nth-child(4){width:48px}
+  table.lo-mx.lo-rktbl th:nth-child(5),table.lo-mx.lo-rktbl td:nth-child(5){width:62px}
+  table.lo-mx.lo-rktbl thead th{font-size:9px;letter-spacing:0}
+  table.lo-mx.lo-rktbl thead th .lo-sub{font-size:8px}
+
+
+  /* --- desglose de una tienda: que la distancia NO se salga --------------------------------
+     La tabla llevaba min-width:620px y el hueco son 283: la columna "vs obj area" se quedaba
+     en x=670 con el borde en 332, o sea fuera de la pantalla. En el movil se esconde esa
+     columna y el mismo dato va como segunda linea dentro de la celda de Prod. */
+  #lo_stDetIn table.lo-mx,#lo_stDet table.lo-mx{min-width:0;font-size:10.5px}
+  #lo_stDetIn table.lo-mx th,#lo_stDetIn table.lo-mx td,
+  #lo_stDet table.lo-mx th,#lo_stDet table.lo-mx td{padding:7px 4px}
+  #lo_stDetIn table.lo-mx td.lo-area,#lo_stDetIn table.lo-mx th.lo-area,
+  #lo_stDet table.lo-mx td.lo-area,#lo_stDet table.lo-mx th.lo-area{width:54px;font-size:9.5px}
+  #lo_stDetIn table.lo-mx thead th,#lo_stDet table.lo-mx thead th{font-size:8.5px;letter-spacing:0}
+  .lo-colvsobj{display:none}
+  .lo-dsub{display:block;font-family:ui-monospace,monospace;font-size:8.5px;font-weight:700;line-height:1.1;margin-top:1px}
+  .lo-dsub.lo-up{color:var(--up-txt)} .lo-dsub.lo-down{color:var(--down-txt)} .lo-dsub.lo-flat{color:var(--ink3-txt)}
+
+  /* --- reparto por area: el nombre no aplasta al punto ---------------------------------------
+     El punto ya no se encoge (arriba, .lo-adot), y la columna se ensancha lo justo para que
+     "Refrigerado" quepa entero: medido, a 78 px y 11 px de letra se cortaba. */
+  .lo-frow{grid-template-columns:88px 1fr 54px 52px;gap:6px}
+  .lo-fname{font-size:9.5px;gap:5px;min-width:0;overflow:hidden;white-space:nowrap}
+  .lo-ftot{font-size:11.5px}
+  .lo-ftot small{font-size:9px}
+}
+</style>
+
+<style>
+/* =================================================================================================
+   RETOQUES DE PANTALLA ESTRECHA  ·  ronda 27
+   El tramo de en medio (una ventana de ordenador minimizada, 430-860 px) no lo cubria nada: las
+   reglas de movil empezaban en 430 y las de escritorio se quedaban ahi. Todo lo de abajo esta
+   medido a 500 px, que es hasta donde deja minimizar Chrome.
+   ================================================================================================= */
+
+/* --- NUNCA cortar un rotulo por el medio -----------------------------------------------------
+   .mxh va centrado y con overflow:hidden, asi que un nombre que no cabia se recortaba por los
+   DOS lados: "Arranque" se leia "ranque" y "Picking", "ickin". Con ellipsis se corta solo por el
+   final y se lee el principio, que es lo que importa. */
+/* sin tocar el display: quien decide cual se ve es la regla de siempre (.mxh-c oculto en
+   ancho, .mxh-l oculto en estrecho). Aqui solo se pone el recorte por el final. */
+.mxh .mxh-l,.mxh .mxh-c{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* --- el boton de informacion de los coeficientes --------------------------------------------- */
+details.coefinfo{margin:18px 0 4px}
+details.coefinfo .coefbox-now{font-size:11.5px;color:var(--ink2)}
+details.coefinfo .coefbox-now b{font-family:ui-monospace,monospace;color:var(--ink)}
+details.coefinfo .coefgrid{margin-top:12px}
+
+@media(max-width:860px){
+  /* la etiqueta corta de los segmentados entra ya aqui, no a los 430: a 500 px "Objetivo
+     oficial" se partia en dos lineas y la pastilla media 50 px de alto */
+  .jv-l{display:none}
+  .jv-s{display:inline}
+  #faroUnitSeg>button,#corteSw>button,#lo_corteSeg>button,#lo_modeSeg>button,
+  #lo_contribViewSeg>button,#lo_calcCorteSeg>button{white-space:nowrap}
+
+  /* el faro desglosado no cabe con los nombres enteros hasta ~860 px: (860-242)/7 = 88 px por
+     columna, y "Desplazamiento" mide 80. Por debajo de eso, abreviatura. */
+  .mxgrid:not(.grouped) .mxh .mxh-l{display:none}
+  .mxgrid:not(.grouped) .mxh .mxh-c{display:block}
+  /* y las cabeceras de las tablas de areas, con el codigo de la columna */
+  table.lo-mx thead th .lo-sub{font-size:8.5px}
+
+  /* --- tablas anchas en un hueco estrecho ---------------------------------------------------
+     table.lo-mx lleva min-width:620px. A 500 px el hueco son 431, asi que "Distancia al
+     objetivo" (y en el desglose, Prod y vs obj area) se quedaban fuera de la pantalla, a la
+     derecha: por eso "no salia nada". */
+  table.lo-mx.lo-rktbl{min-width:0}
+  table.lo-mx.lo-rktbl th,table.lo-mx.lo-rktbl td{padding:9px 6px}
+  table.lo-mx.lo-rktbl th:nth-child(1),table.lo-mx.lo-rktbl td:nth-child(1){width:28px}
+  table.lo-mx.lo-rktbl th:nth-child(3),table.lo-mx.lo-rktbl td:nth-child(3){width:62px}
+  table.lo-mx.lo-rktbl th:nth-child(4),table.lo-mx.lo-rktbl td:nth-child(4){width:54px}
+  table.lo-mx.lo-rktbl th:nth-child(5),table.lo-mx.lo-rktbl td:nth-child(5){width:70px}
+  table.lo-mx.lo-rktbl thead th{font-size:9.5px;letter-spacing:0}
+  #lo_stDetIn table.lo-mx,#lo_stDet table.lo-mx{min-width:0;font-size:11.5px}
+  #lo_stDetIn table.lo-mx th,#lo_stDetIn table.lo-mx td,
+  #lo_stDet table.lo-mx th,#lo_stDet table.lo-mx td{padding:8px 5px}
+  #lo_stDetIn table.lo-mx td.lo-area,#lo_stDetIn table.lo-mx th.lo-area,
+  #lo_stDet table.lo-mx td.lo-area,#lo_stDet table.lo-mx th.lo-area{width:72px;font-size:10.5px}
+  #lo_stDetIn table.lo-mx thead th,#lo_stDet table.lo-mx thead th{font-size:9px;letter-spacing:0}
+  #lo_stDetIn .lo-delta,#lo_stDet .lo-delta{font-size:10px;padding:2px 5px;gap:2px}
+}
+
+/* Por debajo de 480 px ya no caben las ocho columnas del desglose: se esconde "vs obj area" y su
+   dato se lee como segunda linea dentro de la celda de Prod (.lo-dsub). */
+@media(min-width:481px){
+  .lo-colvsobj{display:table-cell}
+  .lo-dsub{display:none}
+}
+@media(max-width:480px){
+  .lo-colvsobj{display:none}
+  .lo-dsub{display:block}
+}
+</style>
+
+<style>
+/* en bloques las cuatro columnas caben enteras hasta ~560 px (a 560 miden 85 px y
+   "Consolidación" mide 79). Por debajo, abreviatura: a 500 px la columna es de 61 px. */
+@media(max-width:560px){
+  .mxgrid.grouped .mxh .mxh-l{display:none}
+  .mxgrid.grouped .mxh .mxh-c{display:block}
+}
+</style>
+
+<style>
+/* Con 7 subprocesos, el ancho se lo llevaban la columna del area (104 px) y la de
+   productividad (88). Estrechandolas, a 500 px cada celda pasa de 32 a 46 px y las
+   abreviaturas caben ENTERAS en vez de acabar en "Arran...". El area se abrevia tambien
+   (REFRI, CONGEL), que es lo que permite bajar su columna a 64 px. */
+@media(max-width:620px){
+  .mxgrid:not(.grouped) .mxrow{grid-template-columns:64px repeat(7,1fr) 66px;gap:3px}
+  .mxgrid:not(.grouped) .mxa .mxa-l{display:none}
+  .mxgrid:not(.grouped) .mxa .mxa-s{display:inline}
+  .mxgrid:not(.grouped) .mxa{font-size:10px;padding-left:2px;gap:4px;overflow:hidden;white-space:nowrap}
+  .mxgrid:not(.grouped) .mxa small{display:none}
+}
+</style>
+
+<style>
+/* El cambio a etiqueta corta empieza a 860 px porque es lo que necesitan los segmentados. En las
+   cabeceras de las tablas de areas, en cambio, de 621 px arriba la columna mide 88 px y el nombre
+   entero cabe de sobra: ahi se deja el nombre y no el codigo. */
+@media(min-width:621px){
+  table.lo-mx thead th .jv-l{display:inline}
+  table.lo-mx thead th .jv-s{display:none}
+}
+</style>
+
+<style>
+/* =================================================================================================
+   EL NOMBRE DEL AREA NO SE PEGA A LOS BLOQUES  ·  ronda 28
+   Medido en la vista de BLOQUES, aire entre el final de la palabra y la primera celda de color:
+     1380 px (columna de 140): SECOS 93 · REFRIGERADO 41 · CONGELADO 53 · FRESCOS 76 · HORNO 88
+      600 px (columna de  92): SECOS 44 · REFRIGERADO -8 · CONGELADO  4 · FRESCOS 27 · HORNO 39
+   O sea que de 431 a 620 px "REFRIGERADO" no solo se pegaba: se metia 8 px DENTRO de la celda.
+   Tres cosas: un punto menos de letra, un hueco a la derecha que nadie puede invadir, y el nombre
+   corto (REFRI, CONGEL) en todo ese tramo, no solo por debajo de 430.
+   ================================================================================================= */
+.mxgrid.grouped .mxa{font-size:11.5px;padding-right:10px}
+/* y si algun dia no cupiera, se corta por el final y nunca pisa la celda */
+.mxa .mxa-l,.mxa .mxa-s{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* por debajo de 430 la columna es de 62 px y ya iba a 9,5 px: esa regla es de una media query
+   anterior en el fichero, asi que la de arriba (sin media query, pero mas abajo) le ganaba por
+   orden y volvia a subir la letra. Se repite aqui. */
+@media(max-width:430px){
+  .mxgrid.grouped .mxa{font-size:9.5px;padding-right:6px}
+}
+
+@media(min-width:431px) and (max-width:620px){
+  .mxgrid.grouped .mxa .mxa-l{display:none}
+  .mxgrid.grouped .mxa .mxa-s{display:inline}
+  .mxgrid.grouped .mxa{font-size:11px;padding-right:8px}
+  .mxgrid.grouped .mxa small{display:none}
+}
+</style>
+
+
+
+
+
+
 <script>
 (function(){
   var NS='http://www.w3.org/2000/svg';
