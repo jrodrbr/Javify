@@ -2686,7 +2686,9 @@ body.simple #mObj{display:none!important}
         <div>
           <div class="sec-n">Tiempos reales</div>
           <div class="sec-h">Cuánto tarda cada tipo de lote y en qué se va</div>
-          <div class="sec-s">Tiempo total por lote y su reparto por subprocesos. En Frescos y FYV la preparación va en un único bloque.</div>
+          <!-- (28/09/2026) Antes: "En Frescos y FYV la preparacion va en un unico bloque". En esta grafica
+               la preparacion va en un bloque en TODAS las areas, y FRESCOS ya separa desde julio de 2026. -->
+          <div class="sec-s">Tiempo total por lote y su reparto por subprocesos. La preparación va en un solo bloque; picking y desplazamiento se ven por separado más abajo.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"><div class="modes" id="realWho"></div><div class="modes" id="realOrder"></div></div>
       </div>
@@ -2698,7 +2700,9 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Dentro de la preparación</div>
         <div class="sec-h">Picking, desplazamiento y su equilibrio</div>
-        <div class="sec-s">La preparación separada en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse), con su mix y ratio. Frescos y FYV no se separan.</div>
+        <!-- (28/09/2026) Que areas separan lo escribe renderPickDespl() con el dato (sepResumen). Antes
+             ponia "Frescos y FYV no se separan" fijo, y FRESCOS separa desde julio de 2026. -->
+        <div class="sec-s">La preparación separada en <b>picking</b> (coger) y <b>desplazamiento</b> (moverse), con su mix y ratio. <span id="pickSepTxt"></span></div>
       </div></div>
       <div class="grid g2" style="margin-bottom:16px">
         <div class="cbox"><div class="cbox-in"><button class="png" data-png="cPick">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Picking · min/ud</div><div class="csub" id="pickSubA">coger producto</div></div></div><div class="chart" id="cPick"></div></div></div>
@@ -2715,7 +2719,8 @@ body.simple #mObj{display:none!important}
       <div class="sec-hd"><div>
         <div class="sec-n">Desplazamiento total y tiempo entre lotes</div>
         <div class="sec-h">El tiempo que no es preparar producto</div>
-        <div class="sec-s">El <b>desplazamiento total</b> del lote y, aparte, el <b>tiempo entre lotes</b>. Frescos y FYV no aparecen (su desplazamiento no se separa).</div>
+        <!-- (28/09/2026) Igual: lo escribe renderDesplTot() con el dato. Antes, "Frescos y FYV no aparecen". -->
+        <div class="sec-s">El <b>desplazamiento total</b> del lote y, aparte, el <b>tiempo entre lotes</b>. <span id="desplSepTxt"></span></div>
       </div></div>
       <div class="grid g2">
         <div>
@@ -3598,12 +3603,101 @@ const AREAS=['SECOS','REFRIGERADO','CONGELADO','FRESCOS','FYV','HORNO','PENDIENT
 // El CSV trae ademas una fila area_batch='GLOBAL' por tienda/mes/turno, calculada en el SQL sumando
 // el dia entero. Se acepta al cargar, pero NO entra en las listas de areas de la interfaz.
 const AREAS_LOAD=AREAS.concat(['GLOBAL']);
+/* AREAS QUE SEPARAN SIEMPRE picking (P2) y desplazamiento (P3). tieneDesglose() se queda con ese
+   sentido: "esta area separa siempre". Si UNA FILA separa lo dice filaSeparada(), mas abajo. */
 const AREAS_DESGLOSE=['SECOS','REFRIGERADO','CONGELADO','HORNO','PENDIENTES'];
 const tieneDesglose=a=>AREAS_DESGLOSE.includes(a);
 // En modo Simple PENDIENTES no se muestra ni se compara (no adherida a objetivo). En Experto, todo.
 const _isSimple=()=>document.body.classList.contains('simple');
 function viewAreas(){ return _isSimple()?AREAS.filter(a=>a!=='PENDIENTES'):AREAS; }
-function viewAreasD(){ return _isSimple()?AREAS_DESGLOSE.filter(a=>a!=='PENDIENTES'):AREAS_DESGLOSE; }
+/* (28/09/2026) Las areas de las graficas de picking y desplazamiento son las que separan EN LOS DOS
+   escenarios que se comparan (m.compat), no una lista fija. Antes era la lista de arriba y FRESCOS
+   no entraba nunca, aunque desde julio de 2026 ya separa. */
+function viewAreasD(){ return viewAreas().filter(a=>{ const m=MODEL.find(x=>x.area===a); return m?m.compat:tieneDesglose(a); }); }
+/* ===== QUE FILAS SEPARAN PICKING Y DESPLAZAMIENTO (28/09/2026, SUPER FASE 6 v7.3c) =====
+   Lo dice el dato de cada fila, no el nombre del area. Desde la v7.3, FRESCOS separa picking (P2) y
+   desplazamiento (P3) a partir de julio de 2026; hasta junio va en un solo bloque (P23), igual que
+   FYV siempre. Con la lista fija, FRESCOS de julio y agosto (1.537 filas del detalle) salia con la
+   preparacion a CERO en la vista Detalle: el bloque sin separar leia el P23, que ahora viene a 0, y
+   el P2/P3 no se pintaba. Medido: tienda 2465, agosto, frente a Veteranas, "Preparacion (sin
+   separar)" 0,00 frente a 0,00 min/lote, cuando son 22,32 frente a 18,62 (14,2 h/mes de mas que no
+   salian ni en el mapa de calor ni en el reparto).
+   La regla: las cinco areas de arriba separan siempre; en las demas separa la fila que trae P2/P3 y
+   no trae P23. Si trae P23, o las dos cosas (el trimestre jun-ago de los objetivos: 3,48 + 7,04 de
+   P2/P3 y 5,23 de P23), no separa y se lee como un solo bloque.
+   Se decide UNA vez por fila, al cargar, con el tiempo total (_sep): el corte de paradas puede traer
+   P2 y P3 a 0 en una fila que si separa, y la respuesta no puede cambiar al cambiar de corte.
+   En una fila que no separa, P2 y P3 se dejan VACIOS (no a 0): asi ninguna serie ni tabla dice
+   "0 min de picking" en un mes en que no se media. La preparacion entera sigue en prep_min_medio. */
+const SEP_EPS=0.01;   // min/lote: por debajo es el redondeo del fichero, que sale con 2 decimales
+const SEP_COLS=[];
+['p2','p3'].forEach(k=>['_min_medio','_pct_medio','_ef_min_medio','_ef_pct_medio','_par_min_medio','_par_pct_medio'].forEach(x=>SEP_COLS.push(k+x)));
+function marcaSep(r,area){
+  if(!r) return r;
+  const a=area||r.area;
+  if(tieneDesglose(a)){ r._sep=true; return r; }
+  if(a==='GLOBAL'){ r._sep=false; return r; }   // la fila global mezcla areas: se marca y no se vacia
+  const p23=r.p23_min_medio, pd=(r.p2_min_medio||0)+(r.p3_min_medio||0);
+  r._sep=(pd>SEP_EPS)&&!(p23>SEP_EPS);
+  if(!r._sep){
+    /* Fila sin separar: P2·P3 (p23) = la preparacion entera, en los tres cortes, y P2/P3 vacios. En el
+       fichero nuevo el P23 de FYV y de FRESCOS hasta junio YA es la preparacion entera (diferencia 0,00
+       en sus 15.203 filas), asi que ahi no cambia nada; en una fila mezclada, como el trimestre de los
+       objetivos, no lo es (5,23 de 15,75). */
+    ['','_ef','_par'].forEach(x=>['_min_medio','_pct_medio'].forEach(y=>{ const v=r['prep'+x+y]; if(v!=null) r['p23'+x+y]=v; }));
+    SEP_COLS.forEach(c=>{ r[c]=null; });
+  }
+  return r;
+}
+/* Una fila que SI separa, leida como un solo bloque: copia con P2·P3 (p23) = la preparacion entera y
+   P2/P3 vacios, sobre los nombres de siempre, que mapCorte() ya ha llenado con el corte activo. Hace
+   falta cuando uno de los dos escenarios no separa (FRESCOS de agosto frente al de junio, o frente al
+   objetivo): sin ella, el lado que separa ponia 0 en "Preparacion (sin separar)". Nunca toca la fila
+   original: es una copia. */
+function plegar(r){
+  if(!r) return r;
+  const o=Object.assign({},r);
+  if(r.prep_min_medio!=null) o.p23_min_medio=r.prep_min_medio;
+  if(r.prep_pct_medio!=null) o.p23_pct_medio=r.prep_pct_medio;
+  o.p2_min_medio=null; o.p3_min_medio=null; o.p2_pct_medio=null; o.p3_pct_medio=null;
+  return o;
+}
+function filaSeparada(r,area){
+  if(tieneDesglose(area)) return true;
+  if(!r) return false;
+  if(r._sep===undefined) marcaSep(r,area);   // red de seguridad: toda fila se marca al cargar
+  return r._sep===true;
+}
+function areaNom(a){ return (a==='FYV')?'FYV':(a?a.charAt(0)+a.slice(1).toLowerCase():''); }
+function listaY(xs){ return xs.length<2?(xs[0]||''):xs.slice(0,-1).join(', ')+' y '+xs[xs.length-1]; }
+function mesTxt(k){ const m=/^(\d{4})-(\d{2})$/.exec(String(k)); return m?(MESES_ES[+m[2]-1]+' de '+m[1]):String(k); }
+/* La regla en una frase, sacada del dato y no escrita a mano: con el fichero de antes dice "Frescos
+   y FYV no separan..."; con el de ahora, "FYV no separa..., y Frescos solo desde julio de 2026". */
+function sepResumen(){
+  if(ST._sepRows===ST.rows) return ST._sepTxt;
+  const nunca=[], desde=[];
+  AREAS.filter(a=>!tieneDesglose(a)).forEach(a=>{
+    let pri=null, hayNo=false;
+    (ST.rows||[]).forEach(r=>{ if(r.area!==a||r.shift!=='global') return;
+      if(filaSeparada(r,a)){ if(pri==null||r.mesKey<pri) pri=r.mesKey; } else hayNo=true; });
+    if(pri==null) nunca.push(areaNom(a)); else if(hayNo) desde.push({n:areaNom(a),m:mesTxt(pri)});
+  });
+  let t=nunca.length?(listaY(nunca)+(nunca.length>1?' no separan':' no separa')+' picking y desplazamiento'):'';
+  if(desde.length) t+=t?(', y '+listaY(desde.map(d=>d.n+' solo desde '+d.m)))
+                      :listaY(desde.map(d=>d.n+' los separa solo desde '+d.m));
+  ST._sepRows=ST.rows; ST._sepTxt=t;
+  return t;
+}
+/* Meses en que el escenario A o el B traen el area separada. Para la tendencia: si hay alguno, las
+   metricas de picking y desplazamiento se ofrecen, con los meses sin separar vacios. */
+function sepMeses(area){
+  let pri=null, hayNo=false;
+  [curA,curB].forEach(sc=>{ if(!sc) return; ST.meses.forEach(k=>{
+    const r=(((ST.index[sc.tienda]||{})[k]||{})[sc.shift]||{})[area]; if(!r) return;
+    if(filaSeparada(r,area)){ if(pri==null||k<pri) pri=k; } else hayNo=true; }); });
+  return {pri,hayNo};
+}
+function separaEnSerie(area){ return tieneDesglose(area)||sepMeses(area).pri!=null; }
 /* abbr = el nombre recortado a mano para cuando la columna es estrecha. ANTES en ese hueco se
    ponia el codigo (P1..P7) y no se entendia, y en el tramo de en medio se ponia el nombre entero
    en 32 px, que al ir centrado y con overflow:hidden se recortaba POR LOS DOS LADOS: "Arranque"
@@ -3620,7 +3714,9 @@ const FASES=[
 const PREP_SIN={k:'p23',col:'--f-prepsin',name:'Preparación (sin separar)',code:'P2·P3',abbr:'Prepa.'};
 const MINKEY={p1:'p1_min_medio',p2:'p2_min_medio',p3:'p3_min_medio',p4:'p4_min_medio',p5:'p5_min_medio',p6:'p6_min_medio',p7:'p7_min_medio',p23:'p23_min_medio',prep:'prep_min_medio'};
 const PCTKEY={p1:'p1_pct_medio',p2:'p2_pct_medio',p3:'p3_pct_medio',p4:'p4_pct_medio',p5:'p5_pct_medio',p6:'p6_pct_medio',p7:'p7_pct_medio',p23:'p23_pct_medio',prep:'prep_pct_medio'};
-function fasesComp(area){return tieneDesglose(area)?FASES:[FASES[0],PREP_SIN,FASES[3],FASES[4],FASES[5],FASES[6]];}
+/* (28/09/2026) Recibe SI SE SEPARA (m.compat), no el area: desde la v7.3 depende del mes. */
+const FASES_SIN=[FASES[0],PREP_SIN,FASES[3],FASES[4],FASES[5],FASES[6]];
+function fasesComp(sep){return sep?FASES:FASES_SIN;}
 const FASE_REVISAR={p1:['asignación del lote','preparación de medios'],p2:['ritmo de recogida','líneas por hora'],p3:['recorrido por el área','orden de la ruta'],p4:['disponibilidad de báscula','esperas en el pesaje'],p5:['distancia a consolidación','recorrido de traslado'],p6:['validación y conteo','embolsado y cierre'],p7:['esperas entre lotes','carro del siguiente lote sin preparar']};
 const SYNTH=['Tiendas Veteranas','Todas las tiendas'];
 const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -4082,7 +4178,7 @@ const OBJ_URL='https://raw.githubusercontent.com/jrodrbr/Javify/refs/heads/main/
 let OBJ_ROWS=null;
 function loadObjetivos(){ try{ Papa.parse(OBJ_URL+'?cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
   complete:res=>{ try{ const by={}; (res.data||[]).forEach(r=>{ const a=normArea(r.area_batch); if(!AREAS.includes(a))return;
-      const o={tienda:OBJ_NAME,area:a,vet:'Objetivo'}; NUMC.forEach(c=>o[c]=numv(r[c])); EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);}); by[a]=o; });
+      const o={tienda:OBJ_NAME,area:a,vet:'Objetivo'}; NUMC.forEach(c=>o[c]=numv(r[c])); EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);}); /* (28/09) ver filaSeparada */ marcaSep(o); by[a]=o; });
       OBJ_ROWS=Object.keys(by).length?by:null; applyObjetivos(); }catch(e){console.warn('obj parse',e);} },
   error:()=>{} }); }catch(e){} }
 function applyObjetivos(){
@@ -4210,6 +4306,8 @@ function buildFromRows(raw,fname){
   $('errbox').classList.remove('show');
   ST.rows=raw.map(r=>{const o={tienda:String(r.tienda).trim(),shift:String(r.shift||'').trim().toLowerCase(),area:normArea(r.area_batch),mesKey:mesKeyFromCell(r.mes),vet:(r.estado_veterana||'').trim()};NUMC.forEach(c=>o[c]=numv(r[c]));EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);});return o;}).filter(r=>r.tienda&&r.shift&&AREAS_LOAD.includes(r.area)&&r.mesKey);
   if(!ST.rows.length){showErr(['No hay filas válidas tras procesar (revisa áreas, turnos y mes).']);return;}
+  /* (28/09/2026) cada fila dice si separa picking y desplazamiento (ver filaSeparada) */
+  ST.rows.forEach(r=>marcaSep(r));
   ST.index={};const tS=new Set(),mS=new Set(),sS=new Set();
   ST.rows.forEach(r=>{tS.add(r.tienda);mS.add(r.mesKey);sS.add(r.shift);(((ST.index[r.tienda]=ST.index[r.tienda]||{})[r.mesKey]=ST.index[r.tienda][r.mesKey]||{})[r.shift]=ST.index[r.tienda][r.mesKey][r.shift]||{})[r.area]=r;});
   const reales=[...tS].filter(t=>!SYNTH.includes(t));
@@ -4236,7 +4334,8 @@ function buildFromRows(raw,fname){
       window.__MERC=false;
       console.warn('Faltan prod_total_min_ud_media_mcd / prod_efectiva_min_ud_media_mcd: se pasa a MO.');
       const n=$('errbox'); if(n){ n.classList.add('show');
-        n.innerHTML='<b>Los datos todavía no traen las unidades Mdonadona.</b><br>'+
+        /* (28/09) decia "Mdonadona": un reemplazo de Merca -> Mdona que se comio "Mercadona" */
+        n.innerHTML='<b>Los datos todavía no traen las unidades Mdona.</b><br>'+
           'Se ha cambiado a <b>unidades MO</b> para que puedas seguir trabajando con normalidad. '+
           'Avisa a Javier para que actualice los datos.'; }
     }
@@ -4299,11 +4398,11 @@ function buildAggregates(){
   ST.tiendas=ST.tiendas.filter(t=>t!==LIEBRE_HIST&&t!==LAB_KEY&&t.indexOf('ZONE::')!==0&&t.indexOf('REG::')!==0);
   ST.geoAgg=[];
   /* TODAS las columnas numéricas, no solo NUMC. NUMC son las 25 del corte 20; en EXTRA_COLS están
-     las otras 43: el corte efectivo ≤6', las paradas por fase y las tres de unidades Mdonadona.
+     las otras 43: el corte efectivo ≤6', las paradas por fase y las tres de unidades Mdona.
      Sin ellas una Zona o una Región se quedaba sin productividad efectiva y, en vista Mercadona,
      completamente vacía. */
   const AGGC=NUMC.concat(EXTRA_COLS);
-  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; AGGC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
+  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; AGGC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); /* (28/09) la media del grupo tambien se marca */ marcaSep(o); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
   // Media de los datos GLOBALES del centro (CSV general) por mes → la usan el resumen ("Lo más importante"), la evolución 12 meses y la tendencia global (genRow/genSerie). Sin esto, los agregados no tenían histórico.
   const buildGen=(members,meta)=>{ const g={}; ST.meses.forEach(mk=>{ const rows=[]; members.forEach(m=>{const r=(ST.gen[m]||{})[mk]; if(r)rows.push(r);}); if(!rows.length)return; const o={center_name:meta.center_name,region:meta.region||'',zona:meta.zona||'',model:'',fase:'',estado:'Sintética: todas'}; GEN_NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});o[c]=n?s/n:null;}); g[mk]=o; }); return g; };
   if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); ordenaRefs(); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
@@ -4621,6 +4720,14 @@ function setMode(m){ST.mode=m; try{ if(typeof saveCfg==='function') saveCfg(); }
      entonces comparar medidas la descartaria. */
   try{ if(window.__jvSize) window.__jvSize.alMostrar(true);
        else if(window.__resizeVisiblePlots) window.__resizeVisiblePlots(); }catch(e){}
+  /* (28/09/2026) EL VIGILANTE ESPERA A LA PESTANA NUEVA. Su temporizador (700 ms) lo arma el ultimo
+     repintado, y si en ese hueco se cambiaba de pestana saltaba justo cuando la nueva se estaba
+     destapando: daba por rotas graficas que alMostrar() estaba midiendo en ese momento, avisaba en
+     la consola y a la segunda las purgaba y repintaba todo. Medido en el banco: 8 o 9 avisos en 40
+     cambios de pestana, 2 de ellos con repintado completo, y 0 graficas mal de verdad al final de
+     cada espera. Ahora cada cambio de pestana lo aplaza 700 ms: sigue vigilando, pero la pestana
+     ya maquetada. */
+  vigilarLuego();
 }
 /* Recordar la ultima configuracion entre sesiones (se guarda en este navegador) */
 function saveCfg(){ try{
@@ -4668,14 +4775,19 @@ function analyze(scroll){curA=scn('A');curB=scn('B');resolveNames();saveCfg();
 
 /* ===== MODELO ===== */
 function rowFor(s,a){return mapCorte((((ST.index[s.tienda]||{})[s.mesKey]||{})[s.shift]||{})[a]||null);}
-function metricVal(r,area,mk){if(!r)return null;const M=METRICS[mk];if(M.deg&&!tieneDesglose(area))return null;
+function metricVal(r,area,mk){if(!r)return null;const M=METRICS[mk];/* (28/09) picking y desplazamiento solo si ESTA fila separa (FRESCOS desde julio de 2026) */if(M.deg&&!filaSeparada(r,area))return null;
   if(M.dyn==='prod')return r[PRODC()];
   if(M.dyn==='uds') return r[UDSC()];
   if(M.perud){const u=r[UDSC()];if(u==null||u===0)return null;let base;if(M.sumk){let s=0,a=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;a=true;}});base=a?s:null;}else base=r[M.col];return base==null?null:base/u;}if(M.calc==='despltot')return (r.p1_min_medio||0)+(r.p3_min_medio||0)+(r.p5_min_medio||0)+(r.p7_min_medio||0);if(M.calc==='ratio')return r.p2_min_medio?r.p3_min_medio/r.p2_min_medio:null;if(M.sumk){let s=0,any=false;M.sumk.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;}return r[M.col];}
 function buildModel(A,B){
   return AREAS.map(area=>{
-    const ra=rowFor(A,area),rb=rowFor(B,area),compat=tieneDesglose(area);
-    const m={area,ra,rb,compat,disponible:!!(ra&&rb)};
+    /* (28/09/2026) compat = los DOS escenarios separan picking y desplazamiento. Antes era el nombre
+       del area. Ahora FRESCOS de agosto frente a agosto se compara separado, y frente a junio o frente
+       al objetivo (que no separan) se lee como un solo bloque en los dos lados. */
+    const r0a=rowFor(A,area),r0b=rowFor(B,area),sepA=filaSeparada(r0a,area),sepB=filaSeparada(r0b,area),compat=sepA&&sepB;
+    /* si no se compara separado, el lado que SI separa se lee como un solo bloque (ver plegar) */
+    const ra=(!compat&&sepA&&r0a)?plegar(r0a):r0a, rb=(!compat&&sepB&&r0b)?plegar(r0b):r0b;
+    const m={area,ra,rb,compat,sepA,sepB,disponible:!!(ra&&rb)};
     const g=(r,k)=>r?r[k]:null,d=k=>(ra&&rb&&ra[k]!=null&&rb[k]!=null)?ra[k]-rb[k]:null;
     m.tiempoA=g(ra,'total_min_util_medio');m.tiempoB=g(rb,'total_min_util_medio');m.dTiempo=d('total_min_util_medio');
     // AQUI se elige la unidad, y solo aqui: todo lo que cuelga de m.prodA / m.udsA ya viene en la
@@ -4702,7 +4814,13 @@ function buildModel(A,B){
     m.dP2=d('p2_min_medio');m.dP3=d('p3_min_medio');
     m.p7A=g(ra,'p7_min_medio');m.p7B=g(rb,'p7_min_medio');
     m.lotesA=g(ra,'n_lotes');m.lotesB=g(rb,'n_lotes');
-    m.gaps={};FASES.forEach(f=>m.gaps[f.k]=d(MINKEY[f.k]));
+    /* (28/09/2026) Las diferencias por subproceso, sobre los subprocesos que se ENSENAN: si no se
+       separa, la preparacion es un bloque (p23) y entra. Antes eran siempre P1..P7 y en un area sin
+       separar P2 y P3 daban 0, asi que la preparacion no podia salir nunca como lo que mas explica la
+       diferencia. Medido, agosto frente a Veteranas: en FYV es la mayor diferencia en 150 de 256
+       tiendas (59 %) y la ficha nombraba otro subproceso (2465: "Entre lotes, +2,07 min/lote", con
+       la preparacion en +7,57). */
+    m.gaps={};fasesComp(compat).forEach(f=>m.gaps[f.k]=d(MINKEY[f.k]));
     // desplazamiento total + ratio (solo desglose)
     m.desplTotA=compat&&ra?(ra.p1_min_medio||0)+(ra.p3_min_medio||0)+(ra.p5_min_medio||0)+(ra.p7_min_medio||0):null;
     m.desplTotB=compat&&rb?(rb.p1_min_medio||0)+(rb.p3_min_medio||0)+(rb.p5_min_medio||0)+(rb.p7_min_medio||0):null;
@@ -4719,7 +4837,7 @@ function buildModel(A,B){
     m.lotesN=(_lf!=null&&!isNaN(_lf))?(_lf/(_ld||1)):null;
     m.baseUds=_objA?m.udsB:m.udsA;
     m.impacto=(m.dProd!=null&&m.baseUds!=null&&m.lotesN!=null)?(m.dProd*m.baseUds*m.lotesN):null;
-    let ft=null,fv=0;FASES.forEach(f=>{const x=m.gaps[f.k];if(x!=null&&Math.abs(x)>Math.abs(fv)){fv=x;ft=f.k;}});
+    let ft=null,fv=0;fasesComp(compat).forEach(f=>{const x=m.gaps[f.k];if(x!=null&&Math.abs(x)>Math.abs(fv)){fv=x;ft=f.k;}});   // (28/09) misma lista que m.gaps
     m.faseTop=ft;m.faseTopVal=fv;m.estado=classify(m);
     return m;
   });
@@ -5754,7 +5872,9 @@ function renderFaroDetail(area,faseK){
   const m=MODEL.find(x=>x.area===area);if(!m||!m.disponible){$('faroDetail').innerHTML='';return;}
   let name,valA,valB,col,dec,sA,sB,imp;
   // serie 12m de una fase/bloque EN LA UNIDAD ACTIVA del faro (tiempo/prod/objetivo oficial)
-  const faroDetSerie=(t,sh,keys,uk)=>ST.meses.map(mkey=>{const r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;let raw=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){raw+=v;any=true;}});if(!any)return null;return faroConv(raw,uk,r[UDSC()]);});
+  /* (28/09/2026) Si esta comparacion se lee sin separar, cada mes tambien (ver plegar): la serie de
+     "Preparacion (sin separar)" de FRESCOS caia a 0 en julio y agosto, que ya separan. */
+  const faroDetSerie=(t,sh,keys,uk)=>ST.meses.map(mkey=>{let r=mapCorte((((ST.index[t]||{})[mkey]||{})[sh]||{})[area]||null);if(!r)return null;if(!m.compat&&filaSeparada(r,area))r=plegar(r);let raw=0,any=false;keys.forEach(k=>{const v=r[MINKEY[k]];if(v!=null){raw+=v;any=true;}});if(!any)return null;return faroConv(raw,uk,r[UDSC()]);});
   if(faseK==='prodcol'){ // columna de productividad del faro
     name='Productividad'; col=cssv('--brand'); dec=2;
     valA=(m.prodA!=null&&!isNaN(m.prodA))?m.prodA:null; valB=(m.prodB!=null&&!isNaN(m.prodB))?m.prodB:null;
@@ -5987,6 +6107,8 @@ function barGroupSem(id,kA,kB,areas,dec,h,eps){
 
 /* ===== PICKING / DESPLAZAMIENTO + RATIOS ===== */
 function renderPickDespl(){
+  /* (28/09/2026) la regla de que areas separan, escrita con el dato (ver sepResumen) */
+  {const t=$('pickSepTxt'); if(t){ const r=sepResumen(); t.textContent=r?(r+'.'):''; }}
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ad.length){
     sinGrafica('cPick','No hay áreas con separación fiable de picking y desplazamiento en estos escenarios.');
@@ -6014,6 +6136,7 @@ function renderPickDespl(){
 
 /* ===== DESPLAZAMIENTO TOTAL ===== */
 function renderDesplTot(){
+  {const t=$('desplSepTxt'); if(t){ const r=sepResumen(); t.textContent=r?('Solo aparecen las áreas que separan el desplazamiento: '+r+'.'):''; }}   // (28/09) ver sepResumen
   const ad=viewAreasD().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible;}).sort((a,b)=>AREAS.indexOf(a)-AREAS.indexOf(b));
   if(!ad.length){sinGrafica('cDesplTot','Sin áreas con desplazamiento total comparable.');$('desplTotNote').textContent='Sin áreas con desplazamiento total comparable.';return;}
   barGroupSem('cDesplTot','desplTotA','desplTotB',ad,2,H.pick,0.2);
@@ -6022,7 +6145,10 @@ function renderDesplTot(){
   const pct=sumT>0?sumDT/sumT*100:null;
   let n='';if(pct!=null)n+='En las áreas con desglose, el desplazamiento total es de media el <b>'+fmt(pct,0)+'%</b> del tiempo del lote de <b>'+ST.nameA+'</b>: mucho tiempo se va en moverse y enlazar, no solo en coger producto. ';
   if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
-  n+='<b>Frescos y FYV</b> no se incluyen: su desplazamiento de preparación no se separa, así que el dato no sería comparable. ';
+  /* (28/09/2026) Las areas que se quedan fuera EN ESTA comparacion, sacadas del modelo. Antes era el
+     texto fijo "Frescos y FYV", que desde julio de 2026 es falso para FRESCOS. */
+  {const fu=viewAreas().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible&&!m.compat;}).map(areaNom);
+   if(fu.length)n+='<b>'+listaY(fu)+'</b> no '+(fu.length>1?'se incluyen':'se incluye')+': en estos escenarios su desplazamiento de preparación no se separa, así que el dato no sería comparable. ';}
   n+='Suma arranque + desplazamiento + traslado + tiempo entre lotes. '+legSem();
   $('desplTotNote').innerHTML=n;
 }
@@ -6118,7 +6244,7 @@ function refreshTrMetricOptions(){const area=$('trArea').value,cur=$('trMetric')
   // en vista AGRUPADO se ofrecen los 4 bloques (suman las fases); en desglosado, las métricas por fase
   const allowed=window.__GROUP
     ? ['prod','tiempo','m_prep','m_pes','m_cons','m_entre']
-    : METRIC_ORDER.filter(k=> area==='__global' ? !METRICS[k].deg : !(METRICS[k].deg&&!tieneDesglose(area)));
+    : METRIC_ORDER.filter(k=> area==='__global' ? !METRICS[k].deg : !(METRICS[k].deg&&!separaEnSerie(area)));   // (28/09) picking y desplazamiento si el area separa en algun mes de A o de B
   $('trMetric').innerHTML=allowed.map(k=>opt(k,METRICS[k].label,k===cur)).join('');if(!allowed.includes(cur))$('trMetric').value='prod';}
 function initTrend(){if(!ST._trInit){ST.trArea=$('trArea').value;ST._trInit=true;}refreshTrMetricOptions();}
 function renderTrendGen(mk,x){
@@ -6210,7 +6336,9 @@ function renderTrend(){
   const x=xMeses();
   if(area==='__global'&&ST.genReady){refreshTrMetricOptions();const gmk=$('trMetric').value;renderTrendGen(GTREND[gmk]?gmk:'gprod',x);return;}
   const mk=$('trMetric').value,M=METRICS[mk];
-  const noDeg=M.deg&&!tieneDesglose(area);
+  /* (28/09/2026) No hay serie solo si el area no separa en NINGUN mes de los dos escenarios (FYV).
+     FRESCOS si la tiene: desde julio de 2026, con los meses de antes vacios. */
+  const noDeg=M.deg&&!separaEnSerie(area);
   // sin escala: serie() ya devuelve el valor en la unidad activa (elige columna, no multiplica)
   const sA=(noDeg?[]:serie(curA.tienda,curA.shift,area,mk)),sB=(noDeg?[]:serie(curB.tienda,curB.shift,area,mk));
   const lineA='#5b8fd6',ref=cssv('--ref'),good=cssv('--good'),bad=cssv('--bad');
@@ -6242,9 +6370,13 @@ function renderTrend(){
   $('trendTitle').textContent=M.label+(M.unit?' ('+M.unit+')':'')+(area==='__global'?'':' · '+area);
   /* el subtitulo dice SOLO quien es quien: el rango de meses ya esta en el eje x, la unidad en
      el titulo, y que la referencia va punteada lo dice la leyenda. */
-  $('trendSub').innerHTML=ST.single
+  /* (28/09/2026) Si el area solo separa en parte de los meses, se dice desde cuando: un hueco en la
+     serie no puede parecer un fallo. */
+  const _sm=(M.deg&&!tieneDesglose(area))?sepMeses(area):null;
+  const _parc=(_sm&&_sm.pri&&_sm.hayNo)?' · <span style="color:var(--ink3-txt)">'+areaNom(area)+' separa picking y desplazamiento desde '+mesTxt(_sm.pri)+'</span>':'';
+  $('trendSub').innerHTML=(ST.single
     ? '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span>'
-    : '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span> frente a <span style="font-weight:700">'+ST.nameB+'</span>';
+    : '<span style="color:'+realC+';font-weight:700">'+ST.nameA+'</span> frente a <span style="font-weight:700">'+ST.nameB+'</span>')+_parc;
 }
 // (v6.3) renderTrendInsights y renderTrendWatch eliminadas: no se invocaban desde ningún sitio
 
@@ -6261,7 +6393,7 @@ function renderFicha(){
   const GRP=!!window.__GROUP;
   const fcomp=GRP
     ? [{k:'g_prep',name:'Preparación',col:'--f-prep',code:'P1·P2·P3',keys:['p1','p2','p3','p23'],mk:'m_prep'},{k:'p4',name:'Pesaje',col:'--f-pesaje',code:'P4',keys:['p4'],mk:'pesaje'},{k:'g_cons',name:'Consolidación',col:'--f-consol',code:'P5·P6',keys:['p5','p6'],mk:'m_cons'},{k:'p7',name:'Entre lotes',col:'--f-entre',code:'P7',keys:['p7'],mk:'entre'}]
-    : fasesComp(m.area);
+    : fasesComp(m.compat);   // (28/09) segun los dos escenarios, no segun el nombre del area
   const fval=(row,f)=>{ if(!row)return null; if(f.keys){let s=0,any=false;f.keys.forEach(k=>{const v=row[MINKEY[k]];if(v!=null){s+=v;any=true;}});return any?s:null;} return row[MINKEY[f.k]]; };
   let h='<div class="fkpi">';
   h+=fk('Productividad',m.prodA,m.prodB,m.dProd,true,3,0.005);
@@ -6295,7 +6427,11 @@ function renderFicha(){
      titulo, que es donde se busca un filtro. */
   h+='<div class="cbox"><div class="cbox-in"><button class="png" data-png="cFevo" data-pngname="evolucion_area" data-pngtitle="'+esc1(((METRICS[ST.fichaFase]&&METRICS[ST.fichaFase].label)||ST.fichaFase)+' · '+ST.fichaArea)+'" data-pngsub="'+esc1([scnSub(),udName()].filter(Boolean).join(' · '))+'">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle">Evolución · '+ST.fichaArea+'</div><div class="csub">'+refSub('')+'</div></div><select id="fichaFaseSel" style="width:auto;min-width:150px;margin-right:92px">'+opts.map(o=>opt(o.v,o.l,o.v===ST.fichaFase)).join('')+'</select></div><div class="chart" id="cFevo"></div></div></div>';
   h+='<div class="card" style="margin-top:15px"><div class="cpad"><div class="sec-n" style="margin-bottom:11px">Lectura automática</div><div class="fread">'+lecturaArea(m)+'</div>';
-  if(!m.compat)h+='<div class="notice warn" style="margin-top:13px"><span class="ic">!</span><span>En <b>'+m.area+'</b> la preparación no separa picking y desplazamiento, así que se lee como un solo bloque y no hay ratio ni desplazamiento total comparables.</span></div>';
+  /* (28/09/2026) Si solo UNO de los dos separa (FRESCOS de julio frente al de junio, o frente al
+     objetivo), se dice eso: decir que el area "no separa" seria falso en uno de los dos lados. */
+  if(!m.compat)h+='<div class="notice warn" style="margin-top:13px"><span class="ic">!</span><span>'+(m.sepA!==m.sepB
+    ? 'En <b>'+m.area+'</b> solo uno de los dos escenarios separa picking y desplazamiento, así que se comparan como un solo bloque y no hay ratio ni desplazamiento total comparables.'
+    : 'En <b>'+m.area+'</b> la preparación no separa picking y desplazamiento, así que se lee como un solo bloque y no hay ratio ni desplazamiento total comparables.')+'</span></div>';
   h+='</div></div>';
   host.innerHTML=h;
   renderFevo();
@@ -7036,7 +7172,7 @@ function answer(q){
   if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+'/mes de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
   if(has('caudal','flota MOT','ancla','horario')) return 'El caudal (horas por indicador: ancla, horario, real) está en la pestaña <b>Caudal</b> del menú de arriba.';
   if(has('otra tienda','otras tiendas','ranking','ranquin','mejores tiendas','peores tiendas','comparar tiendas','qué tienda','que tienda')) return 'Para comparar tiendas entre sí usa el modo <b>Ranking de tiendas</b> del menú: ordena por la métrica que quieras y pulsa una para abrirla aquí.';
-  if(s.includes('ratio')||s.includes('equilibrio')){const c=av.filter(m=>m.compat&&m.dRatio!=null);if(!c.length)return 'No hay áreas con ratio disponible (Frescos y FYV no se separan).';const peor=[...c].sort((a,b)=>b.dRatio-a.dRatio)[0];return 'El peor ratio desplazamiento/picking frente a la referencia está en <b>'+peor.area+'</b>: '+fmt(peor.ratioA,2)+' vs '+fmt(peor.ratioB,2)+'. Hay demasiado desplazamiento por cada minuto de picking.';}
+  if(s.includes('ratio')||s.includes('equilibrio')){const c=av.filter(m=>m.compat&&m.dRatio!=null);/* (28/09) sin nombres fijos: FRESCOS separa desde julio de 2026 */if(!c.length)return 'No hay áreas con ratio disponible: ninguna separa picking y desplazamiento en los dos escenarios.';const peor=[...c].sort((a,b)=>b.dRatio-a.dRatio)[0];return 'El peor ratio desplazamiento/picking frente a la referencia está en <b>'+peor.area+'</b>: '+fmt(peor.ratioA,2)+' vs '+fmt(peor.ratioB,2)+'. Hay demasiado desplazamiento por cada minuto de picking.';}
   if(s.includes('desplazamiento total')||s.includes('despl total')){const c=av.filter(m=>m.compat&&m.dDesplTot!=null);if(!c.length)return 'Sin desplazamiento total comparable.';const peor=[...c].sort((a,b)=>b.dDesplTot-a.dDesplTot)[0];return 'En desplazamiento total (arranque+desplazamiento+traslado+entre lotes), donde más se desvía es <b>'+peor.area+'</b> ('+sg(peor.dDesplTot)+fmt(peor.dDesplTot,1)+' min/lote).';}
   if(s.includes('tarda')||s.includes('largo')){const m=[...av].filter(x=>x.tiempoA!=null).sort((a,b)=>b.tiempoA-a.tiempoA)[0];return 'El lote más largo de <b>'+ST.nameA+'</b> es <b>'+m.area+'</b>: '+fmt(m.tiempoA,1)+' min/lote.';}
   if(s.includes('entre lote')||s.includes('continuidad')){const m=[...av].filter(x=>x.gaps.p7!=null).sort((a,b)=>b.gaps.p7-a.gaps.p7)[0];return 'En tiempo entre lotes, donde más se desvía <b>'+ST.nameA+'</b> es <b>'+m.area+'</b> ('+sg(m.gaps.p7)+fmt(m.gaps.p7,2)+' min vs '+ST.nameB+').';}
@@ -9012,7 +9148,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
 
 <script>
 /* ===== FAROLAS: media DIA-IGUAL por mes (cada tienda-dia pesa lo mismo).
-   Siempre unidades Mdonadona. Objetivos fijos. Dos modos: contra referencia o contra si mismo. ===== */
+   Siempre unidades Mdona. Objetivos fijos. Dos modos: contra referencia o contra si mismo. ===== */
 (function(){
   var FAR_URL='https://raw.githubusercontent.com/jrodrbr/Javify/refs/heads/main/Javify_Farolas.csv';
   var LOADED=false, LOADING=false, PENDING=false, ROWS=[], DIMV={}, NAMES={}, MESES=[];
