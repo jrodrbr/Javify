@@ -532,8 +532,21 @@
       g.fin = ahora();
       if(g.movido) return;                                  /* era scroll: no se elige nada */
       if(dist(g, ev.clientX, ev.clientY) > UMBRAL) return;
+      var antes = pop.__jvSello;
       elegir(fila(ev.target), ev, g);
+      /* (29/09/2026) EL CLICK FANTASMA. Con el dedo se elige aqui, en el pointerup, y la lista se cierra
+         en el acto. Despues el navegador manda el mousedown/mouseup/click de compatibilidad de ESE
+         toque, que ya no cae en la lista sino en lo que habia debajo. Medido en el banco (iPhone
+         390x844, 30 elecciones en los dos campos de tienda): en las 30 el click caia debajo, y en 10
+         sobre algo que reacciona: el campo de la referencia (se abria y se vaciaba: "me vuelve a
+         pedir la tienda"), los desplegables de mes y de turno, "Mismo mes y turno" y "Cambiar
+         escenarios". Se anula ese click, y solo ese (ver tragar). */
+      if(pop.__jvSello !== antes && g.tipo !== 'mouse') tragar(ev.clientX, ev.clientY);
     });
+    /* el mismo toque acaba en touchend: cancelarlo quita los eventos de raton y el click */
+    pop.addEventListener('touchend', function(ev){
+      if(trago && (ahora() - trago.t) < 400 && ev.cancelable) ev.preventDefault();
+    }, { passive:false });
     /* respaldo: raton, teclado, y Safari cuando no manda el pointerup */
     pop.addEventListener('click', function(ev){
       var g = pop.__jvG;
@@ -548,6 +561,26 @@
       if(fila(ev.target)) ev.preventDefault();
     });
   }
+
+  /* -------- (29/09/2026) el click fantasma tras elegir con el dedo (ver pointerup) --------------
+     Red por si el navegador no deja cancelar el touchend o lo manda antes que el pointerup: el
+     mousedown/mouseup/click que llegue en los 700 ms siguientes y a menos de 40 px del dedo se
+     anula. Un toque nuevo (touchstart) lo desarma: ese click si es de verdad. */
+  var trago = null;
+  function tragar(x, y){ trago = { t:ahora(), x:x, y:y }; }
+  function fantasma(ev){
+    if(!trago) return false;
+    if((ahora() - trago.t) > 700){ trago = null; return false; }
+    return (ev.clientX != null && Math.abs(ev.clientX - trago.x) <= 40 && Math.abs(ev.clientY - trago.y) <= 40);
+  }
+  ['mousedown','mouseup','click'].forEach(function(tipo){
+    document.addEventListener(tipo, function(ev){
+      if(!fantasma(ev)) return;
+      ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      if(tipo === 'click') trago = null;             /* un solo click por toque */
+    }, true);
+  });
+  document.addEventListener('touchstart', function(){ if(trago && (ahora() - trago.t) > 60) trago = null; }, { capture:true, passive:true });
 
   /* -------- cierre que respeta el gesto ----------------------------------------------------- */
   function cerrarLuego(pop, cerrar, ms){
@@ -3564,38 +3597,74 @@ window.__uniLoad=function(cb){
     var w=window.__uniWaiters; window.__uniWaiters=[];
     w.forEach(function(f){ try{ f(err,out); }catch(e){ console.warn('uni cb',e); } });
   };
-  var bajar=function(intento){
-  Papa.parse(window.__UNI_URL,{download:true,header:true,skipEmptyLines:true,delimiter:'',
-    transformHeader:function(h){ return h.trim(); },
-    complete:function(res){
-      var out={detalle:[],general:[],objetivo:[]}, sinCol=0;
-      (res.data||[]).forEach(function(r){
-        var d=String(r.dataset||'').trim();
-        if(out[d]) out[d].push(r); else sinCol++;
-      });
-      if(sinCol && !out.detalle.length){          // ¿es un CSV antiguo, sin columna dataset?
-        out.detalle=res.data||[];
-        console.warn('El CSV no trae columna dataset: se trata entero como detalle.');
+  /* (29/09/2026) EL CSV SE LEE FILA A FILA Y EL DESGLOSE SE COMPACTA SEGUN SE LEE.
+     Antes Papa.parse montaba de golpe TODAS las filas como objetos de 134 columnas de texto, y se
+     quedaban para siempre en window.__uni.detalle aunque solo se leian una vez (buildFromRows las
+     pasaba a ST.rows). Medido en Chromium con el CSV de 13 meses (72.927 filas de desglose, iPhone
+     390x844): pico de 868 MB durante la carga y 628 MB retenidos al acabar, 284 MB de ellos esas filas de texto que nadie volvia a mirar. En Safari esos objetos pesan todavia mas (pasadas 64 columnas cada fila
+     lleva su propia tabla de nombres) y el iPhone cierra la pagina cuando se queda sin memoria: al
+     girar o al tocar cosas salia "Cargando datos" una y otra vez y al final "se ha producido un
+     problema repetidamente". Ahora el texto se recorre con step, una fila cada vez y como lista (no
+     como objeto), y cada fila del desglose pasa a su fila compacta en el momento con compactaDet, la
+     MISMA conversion que hacia buildFromRows. Con eso: pico de 327 MB y 197 MB retenidos (con Farolas leido igual, ver farolasInit), y los mismos datos valor a valor: ST.rows, ST.index, ST.gen y las filas de Farolas dan 0 diferencias. Con el heap de V8 limitado, como en un movil, la version anterior revienta al cargar con 700 MB; esta carga, gira 10 veces, cambia de pestana y de vista y elige tiendas con 250 MB.
+     Los bloques general (3.066 filas) y objetivo (1.152) siguen llegando como siempre, con sus
+     nombres de columna: son pocas y sus lectores no cambian.
+     La descarga es un fetch de toda la vida, una sola peticion como antes. No se usa el download de
+     Papa.parse porque, con step, pide el fichero a trozos de 5 MB con cabeceras Range. */
+  var trocear=function(txt){
+    var out={detalle:[],general:[],objetivo:[]}, hdr=null, ix=null, iDs=-1, faltan=[], nDet=0, sinCol=0;
+    Papa.parse(txt,{header:false,skipEmptyLines:true,delimiter:'',
+      step:function(res){
+        var a=res.data;
+        if(!hdr){                                   /* la primera fila es la cabecera */
+          hdr=a.map(function(h){ return String(h).trim(); }); ix={};
+          for(var i=0;i<hdr.length;i++) ix[hdr[i]]=i;
+          iDs=(ix.dataset===undefined)?-1:ix.dataset;
+          faltan=REQUIRED.filter(function(c){ return ix[c]===undefined; });
+          return; }
+        /* sin columna dataset es un CSV antiguo: todo es desglose, como antes */
+        var d=(iDs<0)?'detalle':String(a[iDs]||'').trim();
+        if(d==='detalle'){ nDet++; if(!faltan.length){ var o=compactaDet(a,ix); if(filaDetOk(o)) out.detalle.push(o); } }
+        else if(d==='general'||d==='objetivo'){
+          var r={}; for(var j=0;j<a.length&&j<hdr.length;j++) r[hdr[j]]=a[j];
+          out[d].push(r); }
+        else sinCol++;
+      },
+      complete:function(){
+        if(iDs<0&&nDet) console.warn('El CSV no trae columna dataset: se trata entero como detalle.');
+        /* buildFromRows sabe asi que ya vienen compactas, cuantas habia antes de quitar las no
+           validas (para distinguir "vacio" de "sin filas validas") y que columnas faltan */
+        out.detalle.__compacto=true; out.detalle.__crudas=nDet; out.detalle.__faltan=faltan;
+        /* (29/09/2026) hasta que dia llega cada mes (datos_hasta, SUPER FASE 6 v7.4). Se lee ANTES de
+           avisar a nadie, para que los meses ya salgan rotulados "sin cerrar" desde el primer pintado. */
+        try{ window.__datosHasta=leeDatosHasta(out.general); }catch(e){ window.__datosHasta={}; }
+        window.__uni=out;
+        try{ if(window.__uniInfo) window.__uniInfo(out); }catch(e){}
+        avisar(null,out);
       }
-      /* (29/09/2026) hasta que dia llega cada mes (datos_hasta, SUPER FASE 6 v7.4). Se lee ANTES de
-         avisar a nadie, para que los meses ya salgan rotulados "sin cerrar" desde el primer pintado. */
-      try{ window.__datosHasta=leeDatosHasta(out.general); }catch(e){ window.__datosHasta={}; }
-      window.__uni=out;
-      try{ if(window.__uniInfo) window.__uniInfo(out); }catch(e){}
-      avisar(null,out);
-    },
-    error:function(err){
-      /* Una peticion cortada no distingue entre "no hay red", "la VPN se ha metido por medio" y
-         "el servidor ha colgado a mitad": las tres llegan igual. Se reintenta antes de rendirse. */
-      if(intento<3){ setTimeout(function(){ bajar(intento+1); }, 900*intento); return; }
-      var m=(err&&err.message)||'';
-      window.__uniErr=new Error(
-        (!m || m.indexOf('ProgressEvent')>=0)
-          ? 'la descarga se ha cortado tres veces seguidas. Suele ser la conexion o la VPN.'
-          : m);
-      avisar(window.__uniErr);
-    }
-  });
+    });
+  };
+  var fallo=function(intento,err){
+    /* Una peticion cortada no distingue entre "no hay red", "la VPN se ha metido por medio" y
+       "el servidor ha colgado a mitad": las tres llegan igual. Se reintenta antes de rendirse. */
+    if(intento<3){ setTimeout(function(){ bajar(intento+1); }, 900*intento); return; }
+    var m=(err&&err.message)||'';
+    /* fetch avisa del corte con un TypeError de texto distinto en cada navegador ("Failed to
+       fetch", "Load failed"...): es el mismo caso que el ProgressEvent de antes */
+    window.__uniErr=new Error(
+      (!m || m.indexOf('ProgressEvent')>=0 || (err instanceof TypeError))
+        ? 'la descarga se ha cortado tres veces seguidas. Suele ser la conexion o la VPN.'
+        : m);
+    avisar(window.__uniErr);
+  };
+  var bajar=function(intento){
+    try{
+      fetch(window.__UNI_URL).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+        .then(function(txt){
+          /* un fallo al LEER no se arregla descargando otra vez: se da por perdido a la primera */
+          try{ trocear(txt); }catch(e){ console.warn('Datos: al leer',e); fallo(3,e); }
+        }, function(err){ fallo(intento,err); });
+    }catch(e){ fallo(intento,e); }
   };
   bajar(1);
 };
@@ -4115,6 +4184,43 @@ EXTRA_COLS.push('total_min_efec_medio','total_min_paradas_medio','prod_efectiva_
 // unidades MERCADONA: calculadas en el SQL, no convertidas. Sin ellas la vista Mercadona del
 // desglose y del CSV de objetivos se quedaria vacia.
 EXTRA_COLS.push('uds_media_lote_mcd','prod_total_min_ud_media_mcd','prod_efectiva_min_ud_media_mcd');
+/* ===== (29/09/2026) LA FILA COMPACTA DEL DESGLOSE, CON FORMA FIJA =====
+   Cada fila de ST.rows lleva 74 campos. Nacia con cinco ({tienda,shift,area,mesKey,vet}) y se le iban
+   anadiendo las columnas una a una con o[c]=...: pasadas unas pocas, V8 la convierte en diccionario,
+   y Safari hace lo mismo pasadas 64, con una tabla de nombres propia en CADA fila. Ahora todas nacen
+   de un mismo constructor que declara los campos de una vez y en el mismo orden, y comparten forma.
+   Un campo que antes no se creaba (una columna extra vacia, _sep hasta que marcaSep la marca) nace
+   con undefined, que es justo lo que devolvia leerlo cuando no existia. Lo usan tambien las medias
+   de Zona, Region, Laboratorio y Liebres (buildAggregates). */
+const DET_CAMPOS=(function(){ const v=['tienda','shift','area','mesKey','vet'];
+  NUMC.concat(EXTRA_COLS).forEach(c=>{ if(v.indexOf(c)<0) v.push(c); });
+  if(v.indexOf('_sep')<0) v.push('_sep');
+  return v; })();
+const FilaDet=(function(){ try{
+    if(!DET_CAMPOS.every(c=>/^[A-Za-z_$][\w$]*$/.test(c))) return null;
+    return new Function(DET_CAMPOS.map(c=>'this.'+c+'=undefined;').join(''));
+  }catch(e){ return null; } })();   // si el navegador no deja (CSP), objetos normales como antes
+function nuevaFilaDet(){ return FilaDet?new FilaDet():{}; }
+/* Las cadenas que se repiten en todas las filas (tienda, turno, area, mes, veterana) se guardan una
+   sola vez: cada celda del CSV era una cadena nueva, 72.927 copias de "global" o de "2026-09". */
+const _cadenas=new Map();
+function unica(s){ const x=_cadenas.get(s); if(x!==undefined) return x; _cadenas.set(s,s); return s; }
+/* De fila del CSV a fila compacta. Es la conversion que hacia buildFromRows en linea, sin cambiar
+   nada: ahora la comparten el cargador de GitHub (la fila llega como lista, con ix = columna ->
+   posicion) y el CSV arrastrado a mano (la fila llega como objeto, sin ix). */
+function celdaDet(r,ix,c){ if(!ix) return r[c]; const i=ix[c]; return i===undefined?undefined:r[i]; }
+function compactaDet(r,ix){
+  const o=nuevaFilaDet();
+  o.tienda=unica(String(celdaDet(r,ix,'tienda')).trim());
+  o.shift=unica(String(celdaDet(r,ix,'shift')||'').trim().toLowerCase());
+  o.area=unica(normArea(celdaDet(r,ix,'area_batch')));
+  o.mesKey=unica(mesKeyFromCell(celdaDet(r,ix,'mes')));
+  o.vet=unica((celdaDet(r,ix,'estado_veterana')||'').trim());
+  for(let k=0;k<NUMC.length;k++){ const c=NUMC[k]; o[c]=numv(celdaDet(r,ix,c)); }
+  for(let k=0;k<EXTRA_COLS.length;k++){ const c=EXTRA_COLS[k], v=celdaDet(r,ix,c); if(v!==undefined&&v!=='') o[c]=numv(v); }
+  return o;
+}
+function filaDetOk(r){ return r.tienda&&r.shift&&AREAS_LOAD.includes(r.area)&&r.mesKey; }
 // mapa: nombre canónico (corte 20) -> nombre real del corte elegido
 function buildCorteMap(sfx){const m={};FK.forEach(k=>{m[k+'_min_medio']=k+'_'+sfx+'_min_medio';m[k+'_pct_medio']=k+'_'+sfx+'_pct_medio';});return m;}
 const CORTE_MAP={
@@ -4346,6 +4452,14 @@ $('file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;$
 });
 function showErr(list){$('empty').classList.remove('loading');$('errbox').classList.add('show');$('errbox').innerHTML='<b>No se puede continuar:</b><br>'+list.join('<br>');setStatus('Error en el archivo','err');$('step2').style.display='none';$('modeBar').style.display='none';if($('emptyT')){$('emptyT').textContent='No se han podido cargar los datos';$('emptyP').textContent='Revisa la conexión o carga el CSV manualmente desde el panel de datos.';}}
 function buildFromRows(raw,fname){
+  /* (29/09/2026) Desde GitHub las filas llegan YA COMPACTAS (window.__uniLoad las convierte segun las
+     lee); arrastrando un CSV a mano siguen llegando como objetos de texto y se convierten aqui con la
+     misma funcion. Los avisos son los mismos por los dos caminos. */
+  const compactas=!!(raw&&raw.__compacto);
+  if(compactas){
+    if(!raw.__crudas){showErr(['El CSV está vacío.']);return;}
+    if(raw.__faltan&&raw.__faltan.length){showErr(['Faltan columnas: '+raw.__faltan.map(c=>'<code>'+c+'</code>').join(', ')]);return;}
+  } else {
   if(!raw||!raw.length){showErr(['El CSV está vacío.']);return;}
   /* Si alguien arrastra el CSV unificado entero, aqui solo interesa el bloque de detalle. */
   if(raw[0] && raw[0].dataset!==undefined){
@@ -4358,8 +4472,9 @@ function buildFromRows(raw,fname){
   const cols=Object.keys(raw[0]);
   const miss=REQUIRED.filter(c=>!cols.includes(c));
   if(miss.length){showErr(['Faltan columnas: '+miss.map(c=>'<code>'+c+'</code>').join(', ')]);return;}
+  }
   $('errbox').classList.remove('show');
-  ST.rows=raw.map(r=>{const o={tienda:String(r.tienda).trim(),shift:String(r.shift||'').trim().toLowerCase(),area:normArea(r.area_batch),mesKey:mesKeyFromCell(r.mes),vet:(r.estado_veterana||'').trim()};NUMC.forEach(c=>o[c]=numv(r[c]));EXTRA_COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')o[c]=numv(r[c]);});return o;}).filter(r=>r.tienda&&r.shift&&AREAS_LOAD.includes(r.area)&&r.mesKey);
+  ST.rows=compactas?raw.slice():raw.map(r=>compactaDet(r)).filter(filaDetOk);
   if(!ST.rows.length){showErr(['No hay filas válidas tras procesar (revisa áreas, turnos y mes).']);return;}
   /* (28/09/2026) cada fila dice si separa picking y desplazamiento (ver filaSeparada) */
   ST.rows.forEach(r=>marcaSep(r));
@@ -4457,7 +4572,7 @@ function buildAggregates(){
      Sin ellas una Zona o una Región se quedaba sin productividad efectiva y, en vista Mercadona,
      completamente vacía. */
   const AGGC=NUMC.concat(EXTRA_COLS);
-  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o={shift:sh,mesKey:mk,area:a}; AGGC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); /* (28/09) la media del grupo tambien se marca */ marcaSep(o); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
+  const build=members=>{ const idx={}; ST.meses.forEach(mk=>ST.shifts.forEach(sh=>AREAS_LOAD.forEach(a=>{ const rows=[]; members.forEach(m=>{const r=(((ST.index[m]||{})[mk]||{})[sh]||{})[a]; if(r)rows.push(r);}); if(!rows.length)return; const o=nuevaFilaDet(); /* (29/09) misma forma fija que las filas del CSV */ o.shift=sh; o.mesKey=mk; o.area=a; AGGC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});if(n)o[c]=s/n;}); /* (28/09) la media del grupo tambien se marca */ marcaSep(o); (((idx[mk]=idx[mk]||{})[sh]=idx[mk][sh]||{}))[a]=o; }))); return idx; };
   // Media de los datos GLOBALES del centro (CSV general) por mes → la usan el resumen ("Lo más importante"), la evolución 12 meses y la tendencia global (genRow/genSerie). Sin esto, los agregados no tenían histórico.
   const buildGen=(members,meta)=>{ const g={}; ST.meses.forEach(mk=>{ const rows=[]; members.forEach(m=>{const r=(ST.gen[m]||{})[mk]; if(r)rows.push(r);}); if(!rows.length)return; const o={center_name:meta.center_name,region:meta.region||'',zona:meta.zona||'',model:'',fase:'',estado:'Sintética: todas'}; GEN_NUMC.forEach(c=>{let s=0,n=0;rows.forEach(r=>{const v=r[c];if(v!=null&&!isNaN(v)){s+=v;n++;}});o[c]=n?s/n:null;}); g[mk]=o; }); return g; };
   if(window.__liebreSet&&window.__liebreSet.size){ const mem=ST.realStores.filter(t=>window.__liebreSet.has(String(t))); if(mem.length){ const idx=build(mem); if(Object.keys(idx).length){ ST.index[LIEBRE_HIST]=idx; if(ST.synthPresent.indexOf(LIEBRE_HIST)<0)ST.synthPresent.push(LIEBRE_HIST); if(ST.tiendas.indexOf(LIEBRE_HIST)<0)ST.tiendas.push(LIEBRE_HIST); ordenaRefs(); if(ST.genReady){const g=buildGen(mem,{center_name:'Tiendas Liebre'});if(Object.keys(g).length)ST.gen[LIEBRE_HIST]=g;} } } }
@@ -7702,6 +7817,8 @@ function loadGeneral(){
     if(err){ /* el aviso ya lo ha dado el cargador, una sola vez */
       if($('src2s'))$('src2s').textContent='sin datos'; if($('dot2'))$('dot2').classList.add('err'); return; }
     var res={data:uni.general};
+    /* (29/09/2026) este es su unico lector: se suelta del cargador (ver __uniLoad) */
+    try{ window.__uni.general=null; }catch(e){}
     (function(){
       try{
         const idx={};
@@ -7774,7 +7891,10 @@ if(CSV_URL){
       try{if(window.__bootStep)window.__bootStep('main');}catch(e){} return; }
     try{ buildFromRows(uni.detalle,'GitHub · auto'); }
     catch(e){ showErr(['Error procesando el CSV: '+e.message]); }
-    finally{ try{if(window.__bootStep)window.__bootStep('main');}catch(e){} }
+    finally{
+      /* (29/09/2026) las filas ya viven en ST.rows: la lista del cargador sobra (ver __uniLoad) */
+      try{ if(window.__uni) window.__uni.detalle=null; }catch(e){}
+      try{if(window.__bootStep)window.__bootStep('main');}catch(e){} }
   });
 }
 loadObjetivos();  // carga (si existe) el CSV de objetivos liebre como tienda de referencia
@@ -7862,6 +7982,8 @@ window.loInit=function(){ if(window._loInit)return; window._loInit=1;
   window.__uniLoad(function(err,uni){
     if(err){ fail(err&&err.message); return; }
     try{ build(uni.objetivo); }catch(e){ fail(e.message); console.error(e); }
+    /* (29/09/2026) este es su unico lector: se suelta del cargador (ver __uniLoad) */
+    try{ if(window.__uni) window.__uni.objetivo=null; }catch(e){}
   }); };
 function fail(m){var n=document.getElementById('lo_globNote');if(n)n.innerHTML='<div class="lo-note lo-warn"><span class="lo-ic">!</span>No se han podido cargar los objetivos. Comprueba la conexión y vuelve a intentarlo.</div>';}
 
@@ -9505,15 +9627,24 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(ST.refKind==='liebre' && ST.dim==='Otros' && ST.val==='Tiendas liebre')return true;
     return ST.refKind===ST.dim && ST.refVal===ST.val; }
 
-  function build(data){ ROWS=[]; DIMV={}; NAMES={}; var mset={};
-    for(var i=0;i<data.length;i++){ var r=data[i]; if(!r||r.Tienda===undefined)continue;
-      var o={ Region:(r.Region||'').trim(), Zona:(r.Zona||'').trim(), Tienda:(r.Tienda||'').trim(), Nombre:(r.Nombre||'').trim(),
-              Modelo:(r.Modelo||'').trim(), Fase:(r.Fase||'').trim(), mk:mkeyOf(r.Fecha), d:isoOf(r.Fecha) };
-      if(!o.Tienda)continue;
+  /* (29/09/2026) build partido en tres para leer el CSV fila a fila (ver farolasInit): antes
+     llegaban las 112.781 filas de golpe como objetos de texto y se convertian despues; ahora cada una
+     se convierte segun se lee. Las cadenas que se repiten (region, zona, tienda, nombre, modelo,
+     fase, mes y dia) se guardan una vez: eran ocho cadenas nuevas por fila. build() sigue igual
+     por fuera. */
+  var _mset=null, _cad=null;
+  function faUnica(s){ var x=_cad.get(s); if(x!==undefined) return x; _cad.set(s,s); return s; }
+  function buildIni(){ ROWS=[]; DIMV={}; NAMES={}; _mset={}; _cad=new Map(); }
+  function buildFila(r){ if(!r||r.Tienda===undefined)return;
+      var o={ Region:faUnica((r.Region||'').trim()), Zona:faUnica((r.Zona||'').trim()), Tienda:faUnica((r.Tienda||'').trim()), Nombre:faUnica((r.Nombre||'').trim()),
+              Modelo:faUnica((r.Modelo||'').trim()), Fase:faUnica((r.Fase||'').trim()), mk:faUnica(mkeyOf(r.Fecha)), d:faUnica(isoOf(r.Fecha)) };
+      if(!o.Tienda)return;
       for(var j=0;j<M.length;j++){ o[M[j].k]=num(r[M[j].k]); }
       /* unidades del dia: hacen falta para mover el objetivo del caudal (columna nueva del SQL) */
       o.cdUds=num(r.Caudal_uds);
-      if(o.mk)mset[o.mk]=1; ROWS.push(o); }
+      if(o.mk)_mset[o.mk]=1; ROWS.push(o); }
+  function build(data){ buildIni(); for(var i=0;i<data.length;i++) buildFila(data[i]); buildFin(); }
+  function buildFin(){ var mset=_mset; _mset=null; _cad=null;
     ROWS.forEach(function(r){ if(r.Nombre&&r.Tienda)NAMES[r.Tienda]=r.Nombre; });
     MESES=Object.keys(mset).sort();
     try{ ajustaCaudalRampa(); }catch(e){ console.warn('faRampaCaudal',e); }
@@ -10289,10 +10420,20 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(LOADING){ var s2=$('fa_status'); if(s2){ s2.style.display='block'; s2.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px"><span class="sdot on"></span>Cargando los datos de Farolas…</span>'; } return; }
     LOADING=true; markLoading();
     var st=$('fa_status'); if(st) st.innerHTML='<span style="display:inline-flex;align-items:center;gap:8px"><span class="sdot on"></span>Cargando Farolas…</span>';
-    Papa.parse(FAR_URL+'?cb='+Date.now(),{download:true,header:true,skipEmptyLines:true,
-      complete:function(res){ LOADING=false; try{
-        if(!res.data||!res.data.length||res.data[0].Fecha===undefined){ if(st)st.innerHTML='<span style="color:var(--bad-txt)">El CSV de Farolas no tiene las columnas esperadas.</span>'; return; }
-        build(res.data);
+    /* (29/09/2026) FILA A FILA, igual que el CSV principal (ver __uniLoad): antes Papa.parse montaba las
+       112.781 filas de golpe como objetos de texto y build() las convertia despues; con las dos
+       descargas a la vez, ese pico se sumaba al del CSV principal. Ahora cada fila se convierte segun
+       se lee (buildFila) y el texto se suelta al acabar. Mismos avisos que antes. */
+    var nFa=0, malFa=false;
+    var falloFa=function(){ LOADING=false; if(st)st.innerHTML='<span style="color:var(--bad-txt)">No se han podido cargar los datos de Farolas. Vuelve a cargar la página.</span>'; markFail('No se han podido cargar los datos de Farolas');
+        try{ if(window.__bootStep) window.__bootStep('far'); }catch(_){} };
+    var leerFa=function(txt){ buildIni(); Papa.parse(txt,{header:true,skipEmptyLines:true,
+      step:function(res,parser){ var r=res.data;
+        if(!nFa&&(!r||r.Fecha===undefined)){ malFa=true; parser.abort(); return; }
+        nFa++; buildFila(r); },
+      complete:function(){ LOADING=false; try{
+        if(malFa||!nFa){ if(st)st.innerHTML='<span style="color:var(--bad-txt)">El CSV de Farolas no tiene las columnas esperadas.</span>'; return; }
+        buildFin();
         if(!(DIMV[ST.dim]||[]).length) ST.dim='Tienda';
         ST.val=defVal(ST.dim); ST.mes=lastClosed();
         /* ===== FAROLAS ABRE SIEMPRE EN GLOBAL · VETERANA =====
@@ -10326,10 +10467,11 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         /* el ranking puede ordenar por indicadores de farolas: ahora ya se pueden ofrecer */
         try{ if(window.__rkRefreshMetrics) window.__rkRefreshMetrics(); }catch(e){}
       }catch(e){ if(st)st.innerHTML='<span style="color:var(--bad-txt)">Error al preparar Farolas: '+e.message+'</span>'; markFail('Error al preparar Farolas'); console.warn('farolas',e);
-        try{ if(window.__bootStep) window.__bootStep('far'); }catch(_){} } },
-      error:function(){ LOADING=false; if(st)st.innerHTML='<span style="color:var(--bad-txt)">No se han podido cargar los datos de Farolas. Vuelve a cargar la página.</span>'; markFail('No se han podido cargar los datos de Farolas');
-        try{ if(window.__bootStep) window.__bootStep('far'); }catch(_){} }
-    });
+        try{ if(window.__bootStep) window.__bootStep('far'); }catch(_){} } }
+    }); };
+    try{ fetch(FAR_URL+'?cb='+Date.now()).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(function(txt){ try{ leerFa(txt); }catch(e){ console.warn('farolas',e); falloFa(); } }, falloFa); }
+    catch(e){ falloFa(); }
   };
   /* PRECARGA: los datos de Farolas se descargan al abrir el dashboard (no al entrar en la pestaña).
      Mientras llegan, el botón de la pestaña queda deshabilitado. */
@@ -10476,6 +10618,225 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     if(window.__jvSize){ window.__jvSize.alMostrar(true); return; }
     schedule(true); };
   observeAll();
+})();
+</script>
+<script>
+/* ==================================================================================================
+   LO QUE ESTABAS MIRANDO SE QUEDA DONDE ESTABA  ·  window.__jvAncla   (29/09/2026)
+   --------------------------------------------------------------------------------------------------
+   POR QUE. Al girar el movil y al cambiar en Ajustes de Simple a Experto, de Bloques a Detalle, de
+   unidad o de tema, todo se vuelve a maquetar: cambia el ancho, aparecen o desaparecen secciones y
+   las graficas se repintan. El navegador conserva el scroll en PIXELES, no lo que habia en pantalla,
+   asi que te quedabas mirando otra cosa. Medido en el banco (iPhone 390x844, cuatro giros en cada
+   pestana): en 41 de 47 giros lo de arriba acababa en otro sitio, de media a 481 px y en el peor caso a 3.911 px (varias pantallas mas abajo); y al cambiar de vista en Ajustes, en 30 de 94 cambios (con Experto la barra de pestanas gana una fila y todo bajaba 69 px). Safari no tiene el anclaje de scroll de Chrome (overflow-anchor):
+   ahi no lo corrige nadie.
+
+   COMO. Se apunta que hay en la linea de lectura (justo por debajo de la barra de pestanas, que va
+   pegada arriba): el bloque que toca esa linea, a que altura esta y sus contenedores con id. Tras el
+   cambio se busca ese mismo bloque y se desplaza la pagina lo justo para devolverlo a su altura. Se
+   repite unas pocas veces mientras las graficas terminan de medirse (las pasadas del orquestador de
+   tamanos acaban a los 1.800 ms) y se deja de corregir en cuanto el dedo toca la pantalla: nunca se
+   pelea con quien esta usando la pagina.
+     · Girar: vale la ultima foto tomada CON EL ANCHO DE ANTES (se toma al parar el scroll y cada
+       1,5 s en reposo). Llegue el aviso por 'resize', 'orientationchange' o visualViewport, y en el
+       orden que lo mande iOS, se restaura esa. Si se gira otra vez a mitad, se sigue con la misma.
+       Ida y vuelta sin tocar la pantalla (en el movil, tumbado solo sale el aviso de ponerlo en
+       vertical): al volver se usa la foto de ANTES de girar, no la tomada en el ancho intermedio.
+     · Ajustes: la foto se toma al pulsar, antes de que el boton haga nada (fase de captura).
+   Si el bloque ya no esta (una seccion que solo sale en Experto) se usa su contenedor, y si tampoco,
+   el siguiente contenedor con id hacia arriba. Con esto: 0 de 46 giros y 0 de 94 cambios de vista se mueven mas de 4 px (el peor, 1 px).
+   ================================================================================================== */
+(function(){
+  if(window.__jvAncla || !document.elementsFromPoint) return;
+  var GIRO  = [60,180,400,750,1250,1900,2600];   /* ms: correcciones tras un cambio de ancho */
+  var VISTA = [0,90,250,550,1000,1600];           /* ms: correcciones tras un boton de Ajustes */
+  var ancla = null, restaurando = false, wRest = 0, pasos = [];
+  /* origen: la foto con la que empezo el ultimo giro. Si se vuelve a ese ancho sin haber tocado la
+     pantalla entre medias, se vuelve a ESA foto y no a la tomada en el ancho intermedio: tumbado, en
+     el movil, no se ve nada (sale el aviso de ponerlo en vertical) y de pie tiene que quedar
+     exactamente como estaba, no como quedo en una pantalla que no se ha visto. */
+  var origen = null;
+
+  function ancho(){ return document.documentElement.clientWidth || window.innerWidth || 0; }
+  /* dentro de algo fijo (Ajustes, avisos, el velo de carga): no es contenido de la pagina */
+  function fija(el){
+    for(var e=el; e && e.nodeType===1 && e!==document.body; e=e.parentElement){
+      if(getComputedStyle(e).position==='fixed') return true; }
+    return false; }
+  function idOk(el){ var i=el && el.id; return !!i && !/^(plotly|modebar|js-)/i.test(i); }
+  function clase(el){ return (typeof el.className==='string') ? el.className : ''; }
+  function texto(el){ return String(el.textContent||'').replace(/\s+/g,' ').trim().slice(0,80); }
+  function linea(){
+    var y=0, mb=document.getElementById('modeBar');
+    try{ if(mb && mb.offsetParent){ var r=mb.getBoundingClientRect(); if(r.bottom>0 && r.bottom<innerHeight*0.5) y=r.bottom; } }catch(e){}
+    return Math.round(y+14); }
+  /* LA BARRA DE PESTANAS. Con el movil de pie va en su sitio y se va con el scroll; tumbado, y en el
+     ordenador, se queda pegada arriba y tapa esa franja. Tres casos:
+       'pegada'  pegada arriba: tapa su alto.
+       'visible' en su sitio y a la vista (cerca del principio de la pagina).
+       'fuera'   en su sitio pero ya subida fuera de la pantalla: no tapa nada.
+     tapaAhora(): lo que taparia una vez pegada, con la maqueta de ahora (0 si ahora no se pega). */
+  function barra(){ var mb=document.getElementById('modeBar'); return (mb && mb.offsetParent) ? mb : null; }
+  function pegable(mb){ var p=getComputedStyle(mb).position; return p==='sticky' || p==='fixed'; }
+  function estadoBarra(){
+    var mb=barra(); if(!mb) return { est:'fuera', cov:0 };
+    var r=mb.getBoundingClientRect();
+    if(pegable(mb) && r.top<=1 && r.bottom>0) return { est:'pegada', cov:r.bottom };
+    if(r.bottom>0 && r.top<(innerHeight||600)) return { est:'visible', top:r.top, cov:0 };
+    return { est:'fuera', cov:0 }; }
+  function tapaAhora(){ var mb=barra(); return (mb && pegable(mb)) ? mb.getBoundingClientRect().height : 0; }
+  /* el bloque bajo la linea: fuera del SVG de Plotly y nada de texto suelto */
+  function bloque(el){
+    while(el && el.nodeType===1 && (el instanceof SVGElement)) el=el.parentElement;
+    while(el && el!==document.body && el.nodeType===1){
+      var cs=getComputedStyle(el);
+      if(cs.display!=='inline' && cs.display!=='contents' && el.getBoundingClientRect().height>=12) return el;
+      el=el.parentElement; }
+    return null; }
+  function velo(){ var o=document.getElementById('bootOv'); return !!(o && o.style.display!=='none'); }
+  function iguales(sec,tag,cls,txt){
+    var l=sec.getElementsByTagName(tag), out=[];
+    for(var i=0;i<l.length;i++){ var e=l[i];
+      if(clase(e)!==cls) continue;
+      if(txt!=null && texto(e)!==txt) continue;
+      out.push(e); }
+    return out; }
+
+  /* sube hasta algo con texto o con id: un div vacio no hay forma de reconocerlo despues */
+  function identidad(el){
+    while(el && el!==document.body && !idOk(el) && texto(el)==='') el=el.parentElement;
+    return (el && el!==document.body) ? el : null; }
+  function candidato(x,y){
+    var pila=document.elementsFromPoint(x,y), hit=null;
+    for(var i=0;i<pila.length;i++){ var e=pila[i];
+      if(!e || e===document.documentElement || e===document.body || fija(e)) continue;
+      hit=e; break; }
+    return hit ? identidad(bloque(hit)) : null; }
+  /* Lo mas concreto que hay en la linea de lectura. Si la linea cae en un hueco entre tarjetas lo que
+     toca es el contenedor de todas (en Farolas, el de las 16 graficas, que al girar pasa de una
+     columna a dos): se tantea un poco mas abajo hasta dar con algo que no ocupe casi toda la
+     pantalla. */
+  function foto(){
+    if(velo()) return null;
+    /* Con la barra a la vista (cerca del principio) lo que se ve es la cabecera, la barra y lo primero:
+       el ancla es la propia barra. Contar desde un bloque de debajo no sirve ahi: el bloque y la barra
+       bajan juntos con el scroll y "a la misma distancia de la barra" se cumple en cualquier punto. */
+    var eb=estadoBarra();
+    if(eb.est==='visible') return { w:ancho(), barra:true, top:eb.top };
+    var y0=linea(), vh=innerHeight||600, b=null, bh=Infinity, dys=[0,16,40,80], xs=[0.5,0.3,0.7];
+    for(var a=0;a<dys.length;a++){
+      for(var k=0;k<xs.length;k++){
+        var c=candidato(Math.round(innerWidth*xs[k]), y0+dys[a]); if(!c) continue;
+        var h=c.getBoundingClientRect().height;
+        if(h<bh){ bh=h; b=c; } }
+      if(b && bh<vh*0.8) break; }
+    if(!b) return null;
+    var cadena=[];
+    for(var e2=b; e2 && e2!==document.body && cadena.length<4; e2=e2.parentElement){
+      if(idOk(e2)) cadena.push({ id:e2.id, top:e2.getBoundingClientRect().top }); }
+    var fino=null;
+    if(!(cadena.length && cadena[0].id===b.id)){
+      var raiz=cadena.length ? document.getElementById(cadena[0].id) : document.body;
+      var tag=b.tagName, cls=clase(b), txt=texto(b);
+      var conTxt=iguales(raiz,tag,cls,txt), sinTxt=iguales(raiz,tag,cls,null);
+      fino={ tag:tag, cls:cls, txt:txt, k:conTxt.indexOf(b), n:conTxt.length, kc:sinTxt.indexOf(b), nc:sinTxt.length,
+             top:b.getBoundingClientRect().top };
+    }
+    return { w:ancho(), cov:eb.cov, cadena:cadena, fino:fino };
+  }
+  function desplaza(d){
+    var h=document.documentElement, antes=h.style.scrollBehavior;
+    h.style.scrollBehavior='auto';                  /* el html lleva scroll suave: aqui no */
+    try{ window.scrollBy(0,d); }catch(e){}
+    h.style.scrollBehavior=antes; }
+  /* El mismo bloque, solo si no hay duda: si ahora hay mas o menos iguales que antes, el numero de
+     orden ya no vale y se usa su contenedor. */
+  function busca(raiz,f){
+    var l=iguales(raiz,f.tag,f.cls,f.txt);
+    if(l.length && l.length===f.n && f.k>=0) return l[f.k];
+    var l2=iguales(raiz,f.tag,f.cls,null);          /* ha cambiado la cifra, no el sitio */
+    if(l2.length && l2.length===f.nc && f.kc>=0) return l2[f.kc];
+    return null; }
+  function situa(a){
+    if(!a) return false;
+    if(a.barra){                                      /* la barra, a la misma altura que estaba */
+      var mb=barra(); if(!mb) return false;
+      /* pegada arriba no puede subir por encima del borde: si estaba medio fuera (de pie va en su sitio)
+         y ahora se pega (tumbado), lo mas cerca es el borde. Sin este tope, cada pasada bajaba la
+         pagina otro tanto y seguia pegada: se desbocaba. */
+      var obj=pegable(mb) ? Math.max(0,a.top) : a.top;
+      var db=mb.getBoundingClientRect().top-obj;
+      if(Math.abs(db)>1.5) desplaza(db);
+      return true; }
+    var obj=null, top0=0;
+    if(a.fino){
+      var raiz=a.cadena.length ? document.getElementById(a.cadena[0].id) : document.body;
+      if(raiz && (raiz===document.body || raiz.offsetParent)){
+        obj=busca(raiz,a.fino); if(obj && !obj.offsetParent) obj=null;
+        if(obj) top0=a.fino.top; } }
+    if(!obj){
+      for(var i=0;i<a.cadena.length;i++){ var el=document.getElementById(a.cadena[i].id);
+        if(el && el.offsetParent){ obj=el; top0=a.cadena[i].top; break; } } }
+    if(!obj) return false;
+    var r=obj.getBoundingClientRect();
+    if(!r.width && !r.height) return false;
+    /* Lo que estabas mirando se deja a la MISMA distancia del borde de lo que se ve, descontando lo que
+       tapa la barra pegada arriba antes y ahora: en Experto la barra gana una fila (de 107 a 176 px en
+       el iPhone de pie... y pegada, tumbado) y al girar pasa de ir en su sitio a ir pegada. Contando
+       desde el borde de la pantalla quedaba tapado debajo de la barra. */
+    var d=r.top-(top0-(a.cov||0)+tapaAhora());
+    if(Math.abs(d)>1.5) desplaza(d);
+    return true; }
+  function termina(){
+    for(var i=0;i<pasos.length;i++) clearTimeout(pasos[i]);
+    pasos=[]; restaurando=false;
+    ancla=foto(); }
+  function restaura(tiempos,giro){
+    if(!ancla) return;
+    for(var i=0;i<pasos.length;i++) clearTimeout(pasos[i]);
+    var w=ancho();
+    if(giro){
+      if(!restaurando){
+        if(origen && origen.w===w) ancla=origen;            /* vuelta al ancho de antes sin tocar nada */
+        else origen=ancla; }
+    } else origen=null;                                    /* un boton de Ajustes: empieza de cero */
+    pasos=[]; restaurando=true; wRest=w;
+    var a=ancla, ult=tiempos[tiempos.length-1];
+    tiempos.forEach(function(ms){ pasos.push(setTimeout(function(){
+      try{ situa(a); }catch(e){}
+      if(ms===ult) termina(); }, ms)); }); }
+  function captura(){
+    if(restaurando || document.hidden) return;
+    if(ancla && ancho()!==ancla.w){ restaura(GIRO,true); return; }   /* ancho nuevo sin aviso: es un giro */
+    ancla=foto(); }
+  function alCambiarAncho(){
+    var w=ancho();
+    if(restaurando){ if(w!==wRest) restaura(GIRO,true); return; }  /* gira otra vez a mitad: misma foto */
+    if(ancla && w!==ancla.w) restaura(GIRO,true); }
+  /* el dedo manda: si toca la pantalla mientras se corrige, se deja de corregir, y lo que haga despues
+     vale mas que cualquier foto de antes. Tocar el aviso de "pon el movil en vertical" no cuenta: ahi
+     no se puede mover nada. */
+  function toca(ev){
+    try{ var t=ev && ev.target; if(t && t.closest && t.closest('#soloVertical')) return; }catch(e){}
+    origen=null;
+    if(restaurando) termina(); }
+
+  var tS=null;
+  window.addEventListener('scroll',function(){ if(restaurando) return; clearTimeout(tS); tS=setTimeout(captura,150); },{passive:true});
+  ['touchstart','pointerdown','wheel','keydown'].forEach(function(t){ window.addEventListener(t,toca,{passive:true,capture:true}); });
+  window.addEventListener('resize',alCambiarAncho,{passive:true});
+  window.addEventListener('orientationchange',function(){ setTimeout(alCambiarAncho,0); },{passive:true});
+  try{ if(window.visualViewport) window.visualViewport.addEventListener('resize',alCambiarAncho,{passive:true}); }catch(e){}
+  setInterval(captura,1500);
+  /* Ajustes: la foto ANTES de que el boton cambie nada (fase de captura) y las correcciones despues */
+  var cfg=document.getElementById('cfgPanel');
+  if(cfg) cfg.addEventListener('click',function(ev){
+    var b=ev.target.closest && ev.target.closest('.cfg-seg [data-v]');
+    if(!b || b.classList.contains('on')) return;
+    if(restaurando) termina();
+    ancla=foto(); if(ancla) restaura(VISTA,false); },true);
+  window.__jvAncla={ foto:foto, situa:situa, captura:captura,
+                     estado:function(){ return { ancla:ancla, restaurando:restaurando }; } };
 })();
 </script>
 
@@ -10753,6 +11114,47 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     <div style="font-size:16px;font-weight:800;color:var(--ink)">Cargando datos…</div>
   </div>
 </div>
+<!-- (29/09/2026) EN EL MOVIL, SOLO EN VERTICAL (ver el estilo de #soloVertical, justo debajo) -->
+<div id="soloVertical" role="alert" aria-live="polite">
+  <div class="sv-in">
+    <svg class="sv-ic" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+      <rect x="14" y="7" width="24" height="42" rx="5" stroke="currentColor" stroke-width="3"/>
+      <path d="M23 43h6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M44 6.6A28 28 0 0 1 45.8 47.8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M51.7 46.8L45.8 47.8L46.8 41.9" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="sv-t">Pon el móvil en vertical</div>
+    <div class="sv-s">En el móvil, Javify se usa en vertical.</div>
+  </div>
+</div>
+<style>
+/* (29/09/2026) EN EL MOVIL, SOLO EN VERTICAL
+   Un iPhone no deja a una web bloquear el giro: Safari no tiene screen.orientation.lock() y, en las
+   apps de la pantalla de inicio, no hace caso del "orientation" del manifiesto. Lo mas parecido es
+   que tumbado no haya nada que usar: con el movil en horizontal sale este aviso encima de todo y, al
+   ponerlo de pie otra vez, la pagina sigue donde estaba (window.__jvAncla).
+   Que es un movil lo dicen las medidas, no el nombre del aparato: pantalla tactil sin raton
+   (hover:none y pointer:coarse) y, tumbado, 500 px de alto como mucho. Un iPhone tumbado mide de 320
+   a 440 de alto; el iPad mas pequeno, 744. Al iPad y al ordenador no les cambia nada, y una ventana
+   de ordenador estrecha tampoco lo saca (tiene raton). */
+#soloVertical{display:none}
+@media screen and (orientation:landscape) and (max-height:500px) and (hover:none) and (pointer:coarse){
+  #soloVertical{display:flex;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;
+    padding:24px;background:var(--bg);text-align:center;touch-action:none;overscroll-behavior:contain;
+    -webkit-user-select:none;user-select:none}
+}
+#soloVertical .sv-in{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:340px}
+#soloVertical .sv-ic{color:var(--brand);margin-bottom:4px}
+#soloVertical .sv-t{font-size:18px;font-weight:800;color:var(--ink)}
+#soloVertical .sv-s{font-size:14px;color:var(--ink3-txt)}
+</style>
+<script>
+/* (29/09/2026) con el aviso puesto, arrastrar el dedo encima no mueve la pagina de debajo: al volver a
+   vertical tiene que seguir donde estaba. touch-action:none ya lo pide; esto es la red para iOS. */
+(function(){ var o=document.getElementById('soloVertical'); if(!o) return;
+  o.addEventListener('touchmove',function(e){ if(e.cancelable) e.preventDefault(); },{passive:false});
+  o.addEventListener('wheel',function(e){ e.preventDefault(); },{passive:false}); })();
+</script>
 <style>@keyframes bootSpin{to{transform:rotate(360deg)}}
 /* ===== Modo captura =====
    Mientras se genera un PNG se le quita el recorte a los contenedores con scroll y se
