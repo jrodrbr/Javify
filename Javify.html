@@ -2520,7 +2520,7 @@ body.simple #mObj{display:none!important}
       </div>
 
       <div class="pick-go">
-        <p class="pick-pv"><b id="pvA">Analizado</b><span>frente a</span><b id="pvB">Referencia</b></p>
+        <p class="pick-pv"><b id="pvA">Analizado</b><span>frente a</span><b id="pvB">Referencia</b><span id="pvMes" style="flex-basis:100%;display:none"></span></p>
       </div>
       </div>
     </div>
@@ -2672,7 +2672,7 @@ body.simple #mObj{display:none!important}
         <div class="sec-s">La diferencia traducida a <b>tiempo al mes</b> (impacto). La línea de color es el analizado; la gris, la referencia.</div>
       </div>
       <div class="modes" id="diffMetric"></div></div>
-      <div class="difhead"><span>Área</span><span>Tendencia 12 meses</span><span>Analizado / Referencia</span><span>Dif.</span><span>Impacto / mes</span></div>
+      <div class="difhead"><span>Área</span><span>Tendencia 12 meses</span><span>Analizado / Referencia</span><span>Dif.</span><span id="difImpH">Impacto / mes</span></div>
       <div class="diff" id="diffList"></div>
       <!-- la nota explicativa de Diferencias se quito a peticion de Javier (era demasiado larga).
            El <span id="diffNote"> se queda porque renderDiff() le escribe; el contenedor esta
@@ -3577,6 +3577,9 @@ window.__uniLoad=function(cb){
         out.detalle=res.data||[];
         console.warn('El CSV no trae columna dataset: se trata entero como detalle.');
       }
+      /* (29/09/2026) hasta que dia llega cada mes (datos_hasta, SUPER FASE 6 v7.4). Se lee ANTES de
+         avisar a nadie, para que los meses ya salgan rotulados "sin cerrar" desde el primer pintado. */
+      try{ window.__datosHasta=leeDatosHasta(out.general); }catch(e){ window.__datosHasta={}; }
       window.__uni=out;
       try{ if(window.__uniInfo) window.__uniInfo(out); }catch(e){}
       avisar(null,out);
@@ -3802,6 +3805,9 @@ function ultDiaMs(){
   var mk=ST.meses&&ST.meses.length?ST.meses[ST.meses.length-1]:null;
   if(!mk) return (_ultDiaMs=Date.now());
   var y=+mk.slice(0,4), m=+mk.slice(5,7);
+  /* (29/09/2026) si el ultimo mes esta sin cerrar, su ultimo dia con dato (datos_hasta): antes era el
+     ultimo dia del mes y el coeficiente promediaba dias que aun no han pasado */
+  var h=mesAbierto(mk); if(h) return (_ultDiaMs=new Date(+h.slice(0,4),+h.slice(5,7)-1,+h.slice(8,10)).getTime());
   return (_ultDiaMs=new Date(y, m, 0).getTime());      // ultimo dia de ese mes
 }
 /* FACTOR DE UN MES para una tienda. Si el CSV lo trae calculado (lo hace el SQL sobre los dias
@@ -4153,9 +4159,52 @@ function xMeses(){ return ST.meses.map(mesAA); }
 function mesCorto(k,withYear){const m=k.match(/^(\d{4})-(\d{2})$/);if(!m)return k;const me=MESES_ES[+m[2]-1];const c=me?me.charAt(0).toUpperCase()+me.slice(1):m[2];return withYear?c+' '+m[1]:c;}
 /* "2026-08" -> "Ago 26". El formato de las graficas y de las descargas: el nombre entero del mes
    ocupa media grafica y no dice nada mas. */
+/* (29/09/2026) El mes sin cerrar lleva los dias que trae: "Sep 26 (1-28)". Es el eje de todas las
+   graficas de 12 meses, la cabecera de la tienda y el caudal. */
 function mesAA(k){ const m=/^(\d{4})-(\d{2})$/.exec(String(k)); if(!m) return String(k);
-  const me=MESES_ES[+m[2]-1]||m[2];
-  return me.charAt(0).toUpperCase()+me.slice(1,3)+' '+m[1].slice(2); }
+  const me=MESES_ES[+m[2]-1]||m[2], dt=diasTramo(k);
+  return me.charAt(0).toUpperCase()+me.slice(1,3)+' '+m[1].slice(2)+(dt?(' ('+dt+')'):''); }
+/* ===== MES SIN CERRAR (29/09/2026, SUPER FASE 6 v7.4 "hasta ayer") =====
+   Con hasta_ayer el fichero trae el mes en curso hasta ayer, y el bloque 'general' dice en
+   datos_hasta el ultimo dia con dato de cada mes. Un mes cuyo ultimo dia con dato es anterior a su
+   ultimo dia natural esta SIN CERRAR. Antes Javify daba por hecho que todos lo estaban. Con un
+   fichero sin esa columna (los de antes de la v7.4) todos siguen cerrados, como hasta ahora. */
+window.__datosHasta=window.__datosHasta||{};
+function fechaISO(v){ v=String(v==null?'':v).trim(); let m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+  if(m) return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);
+  m=/^(\d{4})-(\d{2})-(\d{2})/.exec(v); return m?(m[1]+'-'+m[2]+'-'+m[3]):null; }
+function leeDatosHasta(rows){ const o={};
+  (rows||[]).forEach(r=>{ const d=fechaISO(r&&r.datos_hasta), mk=d?mesKeyFromCell(r.mes):null;
+    if(!mk||d.slice(0,7)!==mk) return; if(!o[mk]||d>o[mk]) o[mk]=d; });
+  return o; }
+/* 'AAAA-MM-DD' del ultimo dia con dato si el mes esta sin cerrar; null si esta cerrado */
+function mesAbierto(mk){ const h=(window.__datosHasta||{})[mk]; if(!h||!/^\d{4}-\d{2}$/.test(String(mk))) return null;
+  const ult=new Date(+mk.slice(0,4),+mk.slice(5,7),0).getDate(); return (+h.slice(8,10)<ult)?h:null; }
+function diasTramo(mk){ const h=mesAbierto(mk); if(!h) return ''; const d=+h.slice(8,10); return d>1?('1-'+d):'1'; }
+function tramoMes(mk){ const t=diasTramo(mk); return t?(t+' '+(MESES_ES[+mk.slice(5,7)-1]||'').slice(0,3)):''; }
+/* Rotulo de los meses en los desplegables: el mes sin cerrar sale "Ago 2026 (1-28)". Corto a
+   proposito: "sin cerrar, hasta el 28" se cortaba (en el movil se leia "Agosto 2026 · sin c", y aun
+   "Agosto 2026 (1-28" se comia el parentesis).
+   Con largo=1 (tabla del caudal, descargas del ranking), la frase entera. */
+function mesSel(k,largo){ const h=mesAbierto(k), b=(ST.mesLabel[k]||mesLabel(k)); if(!h) return b;
+  const me=(MESES_ES[+k.slice(5,7)-1]||'');
+  return largo?(b+' \u00b7 sin cerrar, hasta el '+(+h.slice(8,10))):(me.charAt(0).toUpperCase()+me.slice(1,3)+' '+k.slice(0,4)+' ('+diasTramo(k)+')'); }
+/* El mes del VOLUMEN, el de m.lotesN: el analizado, o la referencia si el analizado es el objetivo. */
+function mesVol(){ const sc=(curA&&curA.tienda===OBJ_NAME)?curB:curA; return sc?sc.mesKey:null; }
+/* Rotulo de un total del mes (horas, unidades). Mes cerrado: "/mes". Mes sin cerrar: " (1-28 sep)",
+   porque es lo acumulado hasta ayer y no un mes entero. Decision de Javier: lo real, rotulado, nada
+   proyectado. hmes() es la version para cabeceras ("Impacto / mes" -> "Impacto 1-28 sep"). */
+function pmes(){ const t=tramoMes(mesVol()); return t?(' ('+t+')'):'/mes'; }
+function hmes(base,sep){ const t=tramoMes(mesVol()); return t?(base+' '+t):(base+(sep==null?' / mes':sep)); }
+/* lo mismo para una unidad que ya trae "/mes" (el ranking, que tiene su propio mes) */
+function umes(u,mk){ const t=tramoMes(mk); return (t&&/\/\s*mes/.test(String(u||'')))?String(u).replace(/\s*\/\s*mes/,' ('+t+')'):u; }
+/* Aviso de arriba del resumen: que mes esta sin cerrar y hasta que dia llega. */
+function notaMesAbierto(){
+  const ms=[]; [curA,curB].forEach(sc=>{ if(sc&&sc.tienda!==OBJ_NAME&&mesAbierto(sc.mesKey)&&ms.indexOf(sc.mesKey)<0) ms.push(sc.mesKey); });
+  if(!ms.length) return '';
+  const mk=ms[0], h=mesAbierto(mk), d=+h.slice(8,10), mm=h.slice(5,7), vol=mesAbierto(mesVol());
+  return '<div class="notice warn" style="margin:0 0 14px"><span class="ic">!</span><span><b>'+mesLabel(mk)+' está sin cerrar</b>: hay datos hasta el '+d+'/'+mm+
+    '. Lo que se ve de ese mes es la media de esos días'+(vol?('; las horas y las unidades del mes son las del 1 al '+d+', no las de un mes entero.'):'.')+'</span></div>'; }
 /* #dotTxt y #dot no existen en el marcado desde hace varias versiones: los ids reales son
    dot1/dot2/src1s/src2s, que ya se actualizan donde toca. Esto no informaba de nada. Se deja como
    no-op para no tocar sus tres llamadas. */
@@ -4190,7 +4239,10 @@ function applyObjetivos(){
   /* UN SOLO MES, el ultimo cerrado. El objetivo es una cifra, no una serie: repartirlo por los
      doce meses pintaba una raya plana con pinta de dato medido y descuadraba el comparador al
      cambiar de mes. Con un mes se comporta como una tienda recien abierta: un punto y ya. */
-  const mkObj=ST.meses[ST.meses.length-1];
+  /* (29/09/2026) El ultimo mes CERRADO. Con un mes sin cerrar, ST.meses acaba en el, y el objetivo
+     (que sale de los 3 ultimos meses cerrados) se rotulaba como si fuera de ese mes. */
+  const _cerr=ST.meses.filter(k=>!mesAbierto(k));
+  const mkObj=_cerr.length?_cerr[_cerr.length-1]:ST.meses[ST.meses.length-1];
   ST.objMes=mkObj;
   [mkObj].forEach(mk=>ST.shifts.forEach(sh=>AREAS.forEach(a=>{ const b=OBJ_ROWS[a]; if(!b)return;
     const r=Object.assign({},b,{shift:sh,mesKey:mk});
@@ -4297,6 +4349,9 @@ function buildFromRows(raw,fname){
   if(!raw||!raw.length){showErr(['El CSV está vacío.']);return;}
   /* Si alguien arrastra el CSV unificado entero, aqui solo interesa el bloque de detalle. */
   if(raw[0] && raw[0].dataset!==undefined){
+    /* (29/09/2026) si llega el fichero entero, el "hasta que dia" de cada mes sale de su bloque general */
+    const g=raw.filter(r=>String(r.dataset||'').trim()==='general');
+    if(g.length){ try{ window.__datosHasta=leeDatosHasta(g); }catch(e){} }
     const d=raw.filter(r=>String(r.dataset||'').trim()==='detalle');
     if(d.length) raw=d;
   }
@@ -4520,21 +4575,22 @@ function availMonths(t){
 // re-rellena el selector de turno del lado w ('A'/'B') según la tienda elegida; conserva el valor si sigue disponible
 function syncShift(w){const t=$('t'+w).dataset.val,sel=$('s'+w);if(!sel)return;const sh=availShifts(t),cur=sel.value;fillSel(sel,sh,shiftLabel,sh.includes(cur)?cur:sh[0]);
   const ms=availMonths(t),msel=$('m'+w);
-  if(msel){const cur2=msel.value;fillSel(msel,ms,k=>ST.mesLabel[k],ms.includes(cur2)?cur2:ms[ms.length-1]);}}
+  if(msel){const cur2=msel.value;fillSel(msel,ms,k=>mesSel(k),ms.includes(cur2)?cur2:ms[ms.length-1]);}}   // (29/09) mesSel: "Ago 2026 (1-28)"
 function populate(){
   const last=ST.meses[ST.meses.length-1],first=ST.realStores[0];
   /* Veteranas de salida: es la comparacion que mejor se sostiene. El objetivo, el ultimo. */
   const defB=ST.tiendas.find(t=>t==='Tiendas Veteranas')||ST.tiendas.find(t=>t==='Todas las tiendas')||ST.tiendas.find(t=>t===LIEBRE_HIST)||ST.tiendas.find(t=>t===OBJ_NAME)||first,s0=ST.shifts[0];
   makeCombo('tA');makeCombo('tB');setCombo('tA',first);setCombo('tB',defB);
-  fillSel($('mA'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sA'),ST.shifts,shiftLabel,s0);
-  fillSel($('mB'),ST.meses,k=>ST.mesLabel[k],last);fillSel($('sB'),ST.shifts,shiftLabel,s0);
+  /* (29/09/2026) mesSel: el mes sin cerrar se rotula con sus dias, "Ago 2026 (1-28)" */
+  fillSel($('mA'),ST.meses,k=>mesSel(k),last);fillSel($('sA'),ST.shifts,shiftLabel,s0);
+  fillSel($('mB'),ST.meses,k=>mesSel(k),last);fillSel($('sB'),ST.shifts,shiftLabel,s0);
   $('trArea').innerHTML=opt('__global','Global tienda',true)+viewAreas().map(a=>opt(a,a)).join('');
   $('trMetric').innerHTML=METRIC_ORDER.map(k=>opt(k,METRICS[k].label,k==='prod')).join('');
   // ranking selects
   rkFillMetrics();
   $('rkArea').innerHTML=opt('__global','Todas (global)',true)+viewAreas().map(a=>opt(a,a)).join('');
   fillSel($('rkShift'),ST.shifts,shiftLabel,s0);
-  fillSel($('rkMes'),ST.meses,k=>ST.mesLabel[k],last);
+  fillSel($('rkMes'),ST.meses,k=>mesSel(k),last);
   $('rkRef').innerHTML=ST.synthPresent.map(t=>opt(t,shortStore(t),t==='Tiendas Veteranas')).join('')||opt(first,'Tienda '+first,true);
   ['mA','sA','mB','sB'].forEach(id=>$(id).addEventListener('change',preview));
   // restaurar lo ultimo que se estuvo mirando (si sigue existiendo en los datos)
@@ -4611,8 +4667,10 @@ function pickerName(w){
   return longify((w==='A'?ST.nameA:ST.nameB)||'', sc.tienda);
 }
 function smartName(s,other){
-  const dT=s.tienda!==other.tienda,dM=s.mesKey!==other.mesKey,dS=s.shift!==other.shift,sameYear=s.mesKey.slice(0,4)===other.mesKey.slice(0,4);
-  const parts=[];if(dT||(!dT&&!dM&&!dS))parts.push(shortStore(s.tienda));if(dM)parts.push(mesCorto(s.mesKey,!sameYear));if(dS)parts.push(shiftLabel(s.shift));if(!parts.length)parts.push(shortStore(s.tienda));return parts.join(' · ');
+  /* (29/09/2026) El OBJETIVO no lleva mes en el nombre: es una cifra, no un mes. Ahora vive en el ultimo
+     mes cerrado y, con el mes en curso elegido en el otro lado, salia "Objetivo · Agosto". */
+  const dT=s.tienda!==other.tienda,dM=(s.tienda!==OBJ_NAME)&&s.mesKey!==other.mesKey,dS=s.shift!==other.shift,sameYear=s.mesKey.slice(0,4)===other.mesKey.slice(0,4);
+  const parts=[];if(dT||(!dT&&!dM&&!dS))parts.push(shortStore(s.tienda));if(dM)parts.push(mesCorto(s.mesKey,!sameYear)+(diasTramo(s.mesKey)?(' ('+diasTramo(s.mesKey)+')'):''));/* (29/09) "Septiembre (1-28)" */if(dS)parts.push(shiftLabel(s.shift));if(!parts.length)parts.push(shortStore(s.tienda));return parts.join(' · ');
 }
 function syncAutoNames(){['A','B'].forEach(w=>{const inp=$('n'+w);if(inp&&inp.dataset.touched!=='1')inp.value=smartName(scn(w),scn(w==='A'?'B':'A'));});}
 function resolveNames(){const A=scn('A'),B=scn('B'),_nA=$('nA'),_nB=$('nB'),cA=_nA?_nA.value.trim():'',cB=_nB?_nB.value.trim():'';ST.nameA=cA||smartName(A,B);ST.nameB=cB||smartName(B,A);
@@ -4623,6 +4681,11 @@ function resolveNames(){const A=scn('A'),B=scn('B'),_nA=$('nA'),_nB=$('nB'),cA=_
   if(!_mismo&&ST.nameA===ST.nameB){ST.nameA+=' (analizado)';ST.nameB+=' (ref.)';}}
 function preview(){syncAutoNames();resolveNames();
   var a=$('pvA'),b=$('pvB'); if(a)a.textContent=pickerName('A'); if(b)b.textContent=pickerName('B');
+  /* (29/09/2026) justo debajo de los desplegables, con la frase entera: el desplegable solo cabe "(1-28)" */
+  try{ var pm=$('pvMes'); if(pm){ var ks=[];
+    ['A','B'].forEach(function(w){ var sc=scn(w); if(sc&&sc.tienda!==OBJ_NAME&&mesAbierto(sc.mesKey)&&ks.indexOf(sc.mesKey)<0) ks.push(sc.mesKey); });
+    if(ks.length){ var h=mesAbierto(ks[0]); pm.innerHTML='<strong>'+mesLabel(ks[0])+' está sin cerrar</strong>: hay datos hasta el '+(+h.slice(8,10))+'/'+h.slice(5,7)+'.'; pm.style.display=''; }
+    else { pm.textContent=''; pm.style.display='none'; } } }catch(e){}
   autoAnalyze();}
 /* Ya no hay boton "Analizar": si eliges otra tienda, otro mes o otro turno es porque lo
    quieres ver. Se agrupa con un pequeno retardo para que cambiar varias cosas seguidas
@@ -5155,7 +5218,7 @@ function renderSummary(){
   if(!av.length){badge='var(--ink3)';tx='No hay áreas comparables entre el analizado y la referencia. Prueba otro mes o turno.';}
   else if(impTot>30){
     badge='var(--bad)';
-    let s='<b>'+ST.nameA+'</b> pierde <span class="hot">≈ '+fmtH(impTot)+'/mes</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>. ';
+    let s='<b>'+ST.nameA+'</b> pierde <span class="hot">≈ '+fmtH(impTot)+pmes()+'</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>. ';
     if(areaImp.length&&totalPos>0){const top2=areaImp.slice(0,2),pct=top2.reduce((a,o)=>a+o.imp,0)/totalPos*100;s+='El <b>'+fmt(pct,0)+'%</b> del tiempo de más se concentra en <b>'+top2.map(o=>o.area).join('</b> y <b>')+'</b>. ';}
     if(par.length){const p2=par.slice(0,2);s+='La mayor oportunidad está en <b>'+p2.map(p=>p.area+' · '+p.faseName).join('</b> y <b>')+'</b>. ';}
     if(mesesAlej>=2)s+='No parece puntual: lleva <b>'+mesesAlej+' meses</b> alejándose de la referencia. ';
@@ -5165,7 +5228,7 @@ function renderSummary(){
     tx=s;
   } else if(impTot<-30){
     badge='var(--good)';
-    let s='<b>'+ST.nameA+'</b> ahorra <span class="cool">≈ '+fmtH(impTot)+'/mes</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>: rinde mejor. ';
+    let s='<b>'+ST.nameA+'</b> ahorra <span class="cool">≈ '+fmtH(impTot)+pmes()+'</span>'+(nTiendasImp()>1?' por tienda':'')+' frente a <b>'+ST.nameB+'</b>: rinde mejor. ';
     if(par.length){const p=par[0];s+='Aun así, donde más margen queda es <b>'+p.area+' · '+p.faseName+'</b> ('+parMag(p)+').';}else s+='No hay subprocesos con tiempo de más relevante frente a la referencia.';
     tx=s;
   } else {
@@ -5346,7 +5409,7 @@ function renderSummary(){
       if(_g!=null&&isFinite(_g)&&_g>0) _pgA=_g; }
     k.push(kpiCard('Productividad global',(_pgA),ST.single?null:(pgB),udName(),true,3,0.003));
     if(!ST.single){
-      k.push('<div class="kpi '+(impTot>30?'up':impTot<-30?'down':'')+'"><div class="kpi-l">Impacto estimado / mes'+(nTiendasImp()>1?' · por tienda':'')+' · '+impUd()+'</div><div class="kpi-v">'+fmtImpact(impTot)+'</div><div class="kpi-r">'+(impTot>0?'tiempo de más vs referencia':impTot<0?'tiempo ahorrado vs referencia':'sin impacto neto')+'</div></div>');
+      k.push('<div class="kpi '+(impTot>30?'up':impTot<-30?'down':'')+'"><div class="kpi-l">'+hmes('Impacto estimado')+(nTiendasImp()>1?' · por tienda':'')+' · '+impUd()+'</div><div class="kpi-v">'+fmtImpact(impTot)+'</div><div class="kpi-r">'+(impTot>0?'tiempo de más vs referencia':impTot<0?'tiempo ahorrado vs referencia':'sin impacto neto')+'</div></div>');
       k.push('<div class="kpi '+(nrev>2?'up':nrev>0?'':'down')+'"><div class="kpi-l">Áreas a revisar</div><div class="kpi-v">'+nrev+' <small>de '+av.length+'</small></div><div class="kpi-r">'+(nrev?'marcadas en rojo abajo':'todas en línea o mejor')+'</div></div>');
     }
     $('kpis').innerHTML=k.join('');
@@ -5363,6 +5426,8 @@ function renderSummary(){
       :'La <b>productividad global sale mejor</b> que la referencia, pero el <b>impacto sale en contra</b> (tiempo de más). Es el mismo efecto al revés: el ratio agregado mejora por el <b>mix de áreas</b>, pero al comparar <b>área por área</b> con el volumen real de '+ST.nameA+' sí aparece tiempo de más.';
     $('kpiWarn').innerHTML='<div class="notice warn" style="margin-top:14px"><span class="ic">!</span><span>'+t2+'</span></div>';
   }else if(!gA)$('kpiWarn').innerHTML='';   // en modo general, kpiWarn lleva el caudal (no borrar)
+  /* (29/09/2026) mes sin cerrar: se dice arriba del todo, encima de la tarjeta de la tienda */
+  try{ const nm=notaMesAbierto(); if(nm) $('execSummary').insertAdjacentHTML('afterbegin',nm); }catch(e){}
 }
 /* ---------------------------------------------------------------------------------------------
    TABLA DE COEFICIENTES DE IMPRODUCTIVIDAD
@@ -5398,6 +5463,7 @@ function bloqueCoefs(t,mk){
       if(ap&&p){
         var ini=new Date(+p[1],+p[2]-1,1).getTime();        // primer dia del mes
         var fin=new Date(+p[1],+p[2],0).getTime();          // dia 0 del mes siguiente = ultimo del mes
+        { var _h=mesAbierto(p[1]+'-'+p[2]); if(_h) fin=new Date(+_h.slice(0,4),+_h.slice(5,7)-1,+_h.slice(8,10)).getTime(); }   // (29/09) mes sin cerrar
         var d=function(ms,ref){ return Math.max(0,Math.floor((ms-ref)/86400000)); };
         if(fin>=ap.getTime()){ dAp0=d(ini,ap.getTime()); dAp1=d(fin,ap.getTime()); }
         var amps=ampliacionesDe(t)||[];
@@ -5515,7 +5581,7 @@ function renderCaudal(){
     /* dc es TINTA (va en color:) y db es RELLENO: la tinta usa los tokens -txt, el relleno no. */
     const dc=d==null?ink2:d>0?cssv('--bad-txt'):cssv('--good-txt'),db=d==null?'transparent':d>0?cssv('--up-soft'):cssv('--down-soft');
     rows+='<tr>'+
-      '<td style="'+td+';text-align:left;font-family:var(--ui);font-weight:700"><span class="mes-lg">'+ST.mesLabel[k]+'</span><span class="mes-sm">'+mesAA(k)+'</span></td>'+
+      '<td style="'+td+';text-align:left;font-family:var(--ui);font-weight:700"><span class="mes-lg">'+mesSel(k,1)+'</span><span class="mes-sm">'+mesAA(k)+'</span></td>'+
       '<td style="'+td+';color:var(--ink2)">'+fmt(sOpt[i],dec)+'</td>'+
       '<td style="'+td+';color:'+realT+';font-weight:850">'+fmt(sReal[i],dec)+'</td>'+
       '<td style="'+td+';color:'+efc+';font-weight:700">'+fmt(sEf[i],dec)+'</td>'+
@@ -5731,7 +5797,7 @@ function cellHTML(val,dv,imp,cv,ref,name,area,faseK,span,isTot,dec){
   const inkCls=(dv!=null&&Math.abs(dv)>eps)?(' '+cellInk(dv,ref)):'';
   let mdcls='neu',mdtxt='';if(dv!=null&&Math.abs(dv)>eps){mdcls=dv>0?'bad':'good';mdtxt=sg(dv)+fmt(dv,dec);}else if(dv!=null){mdtxt='≈0';}
   const st=(span>1?'grid-column:span '+span+';':'')+'background:'+bg;
-  return '<div class="mxc'+(isTot?' tot':'')+inkCls+'" style="'+st+'" data-area="'+area+'" data-fase="'+faseK+'" title="'+name+' · '+area+': '+fmt(val,dec)+' '+faroUnitLbl()+(dv!=null?' ('+sg(dv)+fmt(dv,dec)+' vs ref · impacto '+fmtImpact(imp)+'/mes)':'')+'"><div class="mv">'+fmt(val,dec)+'</div>'+(mdtxt?'<div class="md '+mdcls+'">'+mdtxt+'</div>':'')+'</div>';
+  return '<div class="mxc'+(isTot?' tot':'')+inkCls+'" style="'+st+'" data-area="'+area+'" data-fase="'+faseK+'" title="'+name+' · '+area+': '+fmt(val,dec)+' '+faroUnitLbl()+(dv!=null?' ('+sg(dv)+fmt(dv,dec)+' vs ref · impacto '+fmtImpact(imp)+pmes()+')':'')+'"><div class="mv">'+fmt(val,dec)+'</div>'+(mdtxt?'<div class="md '+mdcls+'">'+mdtxt+'</div>':'')+'</div>';
 }
 // Bloques del modo "Juntar": Preparación=P1+P2+P3 · Pesaje=P4 · Consolidación=P5+P6 · Entre lotes=P7
 /* abbr = como se lee en movil. Todas del mismo largo a proposito: con los nombres enteros
@@ -5911,7 +5977,7 @@ function renderFaroDetail(area,faseK){
     '<div class="fd-m"><div class="l">'+ST.nameA+'</div><div class="v">'+fmt(valA,dec)+'</div></div>'+
     (ST.single?'':'<div class="fd-m"><div class="l">'+ST.nameB+'</div><div class="v">'+fmt(valB,dec)+'</div></div>'+
     '<div class="fd-m"><div class="l">Diferencia</div><div class="v" style="color:'+(d==null?'inherit':Math.abs(d)<eps?'inherit':d>0?'var(--bad-txt)':'var(--good-txt)')+'">'+(d==null?'—':sg(d)+fmt(d,dec))+'</div></div>'+
-    '<div class="fd-m"><div class="l">Impacto / mes · '+impUd()+'</div><div class="v" style="color:'+(imp==null?'inherit':imp>0?'var(--bad-txt)':imp<0?'var(--good-txt)':'inherit')+'">'+fmtImpact(imp)+'</div></div>')+
+    '<div class="fd-m"><div class="l">'+hmes('Impacto')+' · '+impUd()+'</div><div class="v" style="color:'+(imp==null?'inherit':imp>0?'var(--bad-txt)':imp<0?'var(--good-txt)':'inherit')+'">'+fmtImpact(imp)+'</div></div>')+
     '<div class="fd-m"><div class="l">Nº de lotes</div><div class="v">'+fmt(m.lotesN,0)+'</div></div>'+
     '</div>'+
     '<div class="fd-chart"><div style="position:relative"><button class="png" data-png="cFaroDetail" data-pngname="faro_detalle"'+
@@ -5974,7 +6040,7 @@ function paretoRows(){
 }
 
 /* magnitud legible de una fila para el resumen ejecutivo */
-function parMag(p){ return (p&&p.imp!=null)?(fmtImpact(p.imp)+'/mes')
+function parMag(p){ return (p&&p.imp!=null)?(fmtImpact(p.imp)+pmes()+'')
   :('+'+fmt(p.contrib,3)+' '+udName()); }
 
 /* ===== QUÉ REVISAR PRIMERO =====
@@ -6027,9 +6093,9 @@ function renderPareto(){
   const rows=data.map((o,i)=>{cum+=o.contrib;
     const prio=(i<n80);
     const tip=o.faseName+' · '+o.area+': se desvía '+sg(o.dvUd)+fmt(o.dvUd,3)+' '+uLbl+' por unidad'
-      +(o.pesoUds!=null?(' y el área mueve '+fmt(o.pesoUds,0)+' uds/mes'):'')
+      +(o.pesoUds!=null?(' y el área mueve '+fmt(o.pesoUds,0)+' uds'+pmes()):'')
       +' → aporta '+fmt(o.contrib,3)+' '+uLbl+' al desvío global'
-      +(o.imp!=null?(' · '+fmtImpact(o.imp)+'/mes'):'')
+      +(o.imp!=null?(' · '+fmtImpact(o.imp)+pmes()+''):'')
       +(prio?' · de las que explican el 80% del desvío: empieza por aquí':'');
     return '<tr class="'+(prio?'prio':'')+'" data-a="'+o.area+'" data-f="'+o.faseK+'" style="cursor:pointer" title="'+tip.replace(/"/g,'&quot;')+'"><td><span class="fdot" style="background:'+areaColor(o.area)+'"></span>'+o.area+' · '+o.faseName+'</td><td class="an">+'+fmt(o.contrib,decC)+'</td><td>'+fmt(o.contrib/total*100,0)+'%</td><td>'+fmt(cum/total*100,0)+'%</td></tr>';
   }).join('');
@@ -6057,7 +6123,7 @@ function renderPareto(){
      seccion ("ponderada por el volumen…") y la cabecera de la columna: no se repite aqui. */
   $('paretoNote').innerHTML='Las <b>'+n80+'</b> filas marcadas explican ~el <b>80%</b> del desvío'+
     (p1?(' · la mayor es <b>'+p1.area+' · '+p1.faseName+'</b> ('+fmt(p1.contrib/total*100,0)+'%)'):'')+
-    (impTotP>0?(' · total <b>'+fmtImpact(impTotP)+'</b>/mes'):'')+
+    (impTotP>0?(' · total <b>'+fmtImpact(impTotP)+'</b>'+pmes()):'')+
     /* el faro puede estar mirando otra unidad: avisar en una linea para que no parezca contradiccion */
     (ST.faroUnit!=='prod'?('<br><span style="color:var(--ink3-txt)">Faro en <b>'+
       (ST.faroUnit==='objof'?'Objetivo oficial':ST.faroUnit==='min'?'Tiempo (min/lote)':'%')+
@@ -6144,7 +6210,7 @@ function renderDesplTot(){
   let top=null,sumDT=0,sumT=0;ad.forEach(a=>{const m=MODEL.find(x=>x.area===a);if(m.dDesplTot!=null&&(!top||m.dDesplTot>top.dDesplTot))top=m;sumDT+=m.desplTotA||0;sumT+=m.tiempoA||0;});
   const pct=sumT>0?sumDT/sumT*100:null;
   let n='';if(pct!=null)n+='En las áreas con desglose, el desplazamiento total es de media el <b>'+fmt(pct,0)+'%</b> del tiempo del lote de <b>'+ST.nameA+'</b>: mucho tiempo se va en moverse y enlazar, no solo en coger producto. ';
-  if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
+  if(top&&top.dDesplTot>0.3){const imp=top.dDesplTot*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.dDesplTot)+fmt(top.dDesplTot,1)+' min/lote, impacto '+fmtImpact(imp)+pmes()+'). ';}
   /* (28/09/2026) Las areas que se quedan fuera EN ESTA comparacion, sacadas del modelo. Antes era el
      texto fijo "Frescos y FYV", que desde julio de 2026 es falso para FRESCOS. */
   {const fu=viewAreas().filter(a=>{const m=MODEL.find(x=>x.area===a);return m&&m.disponible&&!m.compat;}).map(areaNom);
@@ -6163,7 +6229,7 @@ function renderCont(){
   const tot7=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).p7A||0),0),totT=ac.reduce((s,a)=>s+(MODEL.find(x=>x.area===a).tiempoA||0),0);
   const pct=totT>0?tot7/totT*100:null;
   let n='';if(pct!=null)n+='El tiempo entre lotes supone de media un <b>'+fmt(pct,1)+'%</b> del tiempo del lote en <b>'+ST.nameA+'</b>. ';
-  if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+'/mes). ';}
+  if(top&&top.gaps.p7>0.05){const imp=top.gaps.p7*top.lotesN;n+='Donde más se desvía es <b>'+top.area+'</b> ('+sg(top.gaps.p7)+fmt(top.gaps.p7,2)+' min/lote, impacto '+fmtImpact(imp)+pmes()+'). ';}
   n+='Es tiempo que no prepara producto: esperas, cambios de área o el carro del siguiente lote sin preparar.';
   $('contNote').innerHTML=n+' '+legSem();
 }
@@ -6185,6 +6251,7 @@ function renderDiffControls(){
 }
 function renderDiff(){
   const metric=ST.diffMetric, isUds=metric==='uds';
+  {const h=$('difImpH'); if(h) h.textContent=hmes('Impacto');}   // (29/09) "Impacto 1-28 sep" si el mes esta sin cerrar
   const rows=MODEL.filter(m=>m.disponible&&viewAreas().includes(m.area)).map(m=>({m,imp:impactoDe(m,metric)}));
   /* OJO: en la vista "Por unidades" la columna de la derecha es una DIFERENCIA de unidades por mes
      frente a la referencia, no el volumen del analizado. Puede salir negativa con toda normalidad:
@@ -6215,7 +6282,7 @@ function renderDiff(){
       '<div class="spark-wrap"><div style="flex:1;height:36px;min-width:0">'+svgSpark(sA,sB,130,36,lineColor)+'</div><span class="spark-trend '+tr.cls+'">'+(tr.ar||'')+' '+tr.txt+'</span></div>'+
       '<div class="dr-vals"><div class="dr-pair"><span class="k">Analizado</span><span class="v an">'+fmt(v.a,v.dec)+'</span></div><div class="dr-pair"><span class="k">Referencia</span><span class="v rf">'+fmt(v.b,v.dec)+'</span></div></div>'+
       '<div class="dr-dif">'+deltaHtml+'</div>'+
-      '<div class="dr-imp"><div class="k">'+(isUds?'Dif. uds/mes':'Impacto/mes')+(nTiendasImp()>1?'<br><span style="font-weight:800">por tienda</span>':'')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
+      '<div class="dr-imp"><div class="k">'+(isUds?hmes('Dif. uds','/mes'):hmes('Impacto','/mes'))+(nTiendasImp()>1?'<br><span style="font-weight:800">por tienda</span>':'')+'</div><div class="v '+impCls+'">'+impHtml+'</div></div>'+
       '</div>'+
       /* la tendencia de 12 meses se abre AQUI, en un hueco justo debajo del area pulsada */
       (_abD?diffTrendRow(_selD):'');
@@ -6403,7 +6470,7 @@ function renderFicha(){
   h+=fk('Preparación',m.prepA,m.prepB,m.dPrep,true,2,0.05);
   h+='</div>';
   h+='<div class="cbox" style="margin-bottom:16px"><div class="cbox-in"><button class="csv" data-csv="fichaFaseTbl" data-csvname="tiempo_por_subproceso">⤓ CSV</button><div class="cbox-hd"><div><div class="ctitle">Cuánto tarda cada subproceso</div><div class="csub">'+(ST.single?'min/lote, en el orden del proceso':'min/lote, en el orden del proceso · impacto = diferencia × nº de lotes')+'</div></div></div>'+
-    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Subproceso</th><th>'+ST.nameA+'</th>'+(ST.single?'':'<th>'+ST.nameB+'</th><th>Diferencia</th><th>Impacto / mes · <span style="font-weight:600;color:var(--ink3-txt);text-transform:none;letter-spacing:0">'+impUd()+'</span></th>')+'<th class="spk">12 meses</th></tr></thead><tbody>';
+    '<div class="ptable-wrap"><table class="ptable" id="fichaFaseTbl"><thead><tr><th>Subproceso</th><th>'+ST.nameA+'</th>'+(ST.single?'':'<th>'+ST.nameB+'</th><th>Diferencia</th><th>'+hmes('Impacto')+' · <span style="font-weight:600;color:var(--ink3-txt);text-transform:none;letter-spacing:0">'+impUd()+'</span></th>')+'<th class="spk">12 meses</th></tr></thead><tbody>';
   /* BASE DE VOLUMEN: m.lotesN, los lotes de UNA tienda en UN mes. Antes multiplicaba por
      m.lotesA (el n_lotes de la fila), que en 'Todas las tiendas' y 'Tiendas Veteranas' llega
      SUMADO de los 256 / 218 centros: el impacto salia multiplicado por el numero de tiendas.
@@ -6465,7 +6532,7 @@ function lecturaArea(m){
   else p.push('En <b>'+m.area+'</b>, '+ST.nameA+' produce casi como '+ST.nameB+' ('+fmt(m.prodA,3)+' vs '+fmt(m.prodB,3)+' '+_u+').');
   if(m.tiempoA!=null)p.push('Cada lote tarda <b>'+fmt(m.tiempoA,1)+' min</b> (referencia '+fmt(m.tiempoB,1)+').');
   if(m.compat&&m.ratioA!=null)p.push('De cada minuto de picking hay <b>'+fmt(m.ratioA,2)+'</b> de desplazamiento (referencia '+fmt(m.ratioB,2)+')'+(m.dRatio!=null&&m.dRatio>0.1?': hay margen en el recorrido':'')+'.');
-  if(m.impacto!=null&&Math.abs(m.impacto)>=1)p.push('Impacto: <b>'+fmtImpact(m.impacto)+'/mes</b> '+(m.impacto>0?'de más':'ahorrados')+' frente a la referencia.');
+  if(m.impacto!=null&&Math.abs(m.impacto)>=1)p.push('Impacto: <b>'+fmtImpact(m.impacto)+pmes()+'</b> '+(m.impacto>0?'de más':'ahorrados')+' frente a la referencia.');
   if(m.faseTop&&Math.abs(m.faseTopVal)>0.05){ if(window.__GROUP)p.push('El bloque que más explica la diferencia es <b>'+macroOfFase(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote).'); else p.push('El subproceso que más explica la diferencia es <b>'+faseName(m.faseTop)+'</b> ('+sg(m.faseTopVal)+fmt(m.faseTopVal,2)+' min/lote)'+(FASE_REVISAR[m.faseTop]?'; revisar '+FASE_REVISAR[m.faseTop].join(', ')+'.':'.')); }
   p.push('Situación: <b>'+ESTADO_LBL[m.estado]+'</b>.');
   return p.join(' ');
@@ -6486,7 +6553,7 @@ function valorTienda(t,mk,area,shift,mes){
   }
   return metricVal(rowTMSA(t,mes,shift,area),area,mk);
 }
-function impTienda(t,ref,area,shift,mes){const list=area==='__global'?AREAS:[area];let tot=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a),rr=rowTMSA(ref,mes,shift,a);if(r&&rr&&r.prod_total_min_ud_media!=null&&rr.prod_total_min_ud_media!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tot+=(r.prod_total_min_ud_media-rr.prod_total_min_ud_media)*r.uds_media_lote*r.n_lotes;any=true;}});return any?tot:null;}
+function impTienda(t,ref,area,shift,mes){const list=area==='__global'?AREAS:[area];let tot=0,any=false;list.forEach(a=>{const r=rowTMSA(t,mes,shift,a),rr=rowTMSA(ref,(ref===OBJ_NAME&&ST.objMes)?ST.objMes:mes,shift,a);/* (29/09) ver vRef */if(r&&rr&&r.prod_total_min_ud_media!=null&&rr.prod_total_min_ud_media!=null&&r.uds_media_lote!=null&&r.n_lotes!=null){tot+=(r.prod_total_min_ud_media-rr.prod_total_min_ud_media)*r.uds_media_lote*r.n_lotes;any=true;}});return any?tot:null;}
 function prodSerieT(t,area,shift){return ST.meses.map(mk=>area==='__global'?prodGlobal(AREAS.map(a=>rowTMSA(t,mk,shift,a)).filter(Boolean)):metricVal(rowTMSA(t,mk,shift,area),area,'prod'));}
 function slopeBrecha(t,ref,area,shift){const sT=prodSerieT(t,area,shift),sR=prodSerieT(ref,area,shift);return slope(sT.map((v,i)=>(v!=null&&sR[i]!=null)?v-sR[i]:null));}
 /* ===== DESCARGAS DEL RANKING =====
@@ -7020,7 +7087,9 @@ function renderRank(){
     else if(ref===LIEBRE_HIST) vRef=window.__faGroupVal?window.__faGroupVal(r=>window.__faIsLiebre(r.Tienda),mes,FA.k):null;
     else vRef=window.__faStoreVal?window.__faStoreVal(ref,mes,FA.k):null;
   }
-  else { vRef = special?null:valorTienda(ref,mk,area,shift,mes); }
+  /* (29/09/2026) El objetivo es una cifra y vive en un solo mes (el ultimo cerrado). Leido en el mes
+     del ranking, el del mes en curso (el que sale por defecto) se quedaba sin referencia. */
+  else { vRef = special?null:valorTienda(ref,mk,area,shift,(ref===OBJ_NAME&&ST.objMes)?ST.objMes:mes); }
   if(vRef!=null&&rf!==1)vRef*=rf;  // referencia/objetivo en la unidad global
   /* Hay DOS objetivos en el panel y se llamaban igual: el de FLOTA (objAct(), 0,315 MO /
      0,340 Mdona, con su rampa por tienda) y el de las TIENDAS LIEBRE del trimestre, que es
@@ -7031,7 +7100,7 @@ function renderRank(){
      traen unit, la columna se rotulaba "valor". */
   const esHora=!!(isFa&&FA&&FA.isMin);
   const fmtV=v=>(v==null||isNaN(v))?'-':(esHora?(window.__faHHMM?window.__faHHMM(v):fmt(v,0)):fmt(v,dec));
-  const metricLabel=isFa?(esHora?'hora':(FA.unit||'valor')):(isProdMetric?udName():(isGen?G.unit:(special?(mk==='__imp'?'h / mes':mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
+  const metricLabel=isFa?(esHora?'hora':(FA.unit||'valor')):(isProdMetric?udName():(isGen?umes(G.unit,mes):(special?(mk==='__imp'?umes('h / mes',mes):mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
   const _qLbl=esAgr?(scope==='zona'?'Zona':'Región'):'Tienda';
   const rkHead='<div class="difhead"><span>'+_qLbl+'</span><span>Tendencia 12 meses</span><span>'+_qLbl+' / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
   const _exp=[];
@@ -7059,7 +7128,7 @@ function renderRank(){
       :(isGen?(ref===OBJ_NAME?(G&&G.isProd?_serObj():ST.meses.map(()=>vRef)):genSerie(ref,G.calc||G.prop)):rkSerie(ref,area,shift,special?'prod':mk));
     const tr=sparkTrend(sA,true);
     const valTxt=special?(sg(o.val)+fmt(o.val,dec)):fmtV(o.val);
-    const subTxt=isFa?(esHora?'hora':(FA.unit||'')):(isGen?G.unit:(mk==='__imp'?'h/mes':(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio')));
+    const subTxt=isFa?(esHora?'hora':(FA.unit||'')):(isGen?umes(G.unit,mes):(mk==='__imp'?umes('h/mes',mes):(mk==='__worsen'||mk==='__improve')?'/mes':(M&&M.unit||'ratio')));
     const valCls=cls==='up'?'up':cls==='down'?'down':'flat';
     const _fR=faseTienda(o.t,o.gr);
     const vetTxt=faseTxt(o.t,o.gr,o.est)+(faseAunNo(_fR,o.est)?' · aún no ese mes':'');
@@ -7119,7 +7188,7 @@ function renderRank(){
   const vetLbl=fVet==='vet'?'solo veteranas':fVet==='roll'?'solo roll out':fVet==='apr'?'solo aprendices'
     :fVet==='nov'?'solo no veteranas (roll out + aprendiz)':'';
   const ambito=isFa?('media día-igual de Farolas · '+(FA.low?'menos es mejor':'más es mejor')):(isGen?'valores globales del centro':(area==='__global'?'global (todas las áreas, ponderado del desglose)':'área '+area+' · '+shiftLabel(shift)));
-  ST._rkMeta={ metrica:lbl, ambito:ambito, mes:ST.mesLabel[mes], region:fReg||'Todas',
+  ST._rkMeta={ metrica:lbl, ambito:ambito, mes:mesSel(mes,1), region:fReg||'Todas',   // (29/09) con "sin cerrar"
     zonasFuera:_zOut, modelo:(fMod!=='__all'?fMod:''), veterania:vetLbl,
     orden:(worst?'Peores primero':'Mejores primero'), unidad:metricLabel,
     referencia:(vRef!=null?(refLbl+' '+fmtV(vRef)):''), cosa:_qCosa,
@@ -7157,7 +7226,7 @@ function answer(q){
     return 'Puedo responderte con tus datos sobre: <b>por dónde empezar</b>, una <b>área</b> (Secos, Refrigerado, Congelado, Frescos, FYV…), la <b>productividad y el objetivo</b>, los <b>tiempos por lote</b>, el <b>ratio desplazamiento/picking</b>, el <b>desplazamiento total</b>, el <b>tiempo entre lotes</b>, las <b>unidades</b> y el <b>impacto al mes</b>. Escríbeme en lenguaje normal.';
   if(has('resum','cómo voy','como voy','qué tal','que tal','visión','vision','en general','balance')){
     const t=byImp()[0],obj=objEscA(),nMal=av.filter(m=>m.prodA!=null&&m.prodA>obj+0.003).length;
-    return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>: '+(t?'donde más margen hay es <b>'+t.area+'</b> ('+fmtImpact(t.impacto)+'/mes de más; lo explica '+causaText(t)+'). ':'no hay un área que destaque por perder tiempo. ')+(nMal>0?('<b>'+nMal+' de '+av.length+'</b> áreas están por encima del objetivo de productividad ('+fmt(obj,3)+' '+udName()+').'):'La productividad va en objetivo en casi todas las áreas.');
+    return 'Comparando <b>'+ST.nameA+'</b> con <b>'+ST.nameB+'</b>: '+(t?'donde más margen hay es <b>'+t.area+'</b> ('+fmtImpact(t.impacto)+pmes()+' de más; lo explica '+causaText(t)+'). ':'no hay un área que destaque por perder tiempo. ')+(nMal>0?('<b>'+nMal+' de '+av.length+'</b> áreas están por encima del objetivo de productividad ('+fmt(obj,3)+' '+udName()+').'):'La productividad va en objetivo en casi todas las áreas.');
   }
   if(has('productividad','min/ud','min ud','objetivo','cumpl','meta')){
     const bs=[...av].filter(x=>x.prodA!=null); if(!bs.length)return 'Sin datos de productividad en estos escenarios.';
@@ -7168,8 +7237,8 @@ function answer(q){
   if(has('más rápida','mas rapida','más rápido','mas rapido','la más veloz','cuál es la más rápida')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(a.prodA)-(b.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más rápida de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt((m.prodA),3)+' '+udName()+').';}
   if(has('más lenta','mas lenta','más lento','mas lento')){const m=[...av].filter(x=>x.prodA!=null).sort((a,b)=>(b.prodA)-(a.prodA))[0];if(!m)return 'Sin datos de productividad.';return 'La área más lenta de '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt((m.prodA),3)+' '+udName()+').';}
   if(has('unidad','uds','pedidos','volumen')){const m=[...av].filter(x=>x.udsA!=null).sort((a,b)=>b.udsA-a.udsA)[0];if(!m)return 'Sin datos de unidades por lote.';return 'El lote con más unidades en '+ST.nameA+' es <b>'+m.area+'</b> ('+fmt(m.udsA,0)+' uds/lote).';}
-  if(has('impacto total','en total','suma','cuánto pierdo','cuanto pierdo','tiempo total de más','total de más')){const r=byImp();if(!r.length)return 'No hay tiempo de más destacable frente a '+ST.nameB+'.';const tot=r.reduce((sm,m)=>sm+(m.impacto||0),0);return 'En total, frente a '+ST.nameB+' hay <b>'+fmtImpact(tot)+'/mes</b> de más, repartidos en '+r.length+' áreas; la que más pesa es <b>'+r[0].area+'</b>.';}
-  if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+'/mes de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
+  if(has('impacto total','en total','suma','cuánto pierdo','cuanto pierdo','tiempo total de más','total de más')){const r=byImp();if(!r.length)return 'No hay tiempo de más destacable frente a '+ST.nameB+'.';const tot=r.reduce((sm,m)=>sm+(m.impacto||0),0);return 'En total, frente a '+ST.nameB+' hay <b>'+fmtImpact(tot)+pmes()+'</b> de más, repartidos en '+r.length+' áreas; la que más pesa es <b>'+r[0].area+'</b>.';}
+  if(has('peor','peores','oportunidad','margen','pierdo','pierde','impacto')){const t=byImp()[0];if(!t)return 'No hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';return 'El área con más impacto es <b>'+t.area+'</b>: '+fmtImpact(t.impacto)+pmes()+' de más, y lo explica sobre todo <b>'+causaText(t)+'</b>.';}
   if(has('caudal','flota MOT','ancla','horario')) return 'El caudal (horas por indicador: ancla, horario, real) está en la pestaña <b>Caudal</b> del menú de arriba.';
   if(has('otra tienda','otras tiendas','ranking','ranquin','mejores tiendas','peores tiendas','comparar tiendas','qué tienda','que tienda')) return 'Para comparar tiendas entre sí usa el modo <b>Ranking de tiendas</b> del menú: ordena por la métrica que quieras y pulsa una para abrirla aquí.';
   if(s.includes('ratio')||s.includes('equilibrio')){const c=av.filter(m=>m.compat&&m.dRatio!=null);/* (28/09) sin nombres fijos: FRESCOS separa desde julio de 2026 */if(!c.length)return 'No hay áreas con ratio disponible: ninguna separa picking y desplazamiento en los dos escenarios.';const peor=[...c].sort((a,b)=>b.dRatio-a.dRatio)[0];return 'El peor ratio desplazamiento/picking frente a la referencia está en <b>'+peor.area+'</b>: '+fmt(peor.ratioA,2)+' vs '+fmt(peor.ratioB,2)+'. Hay demasiado desplazamiento por cada minuto de picking.';}
@@ -7181,7 +7250,7 @@ function answer(q){
   if(s.includes('mejor')){const m=[...av].filter(x=>x.dProd!=null).sort((a,b)=>a.dProd-b.dProd)[0];if(m.dProd>=0)return 'Ningún área mejora con claridad a '+ST.nameB+'; la más cercana es '+m.area+'.';return '<b>'+m.area+'</b> es donde '+ST.nameA+' va mejor ('+fmt(m.dProd,3)+' min/ud).';}
   const r=[...av].filter(x=>x.impacto!=null).sort((a,b)=>(b.impacto||0)-(a.impacto||0)),t=r[0];
   if(!t||t.impacto<=0)return 'Con los datos actuales no hay un área que pierda tiempo de forma destacada frente a '+ST.nameB+'.';
-  return 'Empezaría por <b>'+t.area+'</b>: más impacto ('+fmtImpact(t.impacto)+'/mes de más). El subproceso que más lo explica es <b>'+causaText(t)+'</b>'+(t.faseTop&&FASE_REVISAR[t.faseTop]?', revisaría '+FASE_REVISAR[t.faseTop].join(', ')+'.':'.');
+  return 'Empezaría por <b>'+t.area+'</b>: más impacto ('+fmtImpact(t.impacto)+pmes()+' de más). El subproceso que más lo explica es <b>'+causaText(t)+'</b>'+(t.faseTop&&FASE_REVISAR[t.faseTop]?', revisaría '+FASE_REVISAR[t.faseTop].join(', ')+'.':'.');
 }
 
 /* ===== EXPORT ===== */
