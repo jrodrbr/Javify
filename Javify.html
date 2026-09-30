@@ -3095,6 +3095,7 @@ body.simple #mObj{display:none!important}
         <div class="h-c">Caudal · horas por indicador</div>
         <div class="s-c">Filtra el <b>ámbito</b> con las casillas. Afecta a la gráfica y a la tabla. La gráfica va siempre a nivel día.</div>
         <div id="cd_status" class="s-c" role="status" style="margin-top:8px;color:var(--up-txt);display:none"></div>
+        <div id="cd_corte"></div>
         <div id="cd_filts" class="cd-groups" style="margin-top:14px"></div>
         <div class="cd-scopebar">
           <button class="lo-tg" id="cd_onlyRR" type="button" aria-pressed="false">Solo con Usado</button>
@@ -3321,7 +3322,8 @@ body.simple #mObj{display:none!important}
              unico que las separaba eran las 16 graficas. Se queda la vista completa. -->
       </div>
 
-      <div class="fa-head"><div class="fa-title" id="fa_gname">—</div><div class="fa-sub" id="fa_gsub"></div></div>
+      <div class="fa-head"><div class="fa-title" id="fa_gname">—</div><div class="fa-sub" id="fa_gsub"></div><div class="fa-sub" id="fa_gper"></div></div>
+      <div id="fa_mesNota"></div>
 
       <div id="fa_blocks"></div>
 
@@ -4304,13 +4306,47 @@ function pmes(){ const t=tramoMes(mesVol()); return t?(' ('+t+')'):'/mes'; }
 function hmes(base,sep){ const t=tramoMes(mesVol()); return t?(base+' '+t):(base+(sep==null?' / mes':sep)); }
 /* lo mismo para una unidad que ya trae "/mes" (el ranking, que tiene su propio mes) */
 function umes(u,mk){ const t=tramoMes(mk); return (t&&/\/\s*mes/.test(String(u||'')))?String(u).replace(/\s*\/\s*mes/,' ('+t+')'):u; }
+/* ===== (29/09/2026) CADA CSV SE SACA UN DIA: QUE LLEGUEN AL MISMO =====
+   El desglose (Comparar y Ranking), las farolas y el caudal salen de tres consultas distintas y se
+   sacan por separado. Las tres llegan "hasta ayer", pero hasta el ayer del dia en que se sacaron:
+   el 29/09 el desglose llegaba al 28/09, las farolas al 7/09 (sacadas el 8/09) y el caudal real al
+   19/09. Asi septiembre no cuadraba entre pestanas: Les Planes (3413) daba Pedido 10 = 75,21 % en
+   Comparar (farolas del 1 al 7) y 76,60 % en Farolas (agosto), junto a un desglose del 1 al 28.
+   Con los mismos dias si cuadra: en julio y agosto la productividad de Farolas y la efectiva del
+   desglose difieren 0,0006 min/ud de mediana en 252 tiendas; en septiembre, 0,0077.
+   corteDistinto(a,b): dos 'AAAA-MM-DD' que NO son el mismo corte. Entre dos sacadas del mismo dia
+   puede haber un domingo (o un festivo) sin datos, asi que hace falta al menos dos dias que no sean
+   domingo entre medias para darlo por distinto. */
+function diaMes(iso){ return (+String(iso).slice(8,10))+'/'+String(iso).slice(5,7); }
+function corteDistinto(a,b){
+  if(!a||!b||a===b) return false;
+  const x=a<b?a:b, y=a<b?b:a, d=new Date(+x.slice(0,4),+x.slice(5,7)-1,+x.slice(8,10));
+  let n=0;
+  for(let i=0;i<400;i++){ d.setDate(d.getDate()+1);
+    const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(iso>y) break; if(d.getDay()!==0) n++; if(n>=2) return true; }
+  return false; }
+window.__corteDistinto=corteDistinto; window.__diaMes=diaMes;
+/* hasta que dia llega el desglose en un mes (el ultimo, si no se dice cual) */
+function hastaDesglose(mk){ const dh=window.__datosHasta||{}; if(mk) return dh[mk]||null;
+  let m=null; Object.keys(dh).forEach(k=>{ if(!m||dh[k]>m) m=dh[k]; }); return m; }
+window.__hastaDesglose=hastaDesglose;
+/* Aviso para lo que se pinta con farolas junto al desglose (roscos del resumen, "Oficial", ranking) */
+function notaCorteFa(mk,corto){
+  const fh=window.__faHasta?window.__faHasta(mk):null, dh=hastaDesglose(mk);
+  if(!corteDistinto(fh,dh)) return '';
+  const t='Las farolas llegan hasta el '+diaMes(fh)+' y el resto de esta página hasta el '+diaMes(dh)+
+    ': en '+mesLabel(mk).toLowerCase()+' sus cifras no cuadran. Hay que volver a sacar las farolas el mismo día.';
+  return corto?t:('<div class="notice warn" style="margin:0 0 12px"><span class="ic">!</span><span>'+t+'</span></div>'); }
 /* Aviso de arriba del resumen: que mes esta sin cerrar y hasta que dia llega. */
 function notaMesAbierto(){
   const ms=[]; [curA,curB].forEach(sc=>{ if(sc&&sc.tienda!==OBJ_NAME&&mesAbierto(sc.mesKey)&&ms.indexOf(sc.mesKey)<0) ms.push(sc.mesKey); });
   if(!ms.length) return '';
   const mk=ms[0], h=mesAbierto(mk), d=+h.slice(8,10), mm=h.slice(5,7), vol=mesAbierto(mesVol());
   return '<div class="notice warn" style="margin:0 0 14px"><span class="ic">!</span><span><b>'+mesLabel(mk)+' está sin cerrar</b>: hay datos hasta el '+d+'/'+mm+
-    '. Lo que se ve de ese mes es la media de esos días'+(vol?('; las horas y las unidades del mes son las del 1 al '+d+', no las de un mes entero.'):'.')+'</span></div>'; }
+    '. Lo que se ve de ese mes es la media de esos días'+(vol?('; las horas y las unidades del mes son las del 1 al '+d+', no las de un mes entero.'):'.')+
+    /* (29/09/2026) y si las farolas (roscos, "Oficial") son de otro dia, se dice aqui arriba */
+    (notaCorteFa(mk,true)?(' '+notaCorteFa(mk,true)):'')+'</span></div>'; }
 /* #dotTxt y #dot no existen en el marcado desde hace varias versiones: los ids reales son
    dot1/dot2/src1s/src2s, que ya se actualizan donde toca. Esto no informaba de nada. Se deja como
    no-op para no tocar sus tres llamadas. */
@@ -4390,10 +4426,13 @@ function renderCompFarolas(){
   if(!grp){ host.innerHTML=''; return; }                       // A = Objetivo -> no hay farolas que mostrar
   var ref=ST.single?null:faSelFromScenario(curB?curB.tienda:null);
   var head='<div class="fa-sech" style="margin-bottom:12px"><div class="t">Farolas'+
-    (ref&&window.__faSelName?(' · frente a '+window.__faSelName(ref)):'')+'</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="cf_rings" data-pngname="farolas_comparacion"'+
+    (ref&&window.__faSelName?(' · frente a '+window.__faSelName(ref)):'')+
+    /* (29/09/2026) de que dias son: con el mes sin cerrar, los de las farolas */
+    (window.__faMesLab?(' · '+window.__faMesLab(curA.mesKey)):'')+'</div><div class="r"></div><button class="png dl-in" type="button" data-pngtbl="cf_rings" data-pngname="farolas_comparacion"'+
     ' data-pngtitle="Farolas generales"'+
     ' data-pngsub="'+esc1((window.__faSelName?window.__faSelName(grp):'')+(ref&&window.__faSelName?(' frente a '+window.__faSelName(ref)):'')+' · '+mesAA(curA.mesKey))+'" title="Descarga los cuatro roscos en una sola imagen">⤓ PNG</button></div>';
-  host.innerHTML=head+'<div id="cfFaBody"></div>';
+  /* (29/09/2026) si las farolas no llegan al mismo dia que el desglose, se dice ENCIMA de los roscos */
+  host.innerHTML=head+notaCorteFa(curA.mesKey)+'<div id="cfFaBody"></div>';
   var ok=window.faSummary($('cfFaBody'),{group:grp, mesKey:curA.mesKey, ref:ref});
   if(!ok&&!$('cfFaBody').innerHTML) host.innerHTML='';
   /* El boton de PNG captura #cf_rings, que lo crea faSummary. Si esa tienda no tiene farolas
@@ -7217,7 +7256,8 @@ function renderRank(){
   const fmtV=v=>(v==null||isNaN(v))?'-':(esHora?(window.__faHHMM?window.__faHHMM(v):fmt(v,0)):fmt(v,dec));
   const metricLabel=isFa?(esHora?'hora':(FA.unit||'valor')):(isProdMetric?udName():(isGen?umes(G.unit,mes):(special?(mk==='__imp'?umes('h / mes',mes):mk==='__worsen'||mk==='__improve'?'tendencia':M&&M.unit||''):(M.unit||M.label))));
   const _qLbl=esAgr?(scope==='zona'?'Zona':'Región'):'Tienda';
-  const rkHead='<div class="difhead"><span>'+_qLbl+'</span><span>Tendencia 12 meses</span><span>'+_qLbl+' / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
+  /* (29/09/2026) un indicador de farolas con las farolas de otro dia: se avisa encima de la lista */
+  const rkHead=(isFa?notaCorteFa(mes):'')+'<div class="difhead"><span>'+_qLbl+'</span><span>Tendencia 12 meses</span><span>'+_qLbl+' / Referencia</span><span>Diferencia</span><span>'+metricLabel+'</span></div>';
   const _exp=[];
   let _selTr=null;                      // datos de la fila abierta, para pintar su tendencia
   $('rkList').innerHTML=rkHead+top.map((o,i)=>{
@@ -8698,6 +8738,16 @@ function build(data){
   VISD=new Set(DEVCOLS.map(c=>c[1]));
   LOADED=true;
   const st=$('cd_status'); if(st){ st.style.display='none'; st.textContent=''; }
+  /* (29/09/2026) El caudal se saca aparte. Si sus horas reales no llegan al mismo dia que el desglose
+     (el 29/09: caudal real hasta el 19/09, desglose hasta el 28/09), se dice aqui. Cuenta el ultimo
+     dia con Usado de verdad (tiene_realreal): lo que viene despues es plan. */
+  try{ let ult=null; ROWS.forEach(r=>{ if(r.tiene&&r.rr!=null&&r.dia&&(!ult||r.dia>ult)) ult=r.dia; });
+    const dh=window.__hastaDesglose?window.__hastaDesglose(null):null, c=$('cd_corte');
+    if(c) c.innerHTML=(window.__corteDistinto&&window.__corteDistinto(ult,dh))
+      ? '<div class="notice warn" style="margin:10px 0 0"><span class="ic">!</span><span><b>El caudal real llega hasta el '+window.__diaMes(ult)+
+        '</b> y Comparar y Ranking hasta el '+window.__diaMes(dh)+': las horas de esos días no cuadran. Hay que volver a sacar el caudal el mismo día que el resto.</span></div>'
+      : '';
+  }catch(e){}
   buildFilterUI(); if(!WIRED){wireControls();WIRED=true;} render();
 }
 
@@ -9437,6 +9487,9 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* El ranking vive en otro <script> y no alcanza a hhmm(): sin esto las horas fin salen en
      minutos desde medianoche (477 en vez de 7:57). */
   window.__faHHMM=function(x){ return (x==null||isNaN(x))?'-':hhmm(x); };
+  /* (29/09/2026) hasta que dia llegan las farolas en un mes, y su rotulo con los dias */
+  window.__faHasta=function(mk){ return LOADED?(HASTA[mk]||null):null; };
+  window.__faMesLab=function(mk){ return LOADED?mesLabFa(mk):''; };
   window.__faIsLiebre=function(t){ try{ return isLiebre({Tienda:String(t)}); }catch(e){ return false; } };
   window.__faFase=function(t){ try{ for(var i=0;i<ROWS.length;i++) if(ROWS[i].Tienda===String(t)) return ROWS[i].Fase; }catch(e){} return null; };
   /* faView: 'tabla' (todos los indicadores en una pantalla) o 'cards' (los roscos y las graficas
@@ -9633,6 +9686,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
      fase, mes y dia) se guardan una vez: eran ocho cadenas nuevas por fila. build() sigue igual
      por fuera. */
   var _mset=null, _cad=null;
+  var HASTA={};   /* (29/09/2026) ultimo dia con farolas de cada mes: 'AAAA-MM' -> 'AAAA-MM-DD' */
   function faUnica(s){ var x=_cad.get(s); if(x!==undefined) return x; _cad.set(s,s); return s; }
   function buildIni(){ ROWS=[]; DIMV={}; NAMES={}; _mset={}; _cad=new Map(); }
   function buildFila(r){ if(!r||r.Tienda===undefined)return;
@@ -9645,6 +9699,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       if(o.mk)_mset[o.mk]=1; ROWS.push(o); }
   function build(data){ buildIni(); for(var i=0;i<data.length;i++) buildFila(data[i]); buildFin(); }
   function buildFin(){ var mset=_mset; _mset=null; _cad=null;
+    HASTA={}; for(var ih=0;ih<ROWS.length;ih++){ var rh=ROWS[ih]; if(rh.mk&&rh.d&&(!HASTA[rh.mk]||rh.d>HASTA[rh.mk])) HASTA[rh.mk]=rh.d; }
     ROWS.forEach(function(r){ if(r.Nombre&&r.Tienda)NAMES[r.Tienda]=r.Nombre; });
     MESES=Object.keys(mset).sort();
     try{ ajustaCaudalRampa(); }catch(e){ console.warn('faRampaCaudal',e); }
@@ -9682,12 +9737,25 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
   /* que periodo resumen las tarjetas y los roscos: 30 dias -> ultimos 30 dias reales; resto -> ultimo mes cerrado */
   function cardSel(){ if(ST.per==='d30'){ var to=lastDay(); if(to){ var from=addD(to,-29);
         return {test:function(r){ return r.d&&r.d>=from&&r.d<=to; }, label:'últimos 30 días · '+dLab(from)+' – '+dLab(to)}; } }
-    var mk=lastClosed(); return {test:function(r){ return r.mk===mk; }, label:mesLab(mk)}; }
-  function lastClosed(){ var now=new Date(); var cur=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
-    for(var i=MESES.length-1;i>=0;i--){ if(MESES[i]<cur) return MESES[i]; } return MESES[MESES.length-1]||null; }
-  /* meses ofrecidos: desde enero del año anterior al del ultimo mes cerrado */
-  function mesesSel(){ var lc=lastClosed(); if(!lc)return []; var y=+lc.split('-')[0]; var min=(y-1)+'-01';
-    return MESES.filter(function(mk){ return mk>=min && mk<=lc; }); }
+    var mk=mesTarjetas(); return {test:function(r){ return r.mk===mk; }, label:mesLabFa(mk), mk:mk}; }
+  /* (29/09/2026) EL MISMO MES QUE EL RESTO DEL PANEL. Antes las tarjetas, los roscos y las graficas
+     acababan en el ultimo mes CERRADO segun el calendario (lastClosed), sin decir cual: el 29/09
+     Farolas ensenaba agosto mientras Comparar y Ranking abrian en septiembre (1-28), y los roscos de
+     Comparar eran de septiembre. Ahora: el mes que tenga puesto Comparar (faSetScenario lo pasa en
+     ST.mes, que antes se guardaba y no se usaba) y, si no, el ultimo con datos aunque este sin
+     cerrar, rotulado con sus dias como en Comparar: "sep 2026 (1-28)". mesesSel, que no usaba
+     nadie, fuera. */
+  function mesVista(){ return MESES[MESES.length-1]||null; }
+  function mesTarjetas(){ return (ST.mes && MESES.indexOf(ST.mes)>=0) ? ST.mes : mesVista(); }
+  /* 'AAAA-MM-DD' del ultimo dia con farolas si el mes esta sin cerrar; null si esta cerrado. Solo
+     puede estar sin cerrar el ultimo mes, y lo esta si despues de ese dia queda alguno que no sea
+     domingo (un mes que acaba en domingo no tiene farolas ese dia y esta cerrado igual). */
+  function abiertoFa(mk){ if(!mk||mk!==mesVista()) return null; var h=HASTA[mk]; if(!h) return null;
+    var y=+mk.slice(0,4), m=+mk.slice(5,7), ult=new Date(y,m,0).getDate();
+    for(var d=+h.slice(8,10)+1; d<=ult; d++){ if(new Date(y,m-1,d).getDay()!==0) return h; }
+    return null; }
+  function tramoFa(mk){ var h=abiertoFa(mk); return h?(' (1-'+(+h.slice(8,10))+')'):''; }
+  function mesLabFa(mk){ return mesLab(mk)+tramoFa(mk); }
   /* Las zonas y regiones llegan como 'Z22' y 'R03'. En pantalla van con palabra y numero
      ("Zona 22", "Región 3"), que es como se llaman, no como vienen en el CSV. */
   function faNum(v){ var n=String(v==null?'':v).replace(/\D/g,''); return n?String(+n):''; }
@@ -10023,7 +10091,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
 
   function renderCharts(){ var host=$('fa_chartSecs'); if(!host)return;
     var P=PERS[ST.per]||PERS.a2, modo=P.mode, dosAnios=(ST.per==='a2');
-    var end=lastClosed(), ld=lastDay(); if(!end)return;
+    var end=mesVista(), ld=lastDay(); if(!end)return;   /* (29/09/2026) el mes sin cerrar tambien, rotulado */
     var yA=+end.split('-')[0], yB=yA-1;
     var SECS=[{t:'Indicadores globales',ms:GLOB}].concat(GRUPOS);
     if(host._key!=='built'){ host.innerHTML=SECS.map(function(s){
@@ -10050,12 +10118,13 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         if(mo!==lm2&&lm2!==null) monthLines.push(k);
         lm2=mo; });
     } else if(dosAnios){ src=acc.m;
-      for(var q=1;q<=12;q++){ var mm=('0'+q).slice(-2); keysA.push(yA+'-'+mm); keysB.push(yB+'-'+mm); xs.push(MM[q-1]); }
+      for(var q=1;q<=12;q++){ var mm=('0'+q).slice(-2); keysA.push(yA+'-'+mm); keysB.push(yB+'-'+mm); xs.push(MM[q-1]+tramoFa(yA+'-'+mm)); }
     } else { src=acc.m;
       var pp=end.split('-'), ey=+pp[0], em=+pp[1];
       for(var z=P.n-1;z>=0;z--){ var dd2=new Date(ey,em-1-z,1); var mk3=dd2.getFullYear()+'-'+('0'+(dd2.getMonth()+1)).slice(-2);
-        keysA.push(mk3); xs.push(mesLabS(mk3)); } }
-    /* en series mensuales, el mes en curso (sin cerrar) NO se pinta: falsearia la media */
+        keysA.push(mk3); xs.push(mesLabS(mk3)+tramoFa(mk3)); } }
+    /* En series mensuales no se pinta nada despues del ultimo mes con datos. El mes en curso SI se
+       pinta (29/09/2026), rotulado con sus dias: es la media de los dias que lleva, como en Comparar. */
     function ser(k,keys){ return keys.map(function(kk){
       if(modo==='mes' && kk>end) return null;
       return gv(src,kk,k); }); }
@@ -10301,12 +10370,16 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       var st=$('fa_status'); if(st){ st.style.display='block'; st.innerHTML='<span style="color:var(--bad-txt)">No se ha podido pintar Farolas: '+e.message+'</span>'; } } }
   function render_(){ syncOtros();               // por si la lista de liebres llego despues
     if(!ST.val) ST.val=defVal(ST.dim);
-    if(!ST.mes) ST.mes=lastClosed();
+    if(!ST.mes) ST.mes=mesVista();
     var inp=$('fa_val'); if(inp&&document.activeElement!==inp) inp.value=ST.val?valLabel(ST.dim,ST.val):'';
     var ri=$('fa_ref'); if(ri&&document.activeElement!==ri) ri.value=refLabel();
     var sel=cardSel(), same=sameSet(), rows=groupRows(sel), rrows=same?[]:refRows(sel);
     if($('fa_gname')) $('fa_gname').textContent=groupName();
     if($('fa_gsub')) $('fa_gsub').textContent=same?'':('frente a '+refLabel());
+    /* (29/09/2026) de que periodo son las tarjetas y los roscos. Antes no lo decia en ningun sitio
+       (solo en el nombre del PNG) y parecian del mismo mes que Comparar. */
+    if($('fa_gper')) $('fa_gper').textContent=sel.label;
+    if($('fa_mesNota')) $('fa_mesNota').innerHTML=notaFa(sel);
     var pe=$('fa_per'); if(pe) pe.querySelectorAll('[data-p]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-p')===ST.per); });
     var sc=$('fa_scope'); if(sc) sc.querySelectorAll('[data-s]').forEach(function(x){ x.classList.toggle('on', x.getAttribute('data-s')===ST.scope); });
     syncScope();
@@ -10314,6 +10387,19 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     renderBlocks(rows,rrows,same); renderCharts();
     requestAnimationFrame(faResize); setTimeout(faResize,240); }
 
+  /* (29/09/2026) EL AVISO DE FAROLAS. Mes sin cerrar: hasta que dia hay farolas (como el de
+     Comparar). Y si las farolas no llegan al mismo dia que el desglose, que no cuadran y por que. */
+  function notaFa(sel){
+    var h='', mk=sel&&sel.mk, fh=mk?HASTA[mk]:lastDay(), ab=mk?abiertoFa(mk):null;
+    var dh=window.__hastaDesglose?window.__hastaDesglose(mk||null):null;
+    var dm=window.__diaMes||function(x){ return x; };
+    if(ab) h+='<div class="notice warn" style="margin:0"><span class="ic">!</span><span><b>'+
+      mesLab(mk).replace(/^./,function(c){ return c.toUpperCase(); })+' está sin cerrar</b>: hay farolas hasta el '+dm(ab)+
+      '. Lo que se ve de ese mes es la media de esos días.</span></div>';
+    if(window.__corteDistinto && window.__corteDistinto(fh,dh))
+      h+='<div class="notice warn" style="margin:'+(h?'10px':'0')+' 0 0"><span class="ic">!</span><span><b>No cuadra con Comparar y Ranking</b>: '+
+        'las farolas llegan hasta el '+dm(fh)+' y el resto del panel hasta el '+dm(dh)+'. Hay que volver a sacar las farolas el mismo día que el resto.</span></div>';
+    return h; }
   function tabBtn(){ return document.getElementById('mFarolas'); }
   function markLoading(){ }
   function markReady(){ var b=tabBtn(); if(b){ b.disabled=false; b.style.opacity=''; b.style.cursor=''; b.title=''; } }
@@ -10370,7 +10456,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     o=o||{};
     var grp=o.group||(o.tienda?{kind:'Tienda',val:String(o.tienda)}:null);
     if(!grp){ host.innerHTML=''; return false; }
-    var mk=o.mesKey||lastClosed(), ref=o.ref||null;
+    var mk=o.mesKey||mesVista(), ref=o.ref||null;
     var gt=selTest(grp), rt=ref?selTest(ref):null;
     var same=ref?(selKey(grp)===selKey(ref)):true;
     var rows=ROWS.filter(function(r){ return r.mk===mk && gt(r); });
@@ -10435,7 +10521,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         if(malFa||!nFa){ if(st)st.innerHTML='<span style="color:var(--bad-txt)">El CSV de Farolas no tiene las columnas esperadas.</span>'; return; }
         buildFin();
         if(!(DIMV[ST.dim]||[]).length) ST.dim='Tienda';
-        ST.val=defVal(ST.dim); ST.mes=lastClosed();
+        ST.val=defVal(ST.dim); ST.mes=mesVista();
         /* ===== FAROLAS ABRE SIEMPRE EN GLOBAL · VETERANA =====
            El AMBITO (grupo y referencia) ya NO se recuerda de una sesion a otra: al entrar
            siempre sale Global · Veterana comparado con Veteranas, que es la foto de partida.
