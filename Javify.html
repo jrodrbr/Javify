@@ -3828,19 +3828,22 @@ window.__objMCDBase=function(){ try{ return objMCD(); }catch(e){ return 0.34; } 
 function objMO(){  return (OBJ.user!=null&&!isNaN(OBJ.user))?OBJ.user*objRatio():OBJ.mo; }
 /* =================================================================================================
    EL OBJETIVO NO ES FIJO
-   Una tienda recien abierta, o recien ampliada de modelo, no puede ir al 0,34: se le da margen.
-     · APERTURA, en bloques de 30 dias desde la implantacion:
-         0-59 -> x1,23   60-119 -> x1,15   120-179 -> x1,06   180+ -> sin margen
-       Los 180 dias son el mismo corte que la veterania: la rampa acaba cuando deja de ser aprendiz.
-     · AMPLIACION DE MODELO, en bloques de 7 dias desde el cambio:
-         0-13 -> x1,06   14-27 -> x1,03   28+ -> sin margen
+   Una tienda recien abierta, o recien ampliada de modelo, no puede ir a su objetivo: se le da margen.
+   (05/10/2026) Revisados con el diario de aperturas y cambios de modelo (efectiva, corte 6), pesando
+   mas lo ultimo: este verano x3, el ultimo año x2, el anterior x1. Cada tramo es la mediana, redondeada.
+     · APERTURA, por semanas desde la implantacion:
+         dias 0-13 -> x1,32   14-34 -> x1,20   35-55 -> x1,12   56-97 -> x1,07   98-139 -> x1,04   140+ -> sin margen
+     · AMPLIACION DE MODELO, por semanas desde el cambio:
+         dias 0-6 -> x1,09   7-20 -> x1,04   21-69 -> x1,02   70+ -> sin margen
        Una REDUCCION de modelo no da margen.
-     · Si coinciden, se MULTIPLICAN: 0,34 x 1,15 x 1,06 = 0,4145.
+     · Si coinciden, se MULTIPLICAN: 0,33 x 1,07 x 1,09 = 0,3849.
+   Los 3 primeros dias de una apertura y los 3 de formacion antes de ampliar no cuentan: eso lo tiene
+   que quitar el SQL del dato de productividad, aqui no se puede porque el dato llega por mes.
    El factor es por DIA. Para un mes se promedia sobre los dias que cuentan, asi que un mes donde
    el escalon cambia a mitad sale con un factor intermedio (x1,0852, no x1,06 redondo).
    ================================================================================================= */
-const RAMPA_AP=[[60,1.23],[120,1.15],[180,1.06]];
-const RAMPA_MO=[[14,1.06],[28,1.03]];
+const RAMPA_AP=[[14,1.32],[35,1.20],[56,1.12],[98,1.07],[140,1.04]];
+const RAMPA_MO=[[7,1.09],[21,1.04],[70,1.02]];
 function facAp(d){ if(d==null||d<0)return 1; for(var i=0;i<RAMPA_AP.length;i++){ if(d<RAMPA_AP[i][0])return RAMPA_AP[i][1]; } return 1; }
 function facMo(d){ if(d==null||d<0)return 1; for(var i=0;i<RAMPA_MO.length;i++){ if(d<RAMPA_MO[i][0])return RAMPA_MO[i][1]; } return 1; }
 const _DIA=86400000;
