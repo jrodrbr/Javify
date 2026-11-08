@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Claude">
   <diagram id="objetivos" name="Objetivos de productividad">
-    <mxGraphModel dx="1616" dy="1424" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1760" pageHeight="2684" background="#FFFFFF" math="0" shadow="0">
+    <mxGraphModel dx="2640" dy="2153" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1760" pageHeight="2684" background="#FFFFFF" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="fondo" parent="0" style="locked=0;" value="Fondo (bloqueado)" />
@@ -79,7 +79,7 @@
         <mxCell id="v30" parent="1" style="shape=swimlane;startSize=60;horizontal=1;rounded=1;absoluteArcSize=1;arcSize=24;html=1;collapsible=0;fontFamily=Arial;fontSize=25;fontColor=#FFFFFF;fillColor=#1F3A5F;swimlaneFillColor=#E7ECF3;strokeColor=#1F3A5F;strokeWidth=2;" value="&lt;b&gt;GRUPO CAUDAL&lt;/b&gt;" vertex="1">
           <mxGeometry height="196" width="440" x="765" y="357" as="geometry" />
         </mxCell>
-        <mxCell id="v31" parent="v30" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;fontFamily=Arial;fontSize=25;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=0;" value="101 tiendas&amp;nbsp;&lt;br&gt;&lt;i style=&quot;background-color: transparent; color: light-dark(rgb(31, 41, 51), rgb(196, 204, 213));&quot;&gt;(R06, R07, R08, R10 + Lab 0)&lt;/i&gt;&lt;div&gt;&lt;div&gt;&lt;b&gt;&lt;span style=&quot;font-size:34px&quot;&gt;0,33 min/ud&lt;/span&gt;&lt;/b&gt;&lt;br&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="v31" parent="v30" style="text;html=1;strokeColor=none;fillColor=none;whiteSpace=wrap;fontFamily=Arial;fontSize=25;fontColor=#1F2933;align=center;verticalAlign=middle;spacing=0;" value="44 tiendas&amp;nbsp;&lt;br&gt;&lt;i style=&quot;background-color: transparent; color: light-dark(rgb(31, 41, 51), rgb(196, 204, 213));&quot;&gt;(R08 + Lab 0)&lt;/i&gt;&lt;div&gt;&lt;div&gt;&lt;b&gt;&lt;span style=&quot;font-size:34px&quot;&gt;0,33 min/ud&lt;/span&gt;&lt;/b&gt;&lt;br&gt;&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="135" width="440" y="61" as="geometry" />
         </mxCell>
         <mxCell id="v32" parent="1" style="shape=swimlane;startSize=60;horizontal=1;rounded=1;absoluteArcSize=1;arcSize=24;html=1;collapsible=0;fontFamily=Arial;fontSize=25;fontColor=#FFFFFF;fillColor=#6B7682;swimlaneFillColor=#F1F3F5;strokeColor=#6B7682;strokeWidth=2;" value="&lt;b&gt;RESTO DE TIENDAS&lt;/b&gt;" vertex="1">

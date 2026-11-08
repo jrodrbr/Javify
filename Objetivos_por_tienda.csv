@@ -49,7 +49,7 @@
 3684,Torrijos (Torrijos),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 3697,Camino Del Cementerio (Valladolid),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 3700,Barbate (Barbate),"0,33",Estudio inicial,05/11/2026,07/12/2026,
-3701,Mercat D'abrera (Abrera),"0,34",Caso especial,05/11/2026,07/12/2026,Montacargas (Drive)
+3701,Mercat D'abrera (Abrera),"0,34",Estudio inicial,05/11/2026,07/12/2026,Caso especial del Drive: montacargas
 3718,Villanueva De Gallego (Villanueva De Gallego),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 3725,Empuria Brava (Castello D'empuries),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 3729,San Isidro (La Jurada) (Granadilla De Abona),"0,33",Estudio inicial,05/11/2026,07/12/2026,
@@ -100,10 +100,10 @@
 4066,Cerdanyola (Cerdanyola Del Valles),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4068,C/ Sant Jaume (Vic),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4069,Tordera (Tordera),"0,33",Estudio inicial,05/11/2026,07/12/2026,
-4074,Vía Augusta (Tarragona),"0,34",Caso especial,05/11/2026,07/12/2026,Montacargas (Drive)
+4074,Vía Augusta (Tarragona),"0,34",Estudio inicial,05/11/2026,07/12/2026,Caso especial del Drive: montacargas
 4077,Ctra. Riaza (Segovia),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4081,C. C. Som Multiespai (Barcelona),"0,33",Estudio inicial,05/11/2026,07/12/2026,
-4088,Vielha (Vielha E Mijaran),"0,34",Caso especial,05/11/2026,07/12/2026,Montacargas (Drive)
+4088,Vielha (Vielha E Mijaran),"0,34",Estudio inicial,05/11/2026,07/12/2026,Caso especial del Drive: montacargas
 4092,Montornés (Montornes Del Valles),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4094,Mercat De Montgat (Montgat),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4097,La Girada (Vilafranca Del Penedes),"0,33",Estudio inicial,05/11/2026,07/12/2026,
@@ -164,7 +164,7 @@
 4385,Ctra. De Onda (Vila-Real),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4389,Barrio Del Socorro (Huesca),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4391,Galdakao (Galdakao),"0,33",Estudio inicial,05/11/2026,07/12/2026,
-4402,Carlos V (Melilla),"0,34",Caso especial,05/11/2026,07/12/2026,Melilla: la reposición es malísima
+4402,Carlos V (Melilla),"0,34",Caso especial,05/11/2026,07/12/2026,El aprovisionamiento es complicado
 4405,Escaparate (Puertollano),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4410,Avda. Príncipe De España (El Ejido),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4413,Cuesta Piedra (Santa Cruz De Tenerife),"0,33",Estudio inicial,05/11/2026,07/12/2026,
@@ -210,7 +210,7 @@
 4570,Vecindario (Santa Lucia De Tirajana),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4572,Retuerto (Barakaldo),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4579,Deltebre (Deltebre),"0,33",Estudio inicial,05/11/2026,07/12/2026,
-4582,Prínceps D'espanya (Marratxí),"0,34",Caso especial,05/11/2026,07/12/2026,Montacargas (Drive)
+4582,Prínceps D'espanya (Marratxí),"0,34",Estudio inicial,05/11/2026,07/12/2026,Caso especial del Drive: montacargas
 4587,C. C. Albacenter (Albacete),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4592,Carballiño Estación (O Carballiño),"0,33",Estudio inicial,05/11/2026,07/12/2026,
 4602,Parc Comercial Vilanova (Vilanova I La Geltru),"0,33",Estudio inicial,05/11/2026,07/12/2026,
