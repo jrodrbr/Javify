@@ -13410,6 +13410,56 @@ html.dark table.rv-otbl tbody tr.rv-cam td,html.dark table.rv-atbl tbody tr.rv-c
   table.rv-otbl .rv-tn span{max-width:none;white-space:normal}
   table.rv-otbl .rv-tn{flex-wrap:wrap}
 }
+/* ---------- v14 · REVISIÓN SENCILLA (10/11/2026) ----------
+   Javier: "Javify está súper complicado de entender... hacerlo muchísimo más fácil". Arriba Estudio inicial / Revisión,
+   las cifras y un solo botón; en la lista cuatro columnas (Tienda, Ahora, Propuesta, Por qué) y lo demás en «Más». */
+#revTab .rv-pill[hidden]{display:none}
+#revTab .rv-vistas2{display:flex;align-items:center;gap:12px;min-width:0}
+#revTab .rv-vistas2[hidden]{display:none}
+#revTab .rv-vtit{margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+#revTab .rv-volver span{margin-right:2px}
+#revTab .rv-mas span{margin-left:3px;font-size:10px}
+.rv-masmenu{min-width:236px}
+.rv-masmenu hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+.rv-masmenu button[aria-current="true"]{background:var(--panel2)}
+table.rv-otbl td.rv-ot-t{width:26%}
+table.rv-otbl td.rv-ot-n{width:200px}
+table.rv-otbl td.rv-ot-m{width:auto;min-width:280px}
+table.rv-otbl .rv-pn{display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:6px}
+table.rv-otbl .rv-pn .rv-porq{margin-top:0;text-align:center}
+.rv-pq1{font-size:12.5px;font-weight:650;color:var(--ink);line-height:1.4}
+.rv-pq2{margin-top:3px;font-size:11.5px;font-weight:600;color:var(--ink3-txt);line-height:1.5}
+.rv-pq2 .rv-fl{margin:0 0 0 6px}
+table.rv-otbl td.rv-ot-m .rv-mot{margin-top:8px;max-width:520px}
+table.rv-otbl td.rv-ot-m .rv-mot-acc{margin-top:6px}
+@media (min-width:641px) and (max-width:1100px){
+  table.rv-otbl thead tr,table.rv-otbl tbody tr.rv-row{grid-template-columns:minmax(0,1.2fr) 74px 180px minmax(0,1.7fr)}
+  table.rv-otbl thead tr{grid-template-areas:"t a n m"}
+  table.rv-otbl tbody tr.rv-row{grid-template-areas:"t a n m"}
+  table.rv-otbl thead th.rv-ot-m{display:block}
+  table.rv-otbl td.rv-ot-m{display:block!important;padding-top:10px}
+}
+@media (max-width:640px){
+  table.rv-otbl tbody tr.rv-row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"t a" "n n" "m m"}
+  table.rv-otbl td.rv-ot-n{flex-wrap:wrap}
+  table.rv-otbl td.rv-ot-n::before{content:"Propuesta"}
+  table.rv-otbl .rv-pn{flex:1 1 100%;flex-direction:row;justify-content:flex-end;margin-top:2px}
+  table.rv-otbl td.rv-ot-m .rv-mot{max-width:none}
+}
+/* (v14 · pulido) en tableta las cifras en una fila, con su raya; en el movil, Estudio inicial / Revision y Mas en una
+   linea; en el ordenador, el buscador algo mas estrecho para que los filtros de la revision quepan en una linea */
+@media (min-width:861px) and (max-width:1100px){
+  #revTab .rv-sum{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0 18px}
+  #revTab .rv-k{padding:0 0 0 18px;border-left:1px solid var(--line)}
+  #revTab .rv-k:first-child{padding-left:0;border-left:0}
+  #revTab .rv-ks{white-space:normal}
+}
+@media (max-width:640px){
+  #revTab .rv-hd-r{flex-direction:row;align-items:center;gap:8px}
+  #revTab .rv-mesw{flex:1 1 auto;min-width:0}
+  #revTab .rv-hd-acc{flex:none}
+}
+@media (min-width:1101px){ .rv-busca{width:216px} }
 /* ---------- v13 · RANKING: lo esencial a la vista, el resto en Filtros (10/11/2026) ----------
    Javier: "hay demasiados filtros y demasiado texto; cuando intentas buscar algo no sabes ni donde clicar".
    Arriba solo lo que define lo que ves; el resto en un panel que se abre con Filtros, y lo que has cambiado
@@ -14352,9 +14402,9 @@ var RVC = (function(){
     return meses.map(function(m){ var x=Mt[m]; if(!x||!(x.n>=10)) return NaN; if(mr&&m<mr) return NaN; var v=x[k]; return v===v?v:NaN; }); }
 
   /* ---------- ESTUDIO INICIAL ----------
-     Todas a 0,33. A 0,34 solo un caso especial: el del Drive (montacargas o dos plantas) si es veterana, fuera del
-     laboratorio y no llega (sufre: su mejor media de dos meses seguidos pasa de 0,345), o el que se marque en
-     Javify (ESPM: tienda -> por que), que va a 0,34 siempre. Mejora: horas del mes del estudio frente a hoy (las 44 a 0,33
+     Todas a 0,33. A 0,34 solo el caso especial que se marque en Javify (ESPM: tienda -> por que). (v14, 10/11/2026:
+     el del Drive, montacargas o dos plantas, ya no va solo a 0,34; queda como informacion.) Sufre: su mejor media de
+     dos meses seguidos pasa de 0,345. Mejora: horas del mes del estudio frente a hoy (las 44 a 0,33
      y el resto a 0,34). */
   function estudio(B,P,k,DR,ESPM){
     var meses=P.ventana, mesH=sumaMes(P.proceso,1), diasH=diasMot(mesH), u3m=meses.slice(-3), nd=diasLS(mesH);
@@ -14369,7 +14419,7 @@ var RVC = (function(){
       var man=ESPM&&ESPM[t]!=null?String(ESPM[t]):null;
       var esp=man!=null?{tipo:'mano',tx:man||'Caso especial'}:(dr.esp?{tipo:'drive',tx:dr.esp}:null);
       var porDrive=!!(dr.esp&&sufre&&!lab);
-      var prop=(man!=null||porDrive)?0.34:0.33;
+      var prop=man!=null?0.34:0.33;   /* (v14) el Drive ya no pone el 0,34 solo */
       var u2=s.slice(-2), so=(u2[0]===u2[0]&&u2[1]===u2[1])?(u2[0]+u2[1])/2:NaN;
       var ojo=!!(so===so&&R3(so)>=prop+0.02-1e-9);
       var fC=factorAp(T.ap,diasH), u3=uds3(B.M[t],u3m), k60=fC*u3/60;
@@ -14545,7 +14595,7 @@ function ancho(){ return window.innerWidth||1200; }
 var OBJ_MIN=0.20, OBJ_MAX=0.34;            /* nunca un objetivo peor que 0,34 */
 
 
-var S={modo:'revision', k:'re6', tab:'obj', coefVer:'ap', f:{region:[],zona:[]}, rapido:'todas', q:'', orden:{}, abierta:null, info:false, apVer:'prod', cfEd:null, ghAb:false, ghLuego:false};
+var S={modo:'revision', k:'re6', tab:'obj', coefVer:'ap', f:{region:[],zona:[]}, rapido:'cambian', q:'', orden:{}, abierta:null, info:false, apVer:'prod', cfEd:null, ghAb:false, ghLuego:false};
 var D={B:null,P:null,DR:null,REG:null,REGTXT:null,FL:null,COEF:null,COEFTXT:null,err:{},cache:{},listo:false,cargando:false,PEND:[],PCOEF:[],PAPR:[],viaGh:false};
 var ESP_MOT='Caso especial';
 function esEsp(m){ return /^caso especial/i.test(String(m||'').trim()); }
@@ -14609,6 +14659,11 @@ function pendDe(t,rige){ for(var i=D.PEND.length-1;i>=0;i--){ var p=D.PEND[i]; i
 function quitaPend(t,rige){ D.PEND=D.PEND.filter(function(p){ return !(p.t===t&&p.rige===rige); }); }
 /* la ultima fila guardada de una tienda para un mes (sin las de aprendices) */
 function regMes(t,rige){ var r=null; ((D.REG&&D.REG.porT[t])||[]).forEach(function(x){ if(x.rige===rige&&!esApr(x)&&(!r||x.orden>r.orden)) r=x; }); return r; }
+/* (v14) lo guardado del estudio inicial que salio solo («Estudio inicial», no lo cambio nadie) deja de valer si el estudio
+   propone ahora otra cosa (10/11/2026: el Drive ya no pone el 0,34 solo). Manda lo que propone y queda por guardar. */
+function rehace(t,m){ if(m!=='estudio') return false; var reg=regMes(t,rigeDe(m)); if(!reg||String(reg.motivo||'').trim()!=='Estudio inicial') return false;
+  var f=filaDe(t,m); if(!f) return false; var pr=propuesta(f,m); return !!pr&&Math.abs(pr.obj-reg.obj)>1e-9; }
+function regVale(t,m){ return rehace(t,m)?null:regMes(t,rigeDe(m)); }
 /* lo ya subido (lo ultimo guardado para esa tienda y ese mes es justo eso) deja de estar pendiente */
 function limpiaPend(){ if(!D.REG) return; var antes=D.PEND.length;
   D.PEND=D.PEND.filter(function(p){ var r=regMes(p.t,p.rige); if(!r) return true;
@@ -14628,23 +14683,23 @@ function propuesta(f,m){
 function espBase(t,m){
   var f=filaDe(t,m); if(!f) return null; var reg=regMes(t,rigeDe(m));
   if(m==='estudio'){
-    if(reg){ if(esEsp(reg.motivo)) return {tipo:'mano',tx:reg.nota||ESP_MOT}; return reg.obj>0.335&&f.porDrive?{tipo:'drive',tx:f.dr.esp}:null; }
+    reg=regVale(t,m); if(reg){ if(esEsp(reg.motivo)) return {tipo:'mano',tx:reg.nota||ESP_MOT}; return null; }
     return f.prop>0.335&&f.esp?{tipo:f.esp.tipo,tx:f.esp.tx}:null; }
   if(reg) return esEsp(reg.motivo)?{tipo:'mano',tx:reg.nota||ESP_MOT}:null;
   if(!((f.nueva?0.33:f.obj)>0.335)) return null;
   var em=espMan()[t]; if(em!=null) return {tipo:'mano',tx:em};
-  return f.dr&&f.dr.esp?{tipo:'drive',tx:f.dr.esp}:null; }
+  return null; }   /* (v14) el Drive ya no hace casos especiales */
 /* la decision de una tienda en un mes: la tuya; si no, la ya guardada; si no, la propuesta (o sigue igual) */
 function decision(t,m){
   m=m||S.modo; var f=filaDe(t,m); if(!f) return null;
-  var rige=rigeDe(m), man=pendDe(t,rige), reg=regMes(t,rige), pr=propuesta(f,m), ah=ahoraDe(f,m), eb=espBase(t,m);
-  var d={t:t,f:f,m:m,rige:rige,ahora:ah,prop:pr?pr.obj:ah,pr:pr,reg:reg,espB:eb};
+  var rige=rigeDe(m), man=pendDe(t,rige), reg=regVale(t,m), pr=propuesta(f,m), ah=ahoraDe(f,m), eb=espBase(t,m), rh=rehace(t,m);
+  var d={t:t,f:f,m:m,rige:rige,ahora:ah,prop:pr?pr.obj:ah,pr:pr,reg:reg,espB:eb,rehace:rh,antes:rh?regMes(t,rige):null};
   if(man){ d.obj=man.obj; d.origen='mano'; d.motivo=motivoDe(man); d.texto=man.texto||''; d.esp=!!man.esp; return d; }
   if(reg){ d.obj=reg.obj; d.origen='guardado'; d.motivo=reg.motivo; d.nota=reg.nota; }
   else if(m==='estudio'||pr){ d.obj=pr.obj; d.origen='flujo'; d.motivo=pr.motivo; d.nota=pr.nota; }
   else { d.obj=ah; d.origen='igual'; d.motivo=''; }
   d.esp=!!eb&&d.obj>0.335; return d; }
-function porDefecto(t,m){ var f=filaDe(t,m), reg=regMes(t,rigeDe(m)), pr=propuesta(f,m); return reg?reg.obj:(pr?pr.obj:ahoraDe(f,m)); }
+function porDefecto(t,m){ var f=filaDe(t,m), reg=regVale(t,m), pr=propuesta(f,m); return reg?reg.obj:(pr?pr.obj:ahoraDe(f,m)); }
 function espDefecto(t,m){ return !!espBase(t,m)&&porDefecto(t,m)>0.335; }
 function clampO(o){ return Math.max(OBJ_MIN,Math.min(OBJ_MAX,r2(o))); }
 /* el − y el +: volver a lo que iba a pasar deshace lo tuyo (tambien su caso especial) */
@@ -14662,11 +14717,14 @@ function ponTexto(t,m,tx){
   else if(String(tx).trim()){ var d=decision(t,m); if(d) D.PEND.push({t:t,obj:d.obj,texto:tx,esp:!!d.esp,rige:rige,decidido:hoy()}); }
   guardaPend(m); }
 /* la casilla de caso especial (solo a 0,34) */
+/* (v14) marcarla con el objetivo por debajo la pone a 0,34; desmarcarla, si solo estaba a 0,34 por eso, la devuelve */
 function ponEsp(t,m,on){
-  var d=decision(t,m); if(!d||!(d.obj>0.335)) return;
-  var rige=rigeDe(m), ya=pendDe(t,rige), def=porDefecto(t,m), dE=espDefecto(t,m), tx=ya?ya.texto:'';
+  var d=decision(t,m); if(!d) return;
+  var rige=rigeDe(m), ya=pendDe(t,rige), def=porDefecto(t,m), dE=espDefecto(t,m), tx=ya?ya.texto:'', obj=d.obj;
+  if(on&&!(obj>0.335)) obj=0.34;
+  if(!on&&ya&&ya.esp&&!(def>0.335)&&Math.abs(obj-0.34)<1e-9) obj=def;
   quitaPend(t,rige);
-  if(Math.abs(d.obj-def)>1e-9||!!on!==dE||String(tx).trim()) D.PEND.push({t:t,obj:d.obj,texto:tx,esp:!!on,rige:rige,decidido:hoy()});
+  if(Math.abs(obj-def)>1e-9||(!!on&&obj>0.335)!==dE||String(tx).trim()) D.PEND.push({t:t,obj:obj,texto:tx,esp:!!on&&obj>0.335,rige:rige,decidido:hoy()});
   guardaPend(m); }
 function deshaz(t,m){ quitaPend(t,rigeDe(m)); guardaPend(m); }
 function falta(d){ return !!(d&&d.origen==='mano'&&!String(d.texto||'').trim()); }
@@ -14712,22 +14770,23 @@ function filasDeMes(m){
   filas.forEach(function(f){ var d=decision(f.t,m); if(!d) return;
     if(d.origen==='mano'){ var notaM=d.esp?String(d.texto||'').trim():(Math.abs(d.prop-d.obj)>1e-9?'Javify proponía '+f2(d.prop):'');
       out.push({t:f.t,nombre:f.T.nombre,obj:d.obj,motivo:d.motivo,decidido:(pendDe(f.t,d.rige)||{}).decidido||d0,rige:d.rige,nota:notaM,origen:'mano',antes:d.ahora,f:f,m:m}); }
-    else if(d.origen==='flujo'&&(m==='revision'||!regMes(f.t,d.rige))) out.push({t:f.t,nombre:f.T.nombre,obj:d.obj,motivo:d.motivo,decidido:d0,rige:d.rige,nota:d.nota||'',origen:'flujo',antes:d.ahora,f:f,m:m}); });
+    else if(d.origen==='flujo'&&(m==='revision'||!regMes(f.t,d.rige)||d.rehace)) out.push({t:f.t,nombre:f.T.nombre,obj:d.obj,motivo:d.motivo,decidido:d0,rige:d.rige,
+      nota:d.rehace?'A 0,34 ya solo los casos especiales marcados a mano (antes '+f2(d.antes.obj)+(f.dr&&f.dr.esp?', '+f.dr.esp.toLowerCase()+' del Drive':'')+')':(d.nota||''),origen:'flujo',antes:d.ahora,f:f,m:m}); });
   /* aprendices: una fila con su objetivo del mes y lo decidido del coeficiente */
   D.PAPR.forEach(function(p){ if(p.rige!==rigeDe(m)) return; var f=filaDe(p.t,m), d=decision(p.t,m); if(!f||!d) return;
     var q=dosSemanas(p.t), mot=p.coef==='normal'?'Aprendiz: coeficiente de apertura de siempre':'Aprendiz: '+APR_TX[p.coef];
     out.push({t:p.t,nombre:f.T.nombre,obj:d.obj,motivo:mot,decidido:p.decidido||d0,rige:p.rige,nota:ok(q.v)?'Sus 2 últimas semanas: '+f3(q.v):'',origen:'apr',antes:d.ahora,f:f,m:m}); });
   return out; }
-function filasNuevas(){ var a=[]; mesesVer().forEach(function(m){ a=a.concat(filasDeMes(m)); }); return a; }
-function sinMotivo(){ return filasNuevas().filter(function(r){ return r.origen==='mano'&&!(r.motivo&&(r.motivo!==ESP_MOT||String(r.nota||'').trim())); }); }
+function filasNuevas(m){ var a=[]; (m?[m]:mesesVer()).forEach(function(mm){ a=a.concat(filasDeMes(mm)); }); return a; }   /* (v14) con m: solo los de esa pantalla */
+function sinMotivo(m){ return filasNuevas(m).filter(function(r){ return r.origen==='mano'&&!(r.motivo&&(r.motivo!==ESP_MOT||String(r.nota||'').trim())); }); }
 function faltaTx(fl){ return 'Falta el motivo en '+fl.length+(fl.length===1?' tienda':' tiendas'); }
 var Q=function(x){ var s=String(x==null?'':x); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
 /* el registro entero: lo leido TAL CUAL y lo nuevo al final, con sus mismos saltos de linea (asi siempre empieza igual) */
 function finLinea(txt){ return /\r\n/.test(txt)?'\r\n':/\n/.test(txt)?'\n':'\r\n'; }
 function conFinal(txt){ txt=String(txt||'').replace(/^﻿/,''); var e=finLinea(txt); return txt&&!/\n$/.test(txt)?txt+e:txt; }
 function lineaReg(r){ return [r.t,r.nombre,f2(r.obj),r.motivo,ok(r.decidido)?diaL(r.decidido):'',ok(r.rige)?diaL(r.rige):'',r.nota||''].map(Q).join(','); }
-function txtRegistro(){ var base=D.REGTXT!=null?conFinal(D.REGTXT):'Tienda,Nombre,Objetivo,Motivo,Decidido,Rige desde,Nota\r\n', e=finLinea(base);
-  return base+filasNuevas().map(function(r){ return lineaReg(r)+e; }).join(''); }
+function txtRegistro(m){ var base=D.REGTXT!=null?conFinal(D.REGTXT):'Tienda,Nombre,Objetivo,Motivo,Decidido,Rige desde,Nota\r\n', e=finLinea(base);
+  return base+filasNuevas(m).map(function(r){ return lineaReg(r)+e; }).join(''); }
 function txtCoef(){ var base=D.COEFTXT!=null?conFinal(D.COEFTXT):'Tipo,Tramo,Coeficiente,Motivo,Decidido,Rige desde,Nota\r\n', e=finLinea(base);
   return base+D.PCOEF.map(function(r){ return [COEF_NOM[r.tipo],trDe(r.tipo)[r.i][2],pctTx(r.v),r.motivo,ok(r.decidido)?diaL(r.decidido):'',ok(r.rige)?diaL(r.rige):'',r.nota||''].map(Q).join(',')+e; }).join(''); }
 
@@ -14793,17 +14852,17 @@ function leeCoefTxt(txt){ var p=Papa.parse(txt,{header:false,skipEmptyLines:true
 var _sube=false;
 function guardaGitHub(){
   if(_sube) return;
-  var nO=filasNuevas().length, nC=D.PCOEF.length, fl=sinMotivo();
-  if(!nO&&!nC){ avisoGuardar('No hay nada nuevo que guardar.'); return; }
+  var mm=S.modo, nO=filasNuevas(mm).length, nC=D.PCOEF.length, fl=sinMotivo(mm);   /* (v14) solo lo de esta pantalla */
+  if(!nO&&!nC){ avisoGuardar('No hay nada nuevo que guardar en '+(mm==='estudio'?'el estudio inicial.':'la revisión.')); return; }
   if(fl.length){ avisoGuardar(faltaTx(fl)+': '+fl.map(function(r){ return r.t; }).join(', ')+'. Escríbelo y vuelve a pulsar «Guardar y subir».');
     irAFalta(fl); return; }
   if(nO&&!D.REG){ avisoGuardar('No se ha podido leer el registro de objetivos: no se guarda para no perder el histórico. Vuelve a cargar la página.'); return; }
   if(nC&&!D.COEF){ avisoGuardar('No se ha podido leer el registro de coeficientes: no se guarda para no perder el histórico. Vuelve a cargar la página.'); return; }
   if(!ghClave()){ S.ghAb=true; S.ghLuego=true; pintaGh(); return; }
   var pasos=[];
-  if(nO) pasos.push({nom:RV_FICHERO,base:D.REGTXT,txt:txtRegistro(),tipo:'reg',n:nO});
+  if(nO) pasos.push({nom:RV_FICHERO,base:D.REGTXT,txt:txtRegistro(mm),tipo:'reg',n:nO});
   if(nC) pasos.push({nom:RV_FICH_COEF,base:D.COEFTXT,txt:txtCoef(),tipo:'coef',n:nC});
-  var meses=mesesVer().filter(function(m){ return filasDeMes(m).length; }).map(function(m){ return mesL(mesHDe(m)); });
+  var meses=[mesL(mesHDe(mm))];
   var msgDe=function(p){ return p.tipo==='reg'?'Javify: objetivos de '+meses.join(' y ')+' ('+p.n+(p.n===1?' fila':' filas')+')':'Javify: coeficientes de caudal ('+p.n+(p.n===1?' tramo':' tramos')+')'; };
   _sube=true; pintaGuardar(); avisoGuardar('Guardando…',false,true);
   var hechos=[];
@@ -15369,7 +15428,7 @@ function dlgFlujo(){
 function cierraFlujo(){ if(!_fl) return; _fl.hidden=true; document.documentElement.classList.remove('rv-sin-scroll'); if(_g){ try{ _g.destroy(); }catch(e){} _g=null; }
   $r('rvFlujoG').innerHTML=''; if(_vuelta&&_vuelta.focus) try{ _vuelta.focus(); }catch(e){} _vuelta=null; }
 function abreFlujo(t,boton){
-  var d=dlgFlujo(); _vuelta=boton||$r('rvFlujoBtn'); d.hidden=false; document.documentElement.classList.add('rv-sin-scroll');
+  var d=dlgFlujo(); _vuelta=boton||$r('rvMasBtn'); d.hidden=false; document.documentElement.classList.add('rv-sin-scroll');
   var g=$r('rvFlujoG'), sub=$r('rvFlujoS'), cap=$r('rvFlujoCap');
   var f=t?filasModo().filter(function(x){ return x.t===t; })[0]:null;
   sub.textContent=f?'Camino de '+f.t+' · '+(f.T.nombre||'')+(S.modo==='estudio'?' · estudio inicial':' · revisión de '+mesL(D.P.proceso)):'La lógica que siguen todas las tiendas';
@@ -15408,9 +15467,8 @@ function esqueleto(){
   r.innerHTML='<div class="sec rv-sec">'+
     '<div class="card rv-box" id="rvTop"><div class="cpad">'+
       '<div class="rv-hd"><div class="rv-hd-tx"><div class="sec-n">Revisión de productividades</div><h2 class="sec-h rv-tit" id="rvTit">—</h2><div class="sec-s" id="rvSub"></div></div>'+
-        '<div class="rv-hd-r"><div class="rv-mesw" id="rvMesW"><span class="rv-l" id="rvMesL">Mes</span><div class="lo-seg rv-seg rv-mes" id="rvMes" role="group" aria-labelledby="rvMesL"></div></div>'+
-          '<div class="rv-hd-acc"><button type="button" class="rv-btn" id="rvFlujoBtn">Flujograma</button>'+
-          '<button type="button" class="rv-ib" id="rvInfoBtn" aria-expanded="false" aria-controls="rvInfo" title="Cómo se decide" aria-label="Cómo se decide">i</button></div></div></div>'+
+        '<div class="rv-hd-r"><div class="rv-mesw" id="rvMesW"><div class="lo-seg rv-seg rv-mes" id="rvMes" role="group" aria-label="Qué se decide"></div></div>'+
+          '<div class="rv-hd-acc"><button type="button" class="rv-btn rv-mas" id="rvMasBtn" aria-haspopup="menu" aria-expanded="false">Más <span aria-hidden="true">▾</span></button></div></div></div>'+
       '<div class="rv-info" id="rvInfo" hidden></div>'+
       '<div class="rv-sum" id="rvSum"></div>'+
       '<div class="rv-gbar" id="rvGuarda" hidden></div>'+
@@ -15419,14 +15477,16 @@ function esqueleto(){
       '<div class="rv-avisos" id="rvAvisos"></div>'+
     '</div></div>'+
     '<div class="card rv-main"><div class="cpad">'+
-      '<div class="rv-bar"><div class="lo-seg rv-seg rv-vistas" id="rvVistas" role="group" aria-label="Qué ver"></div><div class="rv-tools" id="rvTools"></div></div>'+
+      '<div class="rv-bar"><div class="rv-vistas2" id="rvVistas" hidden></div><div class="rv-tools" id="rvTools"></div></div>'+
       '<div class="rv-herr" id="rvHerr"></div>'+
       '<div id="rvVista"></div>'+
     '</div></div></div>';
   $r('rvMes').addEventListener('click',function(e){ var b=e.target.closest('button[data-v]'); if(!b||b.dataset.v===S.modo) return; S.modo=b.dataset.v; S.abierta=null; S.cfEd=null; pinta(); });
   $r('rvVistas').addEventListener('click',function(e){ var b=e.target.closest('button[data-v]'); if(!b||b.dataset.v===S.tab) return; S.tab=b.dataset.v; S.abierta=null; S.cfEd=null; pintaVistas(); pintaVista(); });
-  $r('rvInfoBtn').addEventListener('click',function(){ S.info=!S.info; pintaInfo(); });
-  $r('rvFlujoBtn').addEventListener('click',function(){ abreFlujo(null); });
+  $r('rvMasBtn').addEventListener('click',function(e){ e.stopPropagation(); abreMas(); });
+  document.addEventListener('click',function(e){ if(_mas&&!(e.target&&e.target.closest&&e.target.closest('.rv-masmenu'))) cierraMas(); });
+  window.addEventListener('scroll',function(){ if(_mas) colocaMas(); },{passive:true});
+  window.addEventListener('resize',cierraMas,{passive:true});
   $r('rvGuarda').addEventListener('click',function(e){
     if(e.target.closest('#rvSube')) guardaGitHub();
     if(e.target.closest('#rvMot')) descargaMot();
@@ -15434,8 +15494,34 @@ function esqueleto(){
     if(e.target.closest('#rvClave')){ S.ghAb=!S.ghAb; S.ghLuego=false; pintaGh(); }
     if(e.target.closest('#rvVerG')){ S.tab='obj'; S.rapido='guardar'; S.abierta=null; pintaVistas(); pintaVista(); try{ $r('rvVistas').scrollIntoView({block:'start',behavior:'smooth'}); }catch(x){} } });
   document.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('#rvHerr .rv-msel')) return; cierraPops(); });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape') cierraPops(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ cierraPops(); if(_mas){ cierraMas(); try{ $r('rvMasBtn').focus(); }catch(x){} } } });
 }
+/* (v14) MAS: lo que no se usa cada vez (las otras vistas, el flujograma, como se decide, la lista para el MOT, descargar
+   y la clave). Un menu como el de la descarga del Ranking. */
+var _mas=null;
+function cierraMas(){ if(_mas){ try{ _mas.remove(); }catch(e){} _mas=null; var b=$r('rvMasBtn'); if(b) b.setAttribute('aria-expanded','false'); } }
+function colocaMas(){ var b=$r('rvMasBtn'); if(!_mas||!b) return; var r=b.getBoundingClientRect(), w=_mas.offsetWidth, vw=document.documentElement.clientWidth;
+  if(r.bottom<0||r.top>window.innerHeight){ cierraMas(); return; }
+  _mas.style.top=Math.round(r.bottom+window.pageYOffset+6)+'px'; _mas.style.left=Math.round(Math.max(8,Math.min(r.right-w,vw-w-8))+window.pageXOffset)+'px'; }
+function abreMas(){
+  var b=$r('rvMasBtn'); if(!b) return; if(_mas){ cierraMas(); return; }
+  var na=0; try{ na=aprendices(S.modo).length; }catch(e){}
+  var it=[['apr','Aprendices'+(na?' ('+na+')':'')],['coef','Coeficientes'],['hist','Historial'],null,['flujo','Flujograma'],['info',S.info?'Ocultar cómo se decide':'Cómo se decide'],null,
+    ['mot','Lista para el MOT de '+mesNom(S.modo)],['baja','Descargar los registros'],['clave',ghClave()?'Tu clave de GitHub':'Poner la clave de GitHub']];
+  if(S.tab!=='obj') it.unshift(['obj','Objetivos']);
+  _mas=document.createElement('div'); _mas.className='jv-dlmenu rv-masmenu no-print'; _mas.setAttribute('role','menu');
+  _mas.innerHTML=it.map(function(x){ return x?'<button type="button" role="menuitem" data-m="'+x[0]+'"'+(x[0]===S.tab?' aria-current="true"':'')+'>'+esc(x[1])+'</button>':'<hr>'; }).join('');
+  document.body.appendChild(_mas); b.setAttribute('aria-expanded','true'); colocaMas();
+  _mas.addEventListener('click',function(ev){ var x=ev.target.closest&&ev.target.closest('button[data-m]'); if(!x) return; ev.stopPropagation(); var k=x.dataset.m; cierraMas(); hazMas(k); });
+  try{ _mas.querySelector('button').focus({preventScroll:true}); }catch(e){} }
+function hazMas(k){
+  if(k==='obj'||k==='apr'||k==='coef'||k==='hist'){ S.tab=k; S.abierta=null; S.cfEd=null; pintaVistas(); pintaVista();
+    try{ document.querySelector('#revTab .rv-main').scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){} return; }
+  if(k==='flujo'){ abreFlujo(null); return; }
+  if(k==='info'){ S.info=!S.info; pintaInfo(); return; }
+  if(k==='mot'){ descargaMot(); return; }
+  if(k==='baja'){ descarga(); return; }
+  if(k==='clave'){ S.ghAb=!S.ghAb; S.ghLuego=false; pintaGh(); } }
 
 /* ---------- el mes: titulo, subtitulo y selector ---------- */
 function mesNom(m){ return mesL(mesHDe(m)); }
@@ -15443,15 +15529,22 @@ function mayus(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function fechaLarga(n){ var f=RVC.deDn(n); return 'lunes '+f.d+' de '+MESL[f.m-1]+' de '+f.y; }
 function pintaCab(){
   var m=S.modo, P=D.P, rige=rigeDe(m), ms=mesesVer();
-  $r('rvTit').textContent='Objetivos de '+mesNom(m);
   var V=revOf(), sub;
-  if(m==='estudio') sub='Estudio inicial: todas a 0,33 y a 0,34 solo los casos especiales · rigen desde el '+fechaLarga(rige)+' · datos hasta el '+diaLargo(P.fmax);
-  else sub='Se deciden antes del 21 de '+mesL(V.proceso)+' y rigen desde el '+fechaLarga(rige)+' · datos hasta el '+diaLargo(P.fmax);
+  /* (v14) arriba no van meses: Estudio inicial / Revision; las fechas, en el subtitulo */
+  if(m==='estudio') sub='Estudio inicial · rige desde el '+fechaLarga(rige)+' · datos hasta el '+diaLargo(P.fmax);
+  else sub='Revisión de '+mesL(V.proceso)+' · se decide antes del 21 y rige desde el '+fechaLarga(rige)+' · datos hasta el '+diaLargo(P.fmax);
   $r('rvSub').textContent=sub;
   var w=$r('rvMesW'), c=$r('rvMes'); w.hidden=ms.length<2;
   var k=ms.join(','); if(c.dataset.k!==k){ c.dataset.k=k;
-    c.innerHTML=ms.map(function(x){ var n=mayus(mesNom(x)); return '<button type="button" data-v="'+x+'"><span class="jv-l">'+n+' · '+(x==='estudio'?'estudio inicial':'revisión')+'</span><span class="jv-s">'+n+'</span></button>'; }).join(''); }
-  marca('rvMes',m); }
+    c.innerHTML=ms.map(function(x){ return '<button type="button" data-v="'+x+'">'+(x==='estudio'?'Estudio inicial':'Revisión')+'</button>'; }).join(''); }
+  marca('rvMes',m); pintaTitulo(); }
+/* el titulo dice lo que se decide, con lo que hay ahora (cambia al tocar una tienda) */
+function pintaTitulo(c){ var t=$r('rvTit'); if(!t) return; var m=S.modo, tx; c=c||cifras(m);
+  if(m==='estudio'){ tx='Todas a 0,33';
+    if(c.n34) tx+=' menos '+c.n34+(c.n34===c.nEsp?(c.n34===1?' caso especial':' casos especiales'):' a 0,34');
+    if(c.nBajo) tx+=(c.n34?' y ':' menos ')+c.nBajo+' por debajo'; }
+  else tx='Bajan '+c.baj+(c.sub?', suben '+c.sub:'')+' y se mantienen '+c.man;
+  t.textContent=tx; }
 function pinta(){
   if(!D.listo){ if(D.err.csv) pintaError(); else pintaCargando(); return; }
   esqueleto();
@@ -15461,34 +15554,64 @@ function pinta(){
 /* ---------- cifras del mes y barra de guardar ---------- */
 function kpi(l,v,cls,tit,sub){ return '<div class="rv-k'+(cls?' '+cls:'')+'"'+(tit?' title="'+esc(tit)+'"':'')+'><span class="rv-kl">'+l+'</span><b class="rv-kv">'+v+'</b>'+(sub?'<span class="rv-ks">'+sub+'</span>':'')+'</div>'; }
 function pctMenos(a,b){ if(!(a>0)) return ''; var x=(a-b)/a*100; return (x>=0?'−':'+')+Math.abs(x).toFixed(1).replace('.',',')+' %'; }
-function alertaDe(f,m){ return (m||S.modo)==='estudio'?!!f.ojo:!!f.alerta; }
+/* (v14) ALERTA mira como va ahora: sus dos ultimos meses van 0,02 o mas por encima de su objetivo.
+   SUFRE mira lo mejor que ha hecho: ni en sus dos mejores meses seguidos llega a su objetivo (0,345 con el 0,33, 0,355
+   con el 0,34; por debajo del 0,33, el umbral de la escalera). Las dos, con el objetivo que lleva la tienda ahora. */
+function alertaDe(f,m,d){ m=m||S.modo; if(m!=='estudio') return !!f.alerta; d=d||decision(f.t,m); var o=d?d.obj:f.prop;
+  return !!(ok(f.so)&&RVC.R3(f.so)>=o+0.02-1e-9); }
+function llegaHasta(o){ return o>=0.33-1e-9?o+0.015:o+0.005; }
+function sufreDe(f,m,d){ m=m||S.modo; if(m!=='estudio'||!f.par||!(f.T&&f.T.fase==='VETERANA')) return false; d=d||decision(f.t,m); var o=d?d.obj:f.prop;
+  return RVC.R3(f.media)>llegaHasta(o)+1e-9; }
 function porGuardar(d){ return d.origen==='mano'||(d.origen==='flujo'&&(d.m==='revision'||!d.reg)); }
 function cifras(m){
-  var fs=m==='estudio'?est('re6').filas:revOf().filas, dias=m==='estudio'?est('re6').dias:revOf().dias, c={baj:0,sub:0,al:0,h0:0,h1:0};
+  var fs=m==='estudio'?est('re6').filas:revOf().filas, dias=m==='estudio'?est('re6').dias:revOf().dias, c={baj:0,sub:0,man:0,al:0,suf:0,suf33:0,suf34:0,n34:0,nEsp:0,nBajo:0,h0:0,h1:0,tr:{}};
   fs.forEach(function(f){ var d=decision(f.t,m); if(!d) return;
-    if(d.obj<d.ahora-1e-9) c.baj++; else if(d.obj>d.ahora+1e-9) c.sub++;
-    if(alertaDe(f,m)) c.al++;
+    if(d.obj<d.ahora-1e-9) c.baj++; else if(d.obj>d.ahora+1e-9) c.sub++; else c.man++;
+    if(Math.abs(d.obj-d.ahora)>1e-9){ var kt=f2(d.ahora)+'|'+f2(d.obj); c.tr[kt]=(c.tr[kt]||0)+1; }
+    if(alertaDe(f,m,d)) c.al++;
+    if(sufreDe(f,m,d)){ c.suf++; if(d.obj>0.335) c.suf34++; else c.suf33++; }
+    if(d.obj>0.335){ c.n34++; if(d.esp) c.nEsp++; } else if(d.obj<0.325) c.nBajo++;
     if(ok(f.k60)){ c.h0+=d.ahora*f.k60*dias; c.h1+=d.obj*f.k60*dias; } });
   c.dias=dias; return c; }
+/* (v14) Cambian en el estudio: de que objetivo a cual («de 0,34 a 0,33»); si hay varios, cuantas de cada */
+function trTx(c){ var tr=Object.keys(c.tr).map(function(k){ var p=k.split('|'); return {de:p[0],a:p[1],n:c.tr[k]}; }).sort(function(x,y){ return y.n-x.n||(x.a<y.a?1:-1); });
+  if(!tr.length) return 'ninguna cambia';
+  if(tr.length===1) return 'de '+tr[0].de+' a '+tr[0].a;
+  var r=tr.slice(0,3).map(function(x){ return x.n+' de '+x.de+' a '+x.a; }).join(' · ');
+  return tr.length>3?r+' · y '+tr.slice(3).reduce(function(s,x){ return s+x.n; },0)+' más':r; }
 function pintaResumen(){
   var m=S.modo, c=cifras(m), mes=mesNom(m), dh=c.h0-c.h1, V=revOf();
-  var h=kpi('Cambian',String(c.baj+c.sub)+'<small>bajan '+c.baj+' · suben '+c.sub+'</small>');
-  h+=kpi('Mejora al mes',miles(dh)+' h<small>'+pctMenos(c.h0,c.h1)+'</small>',dh>=0?'rv-k-ok':'rv-k-al',
+  var h=kpi('Cambian',String(c.baj+c.sub)+'<small>'+(m==='estudio'?trTx(c)
+      :'bajan '+c.baj+(c.sub?' · suben '+c.sub:'')+' · se mantienen '+c.man)+'</small>');
+  h+=kpi('Ahorro al mes',(dh<0?'+':'')+miles(Math.abs(dh))+' h<small>'+pctMenos(c.h0,c.h1)+'</small>',dh>=0?'rv-k-ok':'rv-k-al',
     'Horas de '+mes+' ('+c.dias+' días): '+(m==='estudio'?'hoy, ':'con sus objetivos de '+mesL(RVC.sumaMes(mesHDe(m),-1))+', ')+miles(c.h0)+'; con lo decidido, '+miles(c.h1)+'.',
     m==='estudio'?'horas de '+mes+' frente a hoy (44 a 0,33 y el resto a 0,34)':'horas de '+mes+' frente a sus objetivos de '+mesL(RVC.sumaMes(mesHDe(m),-1)));
-  h+=kpi('Alertas',String(c.al),c.al?'rv-k-al':'',null,m==='estudio'?'su media de '+par2(est('re6').meses[10],est('re6').meses[11])+' va 0,02 o más por encima de la propuesta':'van 0,02 o más por encima de su objetivo');
-  $r('rvSum').innerHTML=h; }
+  if(m==='estudio') h+=kpi('Sufren',String(c.suf),c.suf?'rv-k-al':'','Nunca han llegado: ni en sus dos mejores meses seguidos bajan de 0,345 (0,355 las que van a 0,34)',
+    c.suf33+' a 0,33 · '+c.suf34+' a 0,34 · nunca han llegado');
+  h+=kpi('Alertas',String(c.al),c.al?'rv-k-al':'','Cómo van ahora: la media de sus dos últimos meses va 0,02 o más por encima de su objetivo',
+    (m==='estudio'?'en '+par2(est('re6').meses[10],est('re6').meses[11])+' van':'sus dos últimos meses van')+' 0,02 o más por encima de su objetivo');
+  $r('rvSum').innerHTML=h; pintaTitulo(c); }
 function pintaCifras(){ pintaResumen(); pintaGuardar(); cuentaVistas(); cuentaPills(); }
 function pintaGuardar(){
   var g=$r('rvGuarda'); if(!g) return;
   if(!D.listo){ g.hidden=true; return; } g.hidden=false;
   if(!D.REG&&!D.PCOEF.length){ g.innerHTML='<div class="rv-gb-s"><span class="rv-up">Sin el registro de objetivos no se puede guardar (se perdería el histórico).</span><span>Lo que cambies se queda guardado en este ordenador. Vuelve a cargar la página.</span></div>'; return; }
-  var nu=filasNuevas(), cu={mano:0,flujo:0,apr:0}; nu.forEach(function(r){ cu[r.origen]++; });
-  var nc=D.PCOEF.length, n=nu.length+nc, fl=sinMotivo();
-  var porMes=mesesVer().map(function(m){ return {m:m,n:filasDeMes(m).length}; }).filter(function(x){ return x.n; });
+  var nu=filasNuevas(S.modo), cu={mano:0,flujo:0,apr:0}; nu.forEach(function(r){ cu[r.origen]++; });
+  var nc=D.PCOEF.length, n=nu.length+nc, fl=sinMotivo(S.modo);
+  /* (v14) se guarda lo de esta pantalla; lo de la otra, desde alli */
+  var porMes=[], nomP=function(m){ return m==='estudio'?'el estudio inicial':'la revisión'; }, delP=function(m){ return m==='estudio'?'del estudio inicial':'de la revisión'; };
+  var otro=mesesVer().filter(function(m){ return m!==S.modo; }).map(function(m){ return {m:m,n:filasDeMes(m).length}; }).filter(function(x){ return x.n; });
+  var otroTx=otro.length&&nu.length?'Se guarda lo '+delP(S.modo)+'. '+(otro[0].n===1?'El cambio':'Los '+otro[0].n+' cambios')+' '+delP(otro[0].m)+', desde '+nomP(otro[0].m)+'.':'';
   var de=!n?'Nada nuevo todavía: aquí se suman lo que proponga el flujograma, lo que cambies tú y los coeficientes.'
     :[cu.flujo?cu.flujo+' del flujograma':'',cu.mano?(cu.mano===1?'1 tuyo':cu.mano+' tuyos'):'',cu.apr?(cu.apr===1?'1 de aprendices':cu.apr+' de aprendices'):'',nc?(nc===1?'1 coeficiente':nc+' coeficientes'):''].filter(Boolean).join(' · ')+
      (porMes.length>1?' ('+porMes.map(function(x){ return mesNom(x.m)+': '+x.n; }).join(', ')+')':'');
+  /* (v14) sin nada por guardar, la barra no sale; la lista para el MOT, descargar y la clave estan en Mas */
+  if(!n&&!_sube){ g.hidden=true; g.innerHTML=''; return; }
+  g.innerHTML='<div class="rv-gb-n"><b>'+n+'</b><span class="rv-kl">'+(n===1?'cambio sin guardar':'cambios sin guardar')+'</span></div>'+
+    '<div class="rv-gb-s"><span>'+esc(de)+(n?' <button type="button" class="rv-lnk" id="rvVerG">Ver</button>':'')+'</span>'+(fl.length?'<span class="rv-up">'+esc(faltaTx(fl))+': sin él no se guarda.</span>':'')+
+      (otroTx?'<span class="rv-gb-fs">'+esc(otroTx)+'</span>':'')+'</div>'+
+    '<div class="rv-gb-acc"><button type="button" class="rv-btn rv-btn-pri" id="rvSube" title="Se sube solo: lo ve todo el mundo y queda en el histórico de cada tienda"'+(_sube||!n?' disabled':'')+'>'+(_sube?'Guardando…':'Guardar y subir')+'</button></div>';
+  return;
   var fm=rigeDe(S.modo), clave=!!ghClave();
   g.innerHTML='<div class="rv-gb-n"><b>'+n+'</b><span class="rv-kl">'+(n===1?'cambio sin guardar':'cambios sin guardar')+'</span></div>'+
     '<div class="rv-gb-s"><span>'+esc(de)+(n?' <button type="button" class="rv-lnk" id="rvVerG">Ver</button>':'')+'</span>'+(fl.length?'<span class="rv-up">'+esc(faltaTx(fl))+': sin él no se guarda.</span>':'')+
@@ -15500,37 +15623,40 @@ function pintaGuardar(){
 function avisoGuardar(t,bien,neutro){ var a=$r('rvGuardaAviso'); if(!a) return; a.textContent=t; a.className='rv-guarda-av'+(bien?' rv-bien':neutro?' rv-neutro':''); a.hidden=!t; }
 function pintaAvisos(){
   var a=[];
-  if(D.err.drive) a.push('No se han podido leer los comentarios del Drive: faltan sus casos especiales (montacargas, dos plantas) y las reformas. Vuelve a cargar la página.');
+  if(D.err.drive) a.push('No se han podido leer los comentarios del Drive: faltan las reformas. Vuelve a cargar la página.');
   if(D.err.reg) a.push('No se ha podido leer el registro de objetivos: '+(S.modo==='revision'?(hayEstudio()?'la revisión sale con lo que propone el estudio inicial y ':'todas salen como tiendas nuevas y '):'faltan los casos especiales marcados a mano y ')+'no se puede guardar. Vuelve a cargar la página.');
   if(D.err.coef) a.push('No se ha podido leer el registro de coeficientes: se aplican los de siempre y no se pueden guardar cambios. Vuelve a cargar la página.');
   if(D.ghMal) a.push('La clave guardada para subir ya no vale (ha caducado o la han quitado): pon una nueva en «Tu clave».');
   $r('rvAvisos').innerHTML=a.map(function(t){ return '<div class="rv-aviso">'+esc(t)+'</div>'; }).join(''); }
 function pintaInfo(){
-  var b=$r('rvInfoBtn'), p=$r('rvInfo'); b.setAttribute('aria-expanded',S.info); b.classList.toggle('on',S.info); p.hidden=!S.info; if(!S.info) return;
+  var p=$r('rvInfo'); if(!p) return; p.hidden=!S.info; if(!S.info) return;
   var L, m=S.modo, E=est('re6'), V=revOf();
-  if(m==='estudio') L=['<b>Todas a 0,33</b>. A <b>0,34</b> solo un <b>caso especial</b>: el montacargas o las dos plantas del Drive (se mira en directo), en una veterana fuera del laboratorio que no llega, o el que marques tú con su porqué.',
+  if(m==='estudio') L=['<b>Todas a 0,33</b>. A <b>0,34</b> solo los <b>casos especiales</b> que marques tú con su porqué (la casilla «Caso especial»). El montacargas o las dos plantas del Drive salen como información.',
+    '<b>Sufre</b>: mira lo mejor que ha hecho. Ni en sus dos mejores meses seguidos llega a su objetivo (0,345 con el 0,33; 0,355 con el 0,34).',
     'Su mejor media de dos meses seguidos sale de los 12 últimos ('+mesC(E.meses[0])+' a '+mesC(E.meses[11])+'). Un mes vale con 10 días o más; en las reformadas, desde que reabren.',
-    '<b>Mejora al mes</b>: horas de '+mesL(E.mesH)+' con lo decidido frente a hoy (las 44 a 0,33 y el resto a 0,34), con sus unidades de los tres últimos meses y el coeficiente de apertura.',
-    '<b>Alerta</b>: su media de '+par2(E.meses[10],E.meses[11])+' va 0,02 o más por encima de su objetivo nuevo.'];
+    '<b>Ahorro al mes</b>: horas de '+mesL(E.mesH)+' con lo decidido frente a hoy (las 44 a 0,33 y el resto a 0,34), con sus unidades de los tres últimos meses y el coeficiente de apertura.',
+    '<b>Alerta</b>: mira cómo va ahora. Su media de '+par2(E.meses[10],E.meses[11])+' va 0,02 o más por encima de su objetivo nuevo.'];
   else L=['<b>Todos los meses</b>, antes del día 21, con Control NTC: la <b>media de sus dos últimos meses</b> y <b>lo que va de mes</b> (cuenta con '+V.minMes+' días o más).',
     'Si las dos llegan al <b>umbral del escalón de abajo</b> (ese escalón + 0,005; de 0,34 a 0,33, 0,345), <b>baja un escalón</b>. Lo nuevo rige desde el primer lunes del mes MOT de dos meses después ('+diaLargo(V.rige)+').',
     '<b>Espera</b> si ya tiene un cambio que aún no rige, si lleva poco con su objetivo nuevo, si amplió modelo o si le falta algún mes de 10 días.',
     '<b>Alerta</b>: su media va 0,02 o más por encima de su objetivo. Subirla o devolverla a su objetivo de antes lo decides tú, con su motivo.',
-    '<b>Mejora al mes</b>: horas de '+mesL(V.mesH)+' con lo decidido frente a sus objetivos de '+mesL(RVC.sumaMes(V.mesH,-1))+'.'];
+    '<b>Ahorro al mes</b>: horas de '+mesL(V.mesH)+' con lo decidido frente a sus objetivos de '+mesL(RVC.sumaMes(V.mesH,-1))+'.'];
   L=L.concat(['<b>Tú decides</b> en cada fila con − y +. Si no es lo que propone, escribe el motivo: sin él no se guarda. «Deshacer» vuelve a la propuesta.',
-    '<b>Caso especial</b> (a 0,34): marca la casilla y escribe por qué; queda guardado con su porqué. Los del Drive salen solos y se miran en directo.',
+    '<b>Caso especial</b> (a 0,34): marca la casilla y escribe por qué; queda guardado con su porqué.',
     '<b>Aprendices</b>: en sus primeras 20 semanas llevan coeficiente de apertura. Con sus 2 últimas semanas puedes quitárselo o bajarlo un tramo; sale en la lista para el MOT.',
-    '<b>Guardar y subir</b>: lo tuyo y lo que propone el flujograma se añaden al final del registro, con la fecha y el motivo; el recorrido de cada tienda queda en Historial y en «Sus objetivos».',
+    '<b>Guardar y subir</b>: guarda lo de esta pantalla (el estudio inicial o la revisión). Lo tuyo y lo que propone el flujograma se añaden al final del registro, con la fecha y el motivo; el recorrido de cada tienda queda en Historial y en «Sus objetivos».',
     '<b>Lista para el MOT</b>: todas las tiendas con la productividad que llevarán desde el '+diaLargo(rigeDe(m))+' y lo decidido de su coeficiente de apertura, para pasarla al equipo.']);
   p.innerHTML='<ul>'+L.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ul>'; }
 
 /* ---------- pestanas ---------- */
-var VISTAS=[['obj','Objetivos','Objetivos'],['apr','Aprendices','Aprend.'],['coef','Coeficientes','Coef.'],['hist','Historial','Histor.']];
+/* (v14) las vistas se abren desde Mas; fuera de Objetivos, arriba de la lista sale como volver */
+var VISTAS=[['obj','Objetivos'],['apr','Aprendices'],['coef','Coeficientes'],['hist','Historial']];
 function pintaVistas(){
-  var c=$r('rvVistas'); if(!c.dataset.ok){ c.dataset.ok='1';
-    c.innerHTML=VISTAS.map(function(v){ return '<button type="button" data-v="'+v[0]+'"><span class="jv-l">'+v[1]+'</span><span class="jv-s">'+v[2]+'</span><i class="rv-vn" data-n="'+v[0]+'"></i></button>'; }).join(''); }
-  marca('rvVistas',S.tab); cuentaVistas(); }
-function cuentaVistas(){ var i=document.querySelector('#rvVistas .rv-vn[data-n="apr"]'); if(!i) return; var n=aprendices(S.modo).length; i.textContent=n?String(n):''; }
+  var c=$r('rvVistas'); if(!c) return;
+  if(S.tab==='obj'){ c.hidden=false; c.innerHTML='<h3 class="rv-vtit">Tiendas</h3>'; return; }
+  var nom=(VISTAS.filter(function(v){ return v[0]===S.tab; })[0]||['',''])[1];
+  c.hidden=false; c.innerHTML='<button type="button" class="rv-btn rv-volver" data-v="obj"><span aria-hidden="true">←</span> Objetivos</button><h3 class="rv-vtit">'+esc(nom)+'</h3>'; }
+function cuentaVistas(){}
 
 /* ---------- filtros: buscar, region y zona (en Objetivos, ademas, los rapidos) ---------- */
 function pasa(x,f){ var F=S.f, T=x.T||{};
@@ -15539,14 +15665,16 @@ function pasa(x,f){ var F=S.f, T=x.T||{};
   if(S.q){ var q=norm(S.q); if(norm(x.t+' '+(T.nombre||'')).indexOf(q)<0) return false; }
   return true; }
 function filtradas(){ return filasModo().filter(function(f){ return pasa(f,f); }); }
-function rapidos(){ var a=[['todas','Todas'],['cambian','Cambian'],['guardar','Por guardar'],['alertas','Alertas'],['esp','Casos especiales']];
-  if(S.modo==='estudio') a.push(['sufren','Sufren']); return a; }
+function rapidos(){ var a=S.modo==='estudio'?[['cambian','Cambian'],['sufren','Sufren'],['alertas','Alertas'],['esp','Casos especiales'],['todas','Todas']]
+    :[['cambian','Cambian'],['mantienen','Se mantienen'],['alertas','Alertas'],['esp','Casos especiales'],['todas','Todas']];
+  a.push(['guardar','Por guardar']); return a; }
 function rapido(k,x){ var d=x.d, f=x.f;
   if(k==='cambian') return Math.abs(d.obj-d.ahora)>1e-9;
+  if(k==='mantienen') return Math.abs(d.obj-d.ahora)<1e-9;
   if(k==='guardar') return porGuardar(d);
-  if(k==='alertas') return alertaDe(f);
+  if(k==='alertas') return alertaDe(f,S.modo,d);
   if(k==='esp') return !!d.esp;
-  if(k==='sufren') return !!f.sufre;
+  if(k==='sufren') return sufreDe(f,S.modo,d);
   return true; }
 function filasObj(){ return filtradas().map(function(f){ return {t:f.t,f:f,T:f.T,d:decision(f.t,S.modo)}; }).filter(function(x){ return x.d; }); }
 function opciones(k){ var v={}; filasModo().forEach(function(f){ var x=k==='region'?f.T.region:f.T.zona; if(x) v[x]=(v[x]||0)+1; });
@@ -15564,11 +15692,11 @@ function encajaPop(pop){ try{ pop.style.left=''; var r=pop.getBoundingClientRect
 function pintaHerr(){
   var h=$r('rvHerr'); if(!h) return;
   if(S.tab==='apr'){ h.innerHTML=''; h.hidden=true; return; } h.hidden=false;
+  if(S.tab==='obj'&&rapidos().every(function(p){ return p[0]!==S.rapido; })) S.rapido='cambian';   /* (v14) antes de pintar: asi sale marcado */
   var pills=S.tab==='obj'?'<div class="rv-pills" id="rvPills" role="group" aria-label="Ver">'+rapidos().map(function(p){ var on=S.rapido===p[0];
     return '<button type="button" class="rv-pill'+(on?' on':'')+'" data-r="'+p[0]+'" aria-pressed="'+on+'">'+p[1]+'<i></i></button>'; }).join('')+'</div>':'';
   h.innerHTML='<label class="rv-busca"><span class="rv-busca-i">'+IC_BUSCA+'</span><input type="search" id="rvQ" placeholder="Buscar tienda o código" value="'+esc(S.q)+'" autocomplete="off" aria-label="Buscar tienda o código"></label>'+
     pills+'<div class="rv-fpop">'+popHtml('region')+popHtml('zona')+'</div>';
-  if(S.tab==='obj'&&rapidos().every(function(p){ return p[0]!==S.rapido; })) S.rapido='todas';
   var q=$r('rvQ'), tq=null; q.addEventListener('input',function(){ clearTimeout(tq); tq=setTimeout(function(){ S.q=q.value.trim(); S.abierta=null; pintaLista(); },180); });
   var ps=$r('rvPills'); if(ps) ps.addEventListener('click',function(e){ var b=e.target.closest('button[data-r]'); if(!b) return; S.rapido=b.dataset.r; S.abierta=null;
     ps.querySelectorAll('button[data-r]').forEach(function(x){ var on=x===b; x.classList.toggle('on',on); x.setAttribute('aria-pressed',on); }); pintaLista(); });
@@ -15582,7 +15710,8 @@ function pintaHerr(){
     var s=pop.querySelector('.cd-srch'); if(s) s.addEventListener('input',function(){ var qq=norm(s.value); pop.querySelectorAll('.cd-opt').forEach(function(o){ o.style.display=o.dataset.s.indexOf(qq)>=0?'':'none'; }); }); });
   cuentaPills(); }
 function cuentaPills(){ var ps=$r('rvPills'); if(!ps) return; var fs=filasObj();
-  ps.querySelectorAll('button[data-r]').forEach(function(b){ var k=b.dataset.r; b.querySelector('i').textContent=String(fs.filter(function(x){ return rapido(k,x); }).length); }); }
+  ps.querySelectorAll('button[data-r]').forEach(function(b){ var k=b.dataset.r, n=fs.filter(function(x){ return rapido(k,x); }).length; b.querySelector('i').textContent=String(n);
+    b.hidden=k==='guardar'&&!n&&S.rapido!=='guardar'; }); }
 
 /* ---------- la vista ---------- */
 function pintaVista(){
@@ -15622,7 +15751,7 @@ function espPorque(f){ var e=f.esp; if(!e) return '';
   return e.tx+' en el Drive, pero '+(f.lab?'está en el laboratorio':f.T.fase!=='VETERANA'?'no es veterana':'llega al 0,33')+': se queda en 0,33'; }
 /* caso especial con el objetivo de ahora (revision): el guardado a mano o el del Drive, si esta a 0,34 */
 function espActual(f){ if(!f||f.nueva||!(f.obj>0.335)) return null; var v=f.reg&&f.reg.vig;
-  if(v&&esEsp(v.motivo)) return {tipo:'mano',tx:v.nota||ESP_MOT}; return f.dr&&f.dr.esp?{tipo:'drive',tx:f.dr.esp}:null; }
+  if(v&&esEsp(v.motivo)) return {tipo:'mano',tx:v.nota||ESP_MOT}; return null; }
 function espTx(e){ return !e?'':e.tipo==='drive'?'Caso especial del Drive: '+e.tx.toLowerCase():e.tx; }
 
 /* ---------- OBJETIVOS: una fila por tienda, se cambia en ella ---------- */
@@ -15666,7 +15795,53 @@ function motHtml(x){ var d=x.d, t=x.t, man=d.origen==='mano', f34=d.obj>0.335, h
       '<input type="checkbox" data-esp="1"'+(d.esp?' checked':'')+(drv?' disabled':'')+'><span class="rv-chk" aria-hidden="true"></span><span>Caso especial</span></label>'; }
   if(man) acc+='<button type="button" class="rv-lnk rv-desh" data-x="1" title="Vuelve a lo que proponía">Deshacer</button>';
   return h+(acc?'<div class="rv-mot-acc">'+acc+'</div>':''); }
-function colsObj(){ var m=S.modo;
+/* (v14) CUATRO COLUMNAS. Propuesta: el - y el + con lo que propone debajo. Por que: en una frase, con la productividad
+   debajo (y Sufre o Alerta si toca); si la cambias tu, el motivo; a 0,34 (o si fue caso especial), la casilla. */
+function propNHtml(x){ var f=x.f, d=x.d, ch='';
+  if(S.modo==='estudio'){ if(d.esp&&d.obj>0.335) ch='<span class="rv-r rv-r-esp2">Caso especial</span>'; else if(d.rehace&&d.origen!=='mano') ch='<span class="rv-r">Antes '+f2(d.antes.obj)+'</span>'; }
+  else ch=f.res==='baja'?'<span class="rv-r rv-r-baja">Baja a '+f2(f.nuevo)+'</span>':f.res==='espera'?'<span class="rv-r rv-r-esp">Espera</span>':f.res==='nueva'?'<span class="rv-r rv-r-nue">Tienda nueva</span>':'<span class="rv-r">Se mantiene</span>';
+  if(d.origen==='mano'&&Math.abs(d.prop-d.obj)>1e-9) ch+='<span class="rv-porq">Javify propone '+f2(d.prop)+'</span>';
+  else if(d.origen==='guardado'&&Math.abs(d.obj-d.prop)>1e-9) ch+='<span class="rv-porq">Guardado; propone '+f2(d.prop)+'</span>';
+  return pasoHtml(x)+(ch?'<div class="rv-pn">'+ch+'</div>':''); }
+function porqTx(x){ var f=x.f, d=x.d, m=S.modo, tx;
+  if(d.origen==='mano') return 'Lo cambias tú'+(d.esp&&d.obj>0.335?': caso especial':'');
+  if(m==='estudio'){
+    if(d.esp&&d.obj>0.335){ var e=d.espB||{}; tx='Caso especial'+(e.tx&&e.tx!==ESP_MOT?': '+e.tx:''); }
+    else if(d.rehace) tx='Iba a 0,34 por '+(f.dr&&f.dr.esp?'el '+f.dr.esp.toLowerCase()+' del Drive':'el estudio de antes')+'. Ahora todas a 0,33: si es un caso especial, márcalo';
+    else if(sufreDe(f,m,d)) tx='Sufre con el '+f2(d.obj)+': nunca ha bajado de '+f3(llegaHasta(d.obj))+' en dos meses seguidos';
+    else tx='Todas a 0,33'+(Math.abs(d.obj-d.ahora)<1e-9&&d.ahora<0.335?' (ya lo está)':'');
+    if(!(d.esp&&d.obj>0.335)&&!d.rehace&&f.dr&&f.dr.esp) tx+=' · '+f.dr.esp.toLowerCase()+' en el Drive';
+    return tx; }
+  var V=revOf(), u=f3(f.umbral), md=RVC.R3(f.media);
+  if(f.res==='baja') return md<=RVC.umbralBajar(f.nuevo)+1e-9?'Va tan bien que podría bajar más: un escalón cada vez':'Llega al umbral para bajar ('+u+')';
+  if(f.res==='espera') return f.motivoEsp==='mes'?'Lo que va de '+mesL(V.cur)+' no llega ('+f3(RVC.R3(f.cur.v))+')':mayus(ESP_TX2[f.motivoEsp]||'espera');
+  if(f.res==='nueva') return ok(f.T.ap)?'Abrió el '+diaL(f.T.ap)+': entra con 0,33':'Entra con 0,33';
+  if(espActual(f)) return 'Caso especial';
+  return f.alerta?'Va '+f3(md-f.obj)+' por encima de su objetivo: decides tú':'No baja: le falta para '+u; }
+function numsHtml(x){ var f=x.f, d=x.d, m=S.modo, s;
+  if(m==='estudio'){ var E=est('re6'), mismo=f.par&&f.par.meses[1]===E.meses[11];
+    s=f.par?'Sus 2 mejores meses ('+parG(f.par.meses[0],f.par.meses[1])+'): <span class="rv-num'+(sufreDe(f,m,d)?' rv-up':'')+'">'+f3(f.media)+'</span>':'Sin dos meses seguidos';
+    if(ok(f.so)&&!mismo) s+=' · '+parG(E.meses[10],E.meses[11])+': <span class="rv-num'+(alertaDe(f,m,d)?' rv-up':'')+'">'+f3(f.so)+'</span>';
+    return s; }
+  var V=revOf(), c=f.cur;
+  s=ok(f.media)?parG(V.meses[0],V.meses[1])+': <span class="rv-num'+(alertaDe(f,m,d)?' rv-up':'')+'">'+f3(f.media)+'</span>':'Sin sus dos meses';
+  if(c.n&&ok(c.v)) s+=' · '+mesN(V.cur)+' '+f3(c.v)+' ('+c.n+(c.n===1?' día':' días')+(c.cuenta?')':', aún no cuenta)');
+  return s; }
+function motHtml2(x){ var d=x.d, t=x.t, f=x.f, man=d.origen==='mano', f34=d.obj>0.335, h='', acc='';
+  if(man){ var fa=falta(d); h='<input type="text" class="rv-mot'+(fa?' rv-falta':'')+'" maxlength="160" value="'+esc(d.texto||'')+'" placeholder="'+(d.esp?'Por qué es un caso especial':'Escribe el motivo')+'" aria-label="'+esc('Motivo de '+t)+'" autocomplete="off">'; }
+  if(f34||(S.modo==='estudio'&&(d.rehace||!!(f.dr&&f.dr.esp))))
+    acc+='<label class="rv-espc" title="A 0,34 por algo que no sale en los números. Escribe por qué."><input type="checkbox" data-esp="1"'+(d.esp&&f34?' checked':'')+'><span class="rv-chk" aria-hidden="true"></span><span>Caso especial</span></label>';
+  if(man) acc+='<button type="button" class="rv-lnk rv-desh" data-x="1" title="Vuelve a lo que proponía">Deshacer</button>';
+  return h+(acc?'<div class="rv-mot-acc">'+acc+'</div>':''); }
+function porqHtml(x){ var f=x.f, d=x.d, m=S.modo, fl='';
+  if(sufreDe(f,m,d)) fl+='<span class="rv-fl rv-fl-suf" title="'+esc('Nunca ha llegado: ni en sus dos mejores meses seguidos baja de '+f3(llegaHasta(d.obj)))+'">Sufre</span>';
+  if(alertaDe(f,m,d)) fl+='<span class="rv-fl rv-fl-al" title="Sus dos últimos meses van 0,02 o más por encima de su objetivo">Alerta</span>';
+  return '<div class="rv-pq1">'+esc(porqTx(x))+'</div><div class="rv-pq2">'+numsHtml(x)+fl+'</div>'+motHtml2(x); }
+function colsObj(){ return [{k:'t',t:'Tienda',c:'rv-c0 rv-ot-t',s:function(x){ return +x.t; },h:function(x){ return cTienda().h(x); }},
+    {k:'ah',t:'Ahora',c:'rv-cc rv-ot-a',s:function(x){ return x.d.ahora; },h:ahoraHtml,d0:'desc'},
+    {k:'nv',t:'Propuesta',c:'rv-cc rv-ot-n',s:function(x){ return x.d.obj; },h:propNHtml,d0:'desc'},
+    {k:'pq',t:'Por qué',c:'rv-ot-m',s:function(x){ var v=RVC.R3(x.f.media); return ok(v)?v:NaN; },h:porqHtml,d0:'desc'}]; }
+function colsObjV13(){ var m=S.modo;
   var ordR=function(x){ var f=x.f; if(m==='estudio') return -x.d.prop; return {baja:0,nueva:1,mantiene:2,espera:3}[f.res]; };
   return [{k:'t',t:'Tienda',c:'rv-c0 rv-ot-t',s:function(x){ return +x.t; },h:function(x){ return cTienda().h(x); }},
     {k:'ah',t:'Ahora',c:'rv-cc rv-ot-a',s:function(x){ return x.d.ahora; },h:ahoraHtml,d0:'desc'},
@@ -15678,7 +15853,7 @@ function clsFila(x){ var d=x.d; return d.origen==='mano'?' rv-man':(d.obj<d.ahor
 function filaObjHtml(x,cols){ var sel=S.abierta&&S.abierta.v==='obj'&&S.abierta.k===x.t;
   return '<tr class="rv-row'+clsFila(x)+(sel?' rv-sel':'')+'" data-key="'+esc(x.t)+'" tabindex="0" aria-expanded="'+!!sel+'">'+cols.map(function(c){ return '<td class="'+c.c+'">'+c.h(x)+'</td>'; }).join('')+'</tr>'; }
 /* primero lo tuyo y lo que cambia, despues las alertas y el resto (por codigo) */
-function impDe(x){ return (x.d.origen==='mano'||Math.abs(x.d.obj-x.d.ahora)>1e-9)?0:alertaDe(x.f)?1:2; }
+function impDe(x){ return (x.d.origen==='mano'||Math.abs(x.d.obj-x.d.ahora)>1e-9)?0:alertaDe(x.f,S.modo,x.d)?1:2; }
 function vObjetivos(c){
   var cols=colsObj(), def={k:'imp',d:'asc'}, todas=filasObj(), fs=todas.filter(function(x){ return rapido(S.rapido,x); });
   fs.sort(function(a,b){ return impDe(a)-impDe(b)||((+a.t)-(+b.t)); });
@@ -15687,7 +15862,7 @@ function vObjetivos(c){
   var vacio=S.rapido==='guardar'?'Nada por guardar con estos filtros.':'Ninguna tienda con estos filtros.';
   c.innerHTML='<div class="lo-tbl-wrap rv-wrap rv-owrap" id="rvWrap"><table class="rv-tbl rv-otbl" id="rvTbl" data-vista="obj"><thead><tr>'+cab+'</tr></thead><tbody>'+
     (filas.map(function(x){ return filaObjHtml(x,cols); }).join('')||'<tr class="rv-vacio"><td colspan="'+cols.length+'">'+vacio+'</td></tr>')+'</tbody></table></div>'+
-    '<p class="rv-pie">Cambias el objetivo en su fila con − y +. Si no es lo que propone, escribe el motivo. Pulsa una tienda para ver su mes a mes, su camino en el flujograma y sus objetivos de siempre.</p>';
+    '<p class="rv-pie">Cambia el objetivo con − y +; si no es lo que propone, escribe el motivo. Pulsa una tienda para ver su mes a mes, su camino y sus objetivos de siempre. «Por qué» ordena por la productividad.</p>';
   enganchaObj(cols,def);
   herramientas((fs.length===todas.length?fs.length:fs.length+' de '+todas.length)+(todas.length===1?' tienda':' tiendas'),function(){
     var V=revOf(); bajaCsv('objetivos_'+mesNom(S.modo),['Tienda','Nombre','Región','Zona','Ahora','Productividad','Propuesta','Objetivo nuevo','Motivo','Estado'],
@@ -15824,7 +15999,8 @@ function descarga(){
   var bajO=!!(nO||!nC), bajC=!!nC, nom=[];
   if(bajO){ nom.push(RV_FICHERO); if(window.__deliver) window.__deliver(RV_FICHERO,new Blob(['﻿'+txtRegistro()],{type:'text/csv;charset=utf-8'}),false); }
   if(bajC){ nom.push(RV_FICH_COEF); setTimeout(function(){ if(window.__deliver) window.__deliver(RV_FICH_COEF,new Blob(['﻿'+txtCoef()],{type:'text/csv;charset=utf-8'}),false); },bajO?700:0); }
-  avisoGuardar('Descargado '+nom.join(' y ')+'. Para subirlo sin la clave, lanza publicar_javify.command en el Mac: lo recoge de Descargas y lo sube.',true); }
+  var dos=mesesVer().filter(function(m){ return filasDeMes(m).length; }).length>1;
+  avisoGuardar('Descargado '+nom.join(' y ')+(dos?', con todo lo que tienes sin guardar (estudio inicial y revisión)':'')+'. Para subirlo sin la clave, lanza publicar_javify.command en el Mac: lo recoge de Descargas y lo sube.',true); }
 var COEF_MOT={normal:'El que le toca',menos:'Un tramo menos',sin:'Sin coeficiente'};
 function listaMot(fecha,m){
   var R=regObj(), nuevas={}, n=1e6, ap={};
@@ -15836,7 +16012,7 @@ function descargaMot(){
   var fl=sinMotivo();
   if(!D.REG){ avisoGuardar('No se ha podido leer el registro de objetivos: no se puede sacar la lista. Vuelve a cargar la página.'); return; }
   if(fl.length){ avisoGuardar(faltaTx(fl)+': '+fl.map(function(r){ return r.t; }).join(', ')+'. Escríbelo y vuelve a sacar la lista.'); irAFalta(fl); return; }
-  var m=S.modo, fecha=rigeDe(m), F=RVC.deDn(fecha), L=listaMot(fecha,m), por=filasNuevas().length;
+  var m=S.modo, fecha=rigeDe(m), F=RVC.deDn(fecha), L=listaMot(fecha,m), por=filasNuevas(m).length;
   var txt=['Tienda,Nombre,Productividad,Desde,Coeficiente de apertura'].concat(L.map(function(r){ return [r.t,r.nombre,f2(r.obj),diaL(fecha),r.coef].map(Q).join(','); })).join('\r\n')+'\r\n';
   var nom='Productividad_MOT_'+MESL[F.m-1]+'_'+F.y+'.csv';
   if(window.__deliver) window.__deliver(nom,new Blob([String.fromCharCode(0xFEFF)+txt],{type:'text/csv;charset=utf-8'}),false);
