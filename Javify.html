@@ -2856,10 +2856,12 @@ body.simple #mObj{display:none!important}
     <div class="sec" id="secTrend">
       <div class="sec-hd"><div>
         <div class="sec-n">Tendencia</div>
-        <div class="sec-h">Evolución en 12 meses</div>
+        <div class="sec-h" id="trendH">Evolución en 12 meses</div>
       </div></div>
-      <div class="trend-ctrl"><select id="trArea"></select><select id="trMetric"></select></div>
+      <div class="trend-ctrl"><select id="trArea"></select><select id="trMetric"></select><div class="modes" id="trGrano" role="group" aria-label="Por meses o por días"><button type="button" class="mode on" data-g="mes" aria-pressed="true">Por meses</button><button type="button" class="mode" data-g="dia" aria-pressed="false">Por días</button></div></div>
       <div class="cbox"><div class="cbox-in"><button class="png" data-png="cTrend">⤓ PNG</button><div class="cbox-hd"><div><div class="ctitle" id="trendTitle">—</div><div class="csub" id="trendSub">—</div></div></div><div class="chart" id="cTrend"></div></div></div>
+      <!-- (v15) DENTRO DEL MES: solo con "Por días" -->
+      <div id="trDentro" hidden></div>
           </div>
 
     <!-- RADIOGRAFÍA -->
@@ -3576,10 +3578,12 @@ body.simple #mObj{display:none!important}
   function xEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,''); }
   function colLetra(i){ var s=''; i++; while(i>0){ var m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); } return s; }
-  window.__xlsx=function(hoja,filas){
+  window.__xlsx=function(hoja,filas,op){
+    op=op||null;
     var rows=filas.map(function(fila,ri){
       var cs=fila.map(function(v,ci){
         var ref=colLetra(ci)+(ri+1);
+        if(v==null) return '';   /* (v15) un hueco es una celda vacia, no un texto vacio: ordena bien */
         if(typeof v==='number'&&isFinite(v)) return '<c r="'+ref+'"><v>'+v+'</v></c>';
         return '<c r="'+ref+'" t="inlineStr"><is><t xml:space="preserve">'+xEsc(v)+'</t></is></c>';
       }).join('');
@@ -3587,8 +3591,18 @@ body.simple #mObj{display:none!important}
     }).join('');
     var nom=String(hoja||'Hoja1').replace(/[\\\/\*\?\[\]:]/g,' ').slice(0,31)||'Hoja1';
     var P='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-    var sheet=P+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+rows+'</sheetData></worksheet>';
-    var wb=P+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="'+xEsc(nom)+'" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var nCol=filas.reduce(function(m,f){ return Math.max(m,f.length); },1), nFil=Math.max(filas.length,1);
+    var rango='A1:'+colLetra(nCol-1)+nFil, vista='', cols='', filtro='', dn='';
+    if(op){
+      var fx=op.fijarCols||0, fy=op.fijarFilas||0;
+      if(fx||fy) vista='<sheetViews><sheetView workbookViewId="0"><pane'+(fx?' xSplit="'+fx+'"':'')+(fy?' ySplit="'+fy+'"':'')+
+        ' topLeftCell="'+colLetra(fx)+(fy+1)+'" activePane="'+(fx&&fy?'bottomRight':(fy?'bottomLeft':'topRight'))+'" state="frozen"/></sheetView></sheetViews>';
+      if(op.anchos&&op.anchos.length) cols='<cols>'+op.anchos.map(function(w,i){ return '<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>'; }).join('')+'</cols>';
+      if(op.filtro){ filtro='<autoFilter ref="'+rango+'"/>';
+        dn='<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\''+xEsc(nom).replace(/'/g,"''")+'\'!$A$1:$'+colLetra(nCol-1)+'$'+nFil+'</definedName></definedNames>'; }
+    }
+    var sheet=P+'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+(op?'<dimension ref="'+rango+'"/>':'')+vista+cols+'<sheetData>'+rows+'</sheetData>'+filtro+'</worksheet>';
+    var wb=P+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="'+xEsc(nom)+'" sheetId="1" r:id="rId1"/></sheets>'+dn+'</workbook>';
     var wbr=P+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>';
     var rel=P+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
     var ct=P+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
@@ -4904,6 +4918,8 @@ function populate(){
   }catch(e){ console.warn('cfg',e); }
   $('trArea').addEventListener('change',()=>{ST.trArea=$('trArea').value;refreshTrMetricOptions();if(ST.analyzed)renderTrend();});
   $('trMetric').addEventListener('change',()=>{if(ST.analyzed)renderTrend();});
+  /* (v15) por meses / por dias */
+  {const g=$('trGrano'); if(g) g.querySelectorAll('[data-g]').forEach(b=>b.addEventListener('click',()=>setTrGrano(b.dataset.g)));}
   if($('rkMes')&&ST.meses.indexOf($('rkMes').value)<0) $('rkMes').value=last;
   ['rkScope','rkMetric','rkArea','rkShift','rkMes','rkRef','rkVet','rkModel','rkLimit'].forEach(id=>{const e=$(id); if(e)e.addEventListener('change',renderRank);});
   /* Fase, Modelo y Zona son atributos de tienda: con el ranking en Zonas o Regiones no pintan
@@ -6644,6 +6660,8 @@ function renderDiff(){
 
 /* ===== TENDENCIA (ampliada) ===== */
 function refreshTrMetricOptions(){const area=$('trArea').value,cur=$('trMetric').value;
+  /* (v15) por dias solo hay lo global de la tienda: las tres de siempre */
+  if(trGrano()==='dia'){const ks=Object.keys(GTREND);$('trMetric').innerHTML=ks.map(k=>opt(k,GTREND[k].label,k===cur)).join('');if(!ks.includes(cur))$('trMetric').value='gprod';return;}
   if(area==='__global'&&ST.genReady){const ks=Object.keys(GTREND);$('trMetric').innerHTML=ks.map(k=>opt(k,GTREND[k].label,k===cur)).join('');if(!ks.includes(cur))$('trMetric').value='gprod';return;}
   // en vista AGRUPADO se ofrecen los 4 bloques (suman las fases); en desglosado, las métricas por fase
   const allowed=window.__GROUP
@@ -6736,7 +6754,227 @@ function renderTrendGen(mk,x){
   Plotly.react('cTrend',traces,conModelo(lay,curA.tienda),PCFG);
   $('trendTitle').textContent=title;$('trendSub').textContent=sub;
 }
+/* ===== (v15, 23/11/2026) TENDENCIA POR DIAS =====
+   Por defecto la tendencia sigue por meses. "Por dias" pinta los dias de los 3 meses que acaban en el mes
+   analizado y debajo "Dentro del mes": la media de los dias 1-10, 11-20 y 21 al final de cada mes.
+   Los dias salen de Farolas (window.__faDiasDe y __faResumenDias): ningun SQL nuevo. Van en unidades
+   Mercadona, como Farolas, y son del dia entero (los dos turnos). Cada dia, y cada tienda-dia de un
+   conjunto, pesa lo mismo, asi que la media de los dias de un mes da el numero del mes.
+   La referencia se mira en los MISMOS dias que el analizado: se compara lo mismo con lo mismo. */
+const TR_DIAS_MESES=3;
+const TR_SEM=['dom','lun','mar','mié','jue','vie','sáb'];
+const TR_MES3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const TR_TRAMO_X=['1-10','11-20','21 al final'];
+function trGrano(){ return ST.trGrano==='dia'?'dia':'mes'; }
+function trEsc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function trEsGrupo(t){ return SYNTH.indexOf(t)>=0||t===LIEBRE_HIST||!!(ST.aggMeta&&ST.aggMeta[t]); }
+/* que filas de Farolas son de un escenario: el mismo reparto que faSerie() */
+function trFiltroFa(t){
+  if(t==null||t===OBJ_NAME) return null;
+  if(t==='Tiendas Veteranas') return function(r){ return r.Fase==='Veterana'; };
+  if(t==='Todas las tiendas') return function(){ return true; };
+  if(t===LIEBRE_HIST) return function(r){ return !!(window.__faIsLiebre&&window.__faIsLiebre(r.Tienda)); };
+  var am=(ST.aggMeta||{})[t]||null;
+  if(am){ var mem=new Set((am.members||[]).map(String)); if(!mem.size) return null;
+    return function(r){ return mem.has(String(r.Tienda)); }; }
+  var ts=String(t); return function(r){ return r.Tienda===ts; };
+}
+function trIso(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+/* los 3 meses que acaban en el mes analizado */
+function trVentana(mk){
+  var y=+mk.slice(0,4), m=+mk.slice(5,7), meses=[];
+  for(var i=TR_DIAS_MESES-1;i>=0;i--) meses.push(trIso(new Date(y,m-1-i,1)).slice(0,7));
+  return {meses:meses, desde:meses[0]+'-01', hasta:trIso(new Date(y,m,0))};
+}
+function trTramo(iso){ var d=+iso.slice(8,10); return d<=10?0:(d<=20?1:2); }
+function trDiaLab(iso){ var d=new Date(+iso.slice(0,4),+iso.slice(5,7)-1,+iso.slice(8,10));
+  return TR_SEM[d.getDay()]+' '+d.getDate()+' '+TR_MES3[d.getMonth()]; }
+function trDiaCorto(iso){ return (+iso.slice(8,10))+' '+TR_MES3[+iso.slice(5,7)-1]; }
+/* el mes en la tabla: "Noviembre 2026" y, si Farolas aun no lo trae entero, sus dias "(1-21)" */
+function trMesLab(mk,corto){
+  var y=+mk.slice(0,4), m=+mk.slice(5,7), me=MESES_ES[m-1]||mk;
+  var b=me.charAt(0).toUpperCase()+(corto?(me.slice(1,3)+' '+String(y).slice(2)):(me.slice(1)+' '+y));
+  var h=window.__faHasta?window.__faHasta(mk):null, fin=new Date(y,m,0).getDate();
+  if(h&&+h.slice(8,10)<fin) b+=' <span class="trd-dd">(1-'+(+h.slice(8,10))+')</span>';
+  return b;
+}
+function trDiasDatos(){
+  var V=trVentana(curA.mesKey), res=window.__faResumenDias;
+  var fA=trFiltroFa(curA.tienda);
+  var hayB=!ST.single&&!!curB&&curB.tienda!=null&&curB.tienda!==curA.tienda&&curB.tienda!==OBJ_NAME;
+  var fB=hayB?trFiltroFa(curB.tienda):null;
+  var rA=fA?(window.__faDiasDe(fA,V.desde,V.hasta)||{}):{};
+  var rB=fB?(window.__faDiasDe(fB,V.desde,V.hasta)||{}):null;
+  var dias=Object.keys(rA).sort(), A={}, B=rB?{}:null;
+  dias.forEach(function(d){ A[d]=res(rA[d]); if(rB&&rB[d]) B[d]=res(rB[d]); });
+  /* los tramos: las tienda-dia de cada mes y tramo juntas, las de cada mes y las de los 3 meses */
+  function tramos(by){ var g={};
+    dias.forEach(function(d){ var rs=by[d]; if(!rs) return; var mk=d.slice(0,7), t=trTramo(d);
+      [mk+'|'+t, mk+'|*', '*|'+t, '*|*'].forEach(function(k){ var a=g[k]||(g[k]={rows:[],dias:0});
+        for(var i=0;i<rs.length;i++) a.rows.push(rs[i]); a.dias++; }); });
+    var out={}; Object.keys(g).forEach(function(k){ var o=res(g[k].rows); o.dias=g[k].dias; out[k]=o; });
+    return out; }
+  return {V:V, dias:dias, A:A, B:B, TA:tramos(rA), TB:rB?tramos(rB):null, hayB:!!rB,
+          nomA:shortStore(curA.tienda), nomB:rB?shortStore(curB.tienda):'',
+          mismaB:!ST.single&&!!curB&&curB.tienda===curA.tienda};
+}
+function renderTrendDias(){
+  var lineA='#5b8fd6', ref=cssv('--ref'), good=cssv('--good'), bad=cssv('--bad'), ink2=cssv('--ink2');
+  var gmk=$('trMetric').value, mk=(gmk==='gcaudal'||gmk==='ghorasmes')?gmk:'gprod';
+  var TIT={gprod:'Productividad Control NTC y con paradas por día (min/ud Mdona)',
+           gcaudal:'Horas usadas y óptimas por día (h/día)',
+           ghorasmes:'Horas de más al día (usado − óptimo)'};
+  $('trendTitle').textContent=TIT[mk];
+  function vacio(txt,sub){
+    Plotly.react('cTrend',[],baseLayout({height:H.trend,annotations:[{text:txt,showarrow:false,font:{color:ink2,size:13},x:0.5,y:0.5,xref:'paper',yref:'paper'}],xaxis:{visible:false},yaxis:{visible:false}}),PCFG);
+    $('trendSub').textContent=sub||''; ST._trDias=null; trDentro(null,mk); }
+  if(!window.__faReady||!window.__faReady()||!window.__faDiasDe||!window.__faResumenDias){
+    vacio(window.__faFallo?'No han llegado los datos de Farolas y sin ellos no hay días. Vuelve a cargar la página.':'Cargando los días de Farolas…'); return; }
+  if(!curA||curA.tienda==null||curA.tienda===OBJ_NAME){ vacio('El objetivo no tiene días. Elige una tienda o un conjunto.'); return; }
+  var D=trDiasDatos();
+  var key=(mk==='gprod')?'prod':(mk==='gcaudal'?'usado':'horas');
+  if(!D.dias.length||D.dias.every(function(d){ return D.A[d][key]==null; })){
+    vacio('Sin días con datos en estos '+TR_DIAS_MESES+' meses.', D.nomA); return; }
+  ST._trDias=D;
+  var xs=D.dias.map(trDiaLab), estr=(window.innerWidth<=560);
+  function sA(k){ return D.dias.map(function(d){ var o=D.A[d]; return o?o[k]:null; }); }
+  function sB(k){ return D.dias.map(function(d){ var o=D.B&&D.B[d]; return o?o[k]:null; }); }
+  /* el eje: una marca al empezar cada mes y otra en los dias 11 y 21. Linea seguida entre meses y de
+     puntos entre tramos. Sin domingos ni festivos: solo los dias con dato. */
+  var tv=[],tt=[],shapes=[],mP=null,tP=null;
+  D.dias.forEach(function(d,i){ var m=d.slice(0,7), t=trTramo(d);
+    if(m!==mP){ tv.push(xs[i]); tt.push(trDiaCorto(d));
+      if(mP!==null) shapes.push({type:'line',xref:'x',yref:'paper',x0:i-0.5,x1:i-0.5,y0:0,y1:1,layer:'below',line:{color:cssv('--line2'),width:1.4}}); }
+    else if(t!==tP){ tv.push(xs[i]); tt.push(String(+d.slice(8,10)));
+      shapes.push({type:'line',xref:'x',yref:'paper',x0:i-0.5,x1:i-0.5,y0:0,y1:1,layer:'below',line:{color:cssv('--line2'),width:1,dash:'dot'}}); }
+    mP=m; tP=t; });
+  var tr=[], hv=function(dec){ return '%{y:.'+dec+'f}'; };
+  if(mk==='gprod'){
+    if(D.B){
+      tr.push({x:xs,y:sB('prod'),name:estr?'Referencia':'Control NTC (ref.)',legendrank:3,type:'scatter',mode:'lines',connectgaps:true,line:{color:ref,width:1.7,dash:'dot'},hovertemplate:hv(3)});
+      tr.push({x:xs,y:sB('prodcp'),name:'C/paradas (ref.)',legendrank:4,showlegend:!estr,visible:'legendonly',type:'scatter',mode:'lines',connectgaps:true,line:{color:cssv('--ink3'),width:1.5,dash:'dot'},hovertemplate:hv(3)});
+    }
+    tr.push({x:xs,y:sA('prodcp'),name:'Con paradas',legendrank:2,type:'scatter',mode:'lines',connectgaps:true,line:{color:'#e08a3c',width:1.7},hovertemplate:hv(3)});
+    tr.push({x:xs,y:sA('prod'),name:'Control NTC',legendrank:1,type:'scatter',mode:'lines+markers',connectgaps:true,line:{color:lineA,width:2.4},marker:{size:5,color:lineA,line:{width:1,color:cssv('--panel')}},hovertemplate:hv(3)});
+    tr.push({x:xs,y:sA('obj'),name:'Objetivo',legendrank:5,type:'scatter',mode:'lines',connectgaps:true,line:{color:bad,width:1.3,dash:'dash',shape:'hv'},hovertemplate:'objetivo %{y:.3f}<extra></extra>'});
+  }else if(mk==='gcaudal'){
+    tr.push({x:xs,y:sA('optimo'),name:'Óptimo',type:'scatter',mode:'lines',connectgaps:true,line:{color:ref,width:1.8,dash:'dot'},hovertemplate:hv(2)});
+    tr.push({x:xs,y:sA('usado'),name:'Usado',type:'scatter',mode:'lines+markers',connectgaps:true,line:{color:lineA,width:2.4},marker:{size:5,color:lineA,line:{width:1,color:cssv('--panel')}},hovertemplate:hv(2)});
+  }else{
+    var hm=sA('horas');
+    if(D.B) tr.push({x:xs,y:sB('horas'),name:estr?'Referencia':D.nomB,type:'scatter',mode:'lines',connectgaps:true,line:{color:ref,width:1.7,dash:'dot'},hovertemplate:hv(2)});
+    tr.push({x:xs,y:hm,name:'Horas de más/día',type:'scatter',mode:'lines+markers',connectgaps:true,line:{color:lineA,width:2.2},marker:{size:6,color:hm.map(function(v){ return v==null?ref:(v>0?bad:good); }),line:{width:1,color:cssv('--panel')}},hovertemplate:hv(2)});
+    tr.push({x:xs,y:xs.map(function(){ return 0; }),name:'Objetivo (0)',type:'scatter',mode:'lines',line:{color:bad,width:1.2,dash:'dash'},hoverinfo:'skip'});
+  }
+  var lay=baseLayout({height:H.trend+22,margin:{l:54,r:18,t:26,b:46},hovermode:'x unified',showlegend:true,
+    legend:{orientation:'h',y:1.16,x:0,font:{size:11,color:ink2},bgcolor:'rgba(0,0,0,0)'},
+    xaxis:{type:'category',tickmode:'array',tickvals:tv,ticktext:tt,tickangle:0,showgrid:false,tickfont:{color:ink2,size:10},automargin:true},
+    yaxis:{gridcolor:cssv('--line'),tickfont:{color:ink2,size:10},automargin:true,zeroline:false},
+    shapes:shapes});
+  Plotly.react('cTrend',tr,lay,PCFG);
+  var notas=[];
+  if(D.mismaB) notas.push('sin referencia (es la misma tienda)');
+  if(curA.shift&&curA.shift!=='global') notas.push('el día entero, los dos turnos');
+  if(!window.__MERC) notas.push('en unidades Mercadona, como Farolas');
+  $('trendSub').textContent=D.nomA+(D.hayB?' frente a '+D.nomB:'')+' · '+trDiaCorto(D.dias[0])+' – '+trDiaCorto(D.dias[D.dias.length-1])+(notas.length?' · '+notas.join(' · '):'');
+  trDentro(D,mk);
+}
+/* DENTRO DEL MES: la media de los dias 1-10, 11-20 y 21 al final de cada mes, la del mes entero y la de
+   los 3 meses. Se marca el tramo mas flojo de cada mes (solo si los tres tienen 3 dias o mas). */
+function trDentro(D,mk){
+  var box=$('trDentro'); if(!box) return;
+  if(!D||trGrano()!=='dia'){ box.hidden=true; box.innerHTML=''; return; }
+  var esP=(mk==='gprod'), key=esP?'prod':'horas', dec=esP?3:2;
+  var tit=esP?'Productividad Control NTC (min/ud Mdona)':'Horas de más al día (usado − óptimo)';
+  var badT=cssv('--bad-txt'), goodT=cssv('--good-txt'), badS=cssv('--up-soft'), goodS=cssv('--down-soft');
+  function val(T,k){ var o=T&&T[k]; return (o&&o[key]!=null&&isFinite(o[key]))?o:null; }
+  function peorDe(T,pre){ var best=-1,bv=-Infinity,ok=0;
+    for(var t=0;t<3;t++){ var o=val(T,pre+'|'+t); if(!o||o.dias<3) continue; ok++; if(o[key]>bv){ bv=o[key]; best=t; } }
+    return ok===3?best:-1; }
+  function celda(k,peor){
+    var a=val(D.TA,k); if(!a) return '<td class="trd-c"></td>';
+    var h='<span class="trd-v">'+fmt(a[key],dec)+(peor?'<span class="trd-tag">el peor</span>':'')+'</span>';
+    var b=D.TB?val(D.TB,k):null;
+    if(b){ var d=a[key]-b[key], z=Math.abs(d)<Math.pow(10,-dec)/2;
+      h+='<span class="trd-r">ref. '+fmt(b[key],dec)+'<span class="trd-d" style="color:'+(z?'var(--ink2)':(d>0?badT:goodT))+';background:'+(z?'transparent':(d>0?badS:goodS))+'">'+(z?fmt(0,dec):((d>0?'+':'')+fmt(d,dec)))+'</span></span>'; }
+    if(a.dias<5) h+='<span class="trd-n">'+a.dias+(a.dias===1?' día':' días')+'</span>';
+    return '<td class="trd-c'+(peor?' trd-peor':'')+'">'+h+'</td>';
+  }
+  var cA=[0,0,0],nA=0,cB=[0,0,0],nB=0,filas='';
+  D.V.meses.slice().reverse().forEach(function(m){      // el ultimo arriba, como la tabla del caudal
+    if(!val(D.TA,m+'|*')) return;
+    var pA=peorDe(D.TA,m); if(pA>=0){ cA[pA]++; nA++; }
+    if(D.TB){ var pB=peorDe(D.TB,m); if(pB>=0){ cB[pB]++; nB++; } }
+    filas+='<tr><td class="trd-m"><span class="trd-lg">'+trMesLab(m)+'</span><span class="trd-sm">'+trMesLab(m,1)+'</span></td>'+
+      celda(m+'|0',pA===0)+celda(m+'|1',pA===1)+celda(m+'|2',pA===2)+celda(m+'|*',false)+'</tr>';
+  });
+  var pT=peorDe(D.TA,'*');
+  filas+='<tr class="trd-sum"><td class="trd-m"><span class="trd-lg">Los '+TR_DIAS_MESES+' meses</span><span class="trd-sm">'+TR_DIAS_MESES+' meses</span></td>'+
+    celda('*|0',pT===0)+celda('*|1',pT===1)+celda('*|2',pT===2)+celda('*|*',false)+'</tr>';
+  function frase(nom,c,n){
+    if(n<2) return '';
+    var mx=Math.max(c[0],c[1],c[2]);
+    if(mx<=1) return trEsc(nom)+' · cada mes flojea un tramo distinto.';
+    var ts=[0,1,2].filter(function(t){ return c[t]===mx; }).map(function(t){ return 'los días '+TR_TRAMO_X[t]; });
+    return trEsc(nom)+' · su tramo más flojo es el de '+ts.join(' y el de ')+' ('+mx+' de '+n+' meses).';
+  }
+  var notas=[frase(D.nomA,cA,nA)]; if(D.TB) notas.push(frase(D.nomB,cB,nB));
+  notas=notas.filter(Boolean);
+  var th=function(lg,sm){ return '<th><span class="trd-lg">'+lg+'</span><span class="trd-sm">'+sm+'</span></th>'; };
+  box.innerHTML='<div class="cbox"><div class="cbox-in">'+
+    '<button type="button" class="csv" id="trDiasXls" title="Descargar los días (Excel)" aria-label="Descargar los días (Excel)">⤓ Excel</button>'+
+    '<div class="cbox-hd"><div><div class="ctitle">Dentro del mes</div><div class="csub">'+tit+' · media de los días de cada tramo · '+
+      trEsc(D.nomA)+(D.hayB?' frente a '+trEsc(D.nomB):'')+'</div></div></div>'+
+    '<div class="trd-scroll"><table class="trd-t"><thead><tr>'+th('Mes','')+th('Días 1-10','1-10')+th('Días 11-20','11-20')+th('Días 21 al final','21-fin')+th('Todo el mes','Mes')+'</tr></thead>'+
+    '<tbody>'+filas+'</tbody></table></div>'+
+    (notas.length?'<div class="trd-nota">'+notas.join('<br>')+'</div>':'')+
+    '</div></div>';
+  box.hidden=false;
+  var b=$('trDiasXls'); if(b) b.addEventListener('click',trDiasExcel);
+}
+/* EXCEL DE LOS DIAS: un dia por fila, la tabla en A1 con filtro, la primera fila y la fecha fijas */
+function trDiasExcel(){
+  var D=ST._trDias; if(!D||!D.dias.length){ alert('No hay días que descargar.'); return; }
+  var gA=trEsGrupo(curA.tienda), gB=D.hayB&&trEsGrupo(curB.tienda), nA=D.nomA, nB=D.nomB;
+  var cab=['Fecha','Día','Mes','Tramo del mes',
+    nA+' · Productividad Control NTC (min/ud Mdona)', nA+' · Productividad con paradas (min/ud Mdona)', nA+' · Objetivo (min/ud Mdona)',
+    nA+' · Horas usadas (h/día)', nA+' · Horas óptimas (h/día)', nA+' · Horas de más (h/día)', nA+' · Horas de paradas (h/día)'];
+  if(gA) cab.push(nA+' · Tiendas');
+  if(D.hayB){ cab.push(nB+' · Productividad Control NTC (min/ud Mdona)', nB+' · Productividad con paradas (min/ud Mdona)', nB+' · Horas de más (h/día)');
+    if(gB) cab.push(nB+' · Tiendas'); }
+  function r(v,n){ if(v==null||!isFinite(v)) return null; var p=Math.pow(10,n); return Math.round(v*p)/p; }
+  var filas=D.dias.map(function(d){ var a=D.A[d]||{}, b=(D.B&&D.B[d])||null, dt=new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10));
+    var f=[d, TR_SEM[dt.getDay()], d.slice(0,7), TR_TRAMO_X[trTramo(d)],
+      r(a.prod,4), r(a.prodcp,4), r(a.obj,4), r(a.usado,3), r(a.optimo,3), r(a.horas,3), r(a.paradas,3)];
+    if(gA) f.push(a.tiendas||null);
+    if(D.hayB){ f.push(b?r(b.prod,4):null, b?r(b.prodcp,4):null, b?r(b.horas,3):null); if(gB) f.push(b?(b.tiendas||null):null); }
+    return f; });
+  var anchos=cab.map(function(c,i){ return i===0?12:(i===1?6:(i===2?9:(i===3?13:Math.min(48,Math.max(14,Math.round(c.length*0.95)))))); });
+  var nom='dias_'+pngSlug(nA)+(D.hayB?'_frente_a_'+pngSlug(nB):'')+'_'+D.dias[0]+'_a_'+D.dias[D.dias.length-1];
+  try{ window.__deliver(nom+'.xlsx', window.__xlsx('Días',[cab].concat(filas),{filtro:true,fijarFilas:1,fijarCols:1,anchos:anchos}), false); }
+  catch(e){ console.warn('dias xlsx',e); alert('No se pudo generar el Excel: '+(e&&e.message||e)); }
+}
+/* el segmentado: por meses (lo de siempre) o por dias. El area se queda en "Global tienda" mientras se
+   va por dias y vuelve a la que hubiera al volver a meses. */
+function setTrGrano(v){
+  v=(v==='dia')?'dia':'mes'; if(trGrano()===v) return;
+  var ar=$('trArea'), me=$('trMetric');
+  if(v==='dia'){ ST._trAreaMes=ar.value; ST._trMetMes=me.value; ar.value='__global'; ar.disabled=true;
+    ar.title='Por días solo hay el global de la tienda'; ST.trArea='__global'; }
+  else { ar.disabled=false; ar.title='';
+    if(ST._trAreaMes!=null&&[...ar.options].some(function(o){ return o.value===ST._trAreaMes; })) ar.value=ST._trAreaMes;
+    ST.trArea=ar.value; }
+  ST.trGrano=v;
+  var g=$('trGrano'); if(g) g.querySelectorAll('[data-g]').forEach(function(x){ var on=(x.dataset.g===v); x.classList.toggle('on',on); x.setAttribute('aria-pressed',on?'true':'false'); });
+  var h=$('trendH'); if(h) h.textContent=(v==='dia')?('Día a día · últimos '+TR_DIAS_MESES+' meses'):'Evolución en 12 meses';
+  refreshTrMetricOptions();
+  if(v==='mes'&&ST._trMetMes!=null&&[...me.options].some(function(o){ return o.value===ST._trMetMes; })) me.value=ST._trMetMes;
+  if(v==='mes') trDentro(null);
+  if(ST.analyzed) renderTrend();
+}
+window.__trDiasFarolas=function(){ try{ if(trGrano()==='dia'&&ST.analyzed) renderTrend(); }catch(e){ console.warn('tendencia por dias',e); } };
 function renderTrend(){
+  if(trGrano()==='dia'){ renderTrendDias(); return; }
   const area=$('trArea').value;
   const x=xMeses();
   if(area==='__global'&&ST.genReady){refreshTrMetricOptions();const gmk=$('trMetric').value;renderTrendGen(GTREND[gmk]?gmk:'gprod',x);return;}
@@ -9698,6 +9936,34 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var byM={};
     for(var i=0;i<ROWS.length;i++){ var r=ROWS[i]; if(!r.mk||!filtro(r))continue; (byM[r.mk]=byM[r.mk]||[]).push(r); }
     return mks.map(function(mk){ return byM[mk]?dayIgual(byM[mk],key):null; }); };
+  /* ===== (v15, 23/11/2026) DIA A DIA PARA LA TENDENCIA DEL COMPARADOR =====
+     __faDiasDe: las filas de un escenario entre dos dias (AAAA-MM-DD), agrupadas por dia.
+     __faResumenDias: la media DIA-IGUAL de unas filas (cada tienda-dia pesa lo mismo) de todo lo que
+     pinta la tendencia global. De cada fila sale con las mismas cuentas que el CSV mensual; comprobado en
+     3.095 meses-tienda, la media de sus dias da el mes a 0,001 min/ud y a 0,01 h como mucho:
+       con paradas = horas usadas x 60 / uds · paradas = usadas - Control NTC x uds / 60
+       optimo = usadas - caudal (el caudal ya lleva el coeficiente de ese dia, ver ajustaCaudalRampa).
+     El objetivo es el de cada tienda-dia (0,34 por su coeficiente), como en Farolas. */
+  window.__faDiasDe=function(filtro,desde,hasta){ if(!LOADED||typeof filtro!=='function') return null;
+    var by={};
+    for(var i=0;i<ROWS.length;i++){ var r=ROWS[i], d=r.d;
+      if(!d||d<desde||d>hasta||!filtro(r)) continue;
+      (by[d]||(by[d]=[])).push(r); }
+    return by; };
+  window.__faResumenDias=function(rs){
+    rs=rs||[];
+    var base=(window.__objMCDBase?window.__objMCDBase():0.34), tt={};
+    var p=0,np=0,cp=0,ncp=0,u=0,o=0,h=0,nu=0,pa=0,npa=0,ob=0;
+    for(var i=0;i<rs.length;i++){ var r=rs[i]; tt[r.Tienda]=1;
+      var pr=r.Productividad_min_ud, us=r.cdUsa, ca=r.Caudal, ud=r.cdUds;
+      var okP=(pr!=null&&!isNaN(pr)), okU=(us!=null&&!isNaN(us)), okD=(ud!=null&&!isNaN(ud)&&ud>0);
+      if(okP){ p+=pr; np++; ob+=base*(r.d?facDiaFa(r.Tienda,r.d):1); }
+      if(okU&&ca!=null&&!isNaN(ca)){ u+=us; o+=us-ca; h+=ca; nu++; }
+      if(okU&&okD){ cp+=us*60/ud; ncp++; if(okP){ pa+=us-pr*ud/60; npa++; } }
+    }
+    var m=function(s,n){ return n?s/n:null; };
+    return {prod:m(p,np), prodcp:m(cp,ncp), usado:m(u,nu), optimo:m(o,nu), horas:m(h,nu), paradas:m(pa,npa),
+            obj:m(ob,np), tiendas:Object.keys(tt).length, filas:rs.length}; };
   /* El ranking vive en otro <script> y no alcanza a hhmm(): sin esto las horas fin salen en
      minutos desde medianoche (477 en vez de 7:57). */
   window.__faHHMM=function(x){ return (x==null||isNaN(x))?'-':hhmm(x); };
@@ -9910,6 +10176,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       for(var j=0;j<M.length;j++){ o[M[j].k]=num(r[M[j].k]); }
       /* unidades del dia: hacen falta para mover el objetivo del caudal (columna nueva del SQL) */
       o.cdUds=num(r.Caudal_uds);
+      /* (v15) y las horas usadas del dia (Control NTC + paradas): las necesita la tendencia por dias */
+      o.cdUsa=num(r.Caudal_horas_usadas);
       if(o.mk)_mset[o.mk]=1; ROWS.push(o); }
   function build(data){ buildIni(); for(var i=0;i<data.length;i++) buildFila(data[i]); buildFin(); }
   function buildFin(){ var mset=_mset; _mset=null; _cad=null;
@@ -9930,7 +10198,14 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
      Se guarda el valor crudo en Caudal0 y se recalcula Caudal. Una sola pasada, y solo cuando ya
      se sabe la apertura de cada tienda (la trae el otro CSV, que llega por su cuenta). */
   var _cdRampa=false;
+  /* (v15) factor de cada tienda-dia para la tendencia por dias: se calcula una vez y se olvida cuando
+     se vuelve a ajustar el caudal (han llegado o cambiado las aperturas) */
+  var _fdCache=new Map();
+  function facDiaFa(t,d){ var k=t+'|'+d, f=_fdCache.get(k);
+    if(f===undefined){ f=window.__facDia?window.__facDia(t,d):1; _fdCache.set(k,f); }
+    return f; }
   function ajustaCaudalRampa(){
+    _fdCache=new Map();
     if(!ROWS.length || !window.__facDia) return false;
     var base=(window.__objMCDBase?window.__objMCDBase():0.34), tocadas=0;
     for(var i=0;i<ROWS.length;i++){
@@ -10633,9 +10908,12 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     return h; }
   function tabBtn(){ return document.getElementById('mFarolas'); }
   function markLoading(){ }
-  function markReady(){ var b=tabBtn(); if(b){ b.disabled=false; b.style.opacity=''; b.style.cursor=''; b.title=''; } }
+  function markReady(){ var b=tabBtn(); if(b){ b.disabled=false; b.style.opacity=''; b.style.cursor=''; b.title=''; } window.__faFallo=null; }
   /* si algo falla NO se bloquea la pestana: se puede entrar y reintentar */
   function markFail(msg){ var b=tabBtn(); if(b){ b.disabled=false; b.style.opacity=''; b.style.cursor=''; b.title=msg||''; }
+    /* (v15) para que la tendencia por dias no se quede en "Cargando" */
+    window.__faFallo=msg||'No se pudieron cargar los datos de Farolas';
+    try{ if(window.__trDiasFarolas) window.__trDiasFarolas(); }catch(e){}
     var st=$('fa_status'); if(st){ st.style.display='block';
       st.innerHTML='<span style="color:var(--bad-txt)">'+(msg||'No se pudieron cargar los datos de Farolas')+'</span> '+
         '<button type="button" id="fa_retry" style="margin-left:8px;font-size:12px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink);cursor:pointer">Reintentar</button>';
@@ -10783,6 +11061,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
         try{ if(window.__kpiOficial) window.__kpiOficial(); }catch(e){}
         /* el ranking puede ordenar por indicadores de farolas: ahora ya se pueden ofrecer */
         try{ if(window.__rkRefreshMetrics) window.__rkRefreshMetrics(); }catch(e){}
+        /* (v15) la tendencia por dias espera a Farolas: si ya estaba elegida, se pinta ahora */
+        try{ if(window.__trDiasFarolas) window.__trDiasFarolas(); }catch(e){}
       }catch(e){ if(st)st.innerHTML='<span style="color:var(--bad-txt)">Error al preparar Farolas: '+e.message+'</span>'; markFail('Error al preparar Farolas'); console.warn('farolas',e);
         try{ if(window.__bootStep) window.__bootStep('far'); }catch(_){} } }
     }); };
@@ -12259,6 +12539,35 @@ html.dark{--jv-ic-dl:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
 @media (hover:hover){ .modes>.mode:hover:not(.on){color:var(--ink);background:transparent} }
 @media (pointer:coarse){ .modes>.mode{min-height:40px} }
 @media(max-width:640px){ .modes{display:flex;width:100%;border-radius:14px} .modes>.mode{flex:1 1 auto;padding:7px 10px} }
+/* ---------- (v15) TENDENCIA POR DIAS: el segmentado a la derecha y la tabla "Dentro del mes" ---------- */
+.trend-ctrl #trGrano{margin-left:auto}
+#trArea:disabled{opacity:.55;cursor:not-allowed}
+#trDentro{margin-top:14px}
+#trDentro .trd-scroll{overflow-x:auto;margin-top:8px}
+#trDentro .trd-t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+#trDentro .trd-t th{padding:10px 12px 8px;text-align:right;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3-txt);border-bottom:1px solid var(--line2);white-space:nowrap}
+#trDentro .trd-t th:first-child{text-align:left}
+#trDentro .trd-t td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+#trDentro .trd-t td.trd-m{text-align:left;font-weight:750;font-size:13px;color:var(--ink);white-space:nowrap}
+#trDentro .trd-dd{font-weight:600;color:var(--ink2)}
+#trDentro .trd-v{display:block;font-size:14px;font-weight:800;color:var(--ink);white-space:nowrap}
+#trDentro .trd-r{display:block;font-size:11px;color:var(--ink2);margin-top:3px;white-space:nowrap}
+#trDentro .trd-d{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-weight:800;font-size:10.5px}
+#trDentro .trd-n{display:block;font-size:10.5px;color:var(--ink3-txt);margin-top:2px}
+#trDentro td.trd-peor{background:var(--up-soft)}
+#trDentro .trd-tag{display:inline-block;margin-left:6px;vertical-align:1px;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--bad-txt);border:1px solid var(--bad-bd);border-radius:999px;padding:1px 6px}
+#trDentro tr.trd-sum td{border-top:2px solid var(--line2);border-bottom:0}
+#trDentro .trd-sm{display:none}
+#trDentro .trd-nota{font-size:12px;color:var(--ink2);margin:12px 2px 2px;line-height:1.55}
+@media(max-width:640px){
+  #trDentro .trd-lg{display:none}
+  #trDentro .trd-sm{display:inline}
+  #trDentro .trd-t th,#trDentro .trd-t td{padding:8px 5px}
+  #trDentro .trd-v{font-size:13px}
+  #trDentro .trd-d{display:block;width:max-content;margin:2px 0 0 auto}
+  #trDentro td.trd-m .trd-dd{display:block}
+  #trDentro .trd-tag{display:none}
+}
 /* ---------- COMPARAR · FAROLAS: los cuatro roscos a la vista, el detalle plegado ---------- */
 .jv-mas{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;min-height:44px;padding:10px 16px;
   border-radius:var(--r);border:1px dashed var(--line2);background:transparent;color:var(--brand-txt);font:inherit;font-size:12.5px;font-weight:750;cursor:pointer;
