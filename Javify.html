@@ -5050,7 +5050,7 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
 (function(){var b=document.getElementById('faroPng'); if(b)b.addEventListener('click',()=>{
   const el=document.querySelector('#secMatrix .matrix'); if(!el)return;
   if(typeof html2canvas==='undefined'){alert('No se pudo cargar la librería de captura (sin conexión).');return;}
-  const bg=cssv('--panel','#fff'); b.disabled=true; const old=b.textContent; b.textContent='Generando…';
+  const bg=window.__pngFondo(); b.disabled=true; const old=b.textContent; b.textContent='Generando…';   /* (v15) transparente en claro */
   // en modo ficha (una sola tienda) no incluir el pie de texto en la imagen (para presentaciones)
   const foot=document.getElementById('matFoot'); const hideFoot=(foot&&ST.single); if(hideFoot)foot.style.display='none';
   /* La unidad va al SUBTITULO, no al titulo: el titulo dice QUE es, el subtitulo en que
@@ -5058,7 +5058,8 @@ $('corteSw').querySelectorAll('[data-corte]').forEach(b=>b.addEventListener('cli
   const _TT=pngNorm('Visi\u00f3n global por \u00e1rea y subproceso', pngCtx(), 'matBody'), _t=_TT[0], _s=_TT[1];
   document.documentElement.classList.add('pngshot');
   const _lim=()=>document.documentElement.classList.remove('pngshot');
-  html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,
+  html2canvas(el,{backgroundColor:window.__pngOscuro()?bg:null,scale:2,useCORS:true,
+      onclone:function(d,c){ window.__pngSinFondo(d,c||d.querySelector('#secMatrix .matrix')); },
       windowWidth:Math.max(document.documentElement.clientWidth,el.scrollWidth+200),
       windowHeight:Math.max(document.documentElement.clientHeight,el.scrollHeight+200)}).then(canvas=>{
     _lim();
@@ -7901,6 +7902,39 @@ function pngIgnore(el){
    claro o en oscuro segun como este el dashboard.
    ============================================================================================ */
 var PNG_FONT='-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,Helvetica,Arial,sans-serif';
+/* (v15, 23/11/2026) LAS DESCARGAS EN PNG SALEN CON EL FONDO TRANSPARENTE, para pegarlas en una
+   presentacion. Las graficas se pintan sin fondo, la banda del titulo no se rellena y en las capturas de
+   html2canvas lo que tiene el color del panel o de la pagina pasa a transparente (__pngSinFondo, en el
+   clon: la pantalla no se toca). Con el tema OSCURO siguen con su fondo: sus letras son claras y sobre
+   transparente no se leerian en una diapositiva blanca. El PDF del ranking y la impresion siguen en
+   blanco, porque un PDF no tiene transparencia. */
+window.__PNG_BG='rgba(0,0,0,0)';
+window.__pngOscuro=function(){ return document.documentElement.classList.contains('dark'); };
+/* el fondo de una descarga: transparente en claro; en oscuro, el de siempre (el panel o el de la pagina) */
+window.__pngFondo=function(deLaPagina){
+  if(!window.__pngOscuro()) return window.__PNG_BG;
+  return cssv(deLaPagina?'--bg':'--panel')||'#121a2a'; };
+window.__pngSinFondo=function(doc,root){
+  try{
+    if(!doc||!root||window.__pngOscuro()) return;
+    var w=doc.defaultView||window, probe=doc.createElement('div'), fondos={};
+    (doc.body||doc.documentElement).appendChild(probe);
+    /* el color de una variable, tal y como lo devuelve getComputedStyle: asi se compara con el de cada
+       elemento sin depender de como este escrito (#fff, #ffffff, rgb(...)) */
+    var canon=function(c){ probe.style.backgroundColor=''; probe.style.backgroundColor=c; return w.getComputedStyle(probe).backgroundColor; };
+    var rs=w.getComputedStyle(doc.documentElement);
+    ['--panel','--bg','--bg2'].forEach(function(v){ var c=String(rs.getPropertyValue(v)||'').trim();
+      if(c){ var k=canon(c); if(k&&k!=='rgba(0, 0, 0, 0)'&&k!=='transparent') fondos[k]=1; } });
+    probe.remove();
+    var nodos=[root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
+    for(var i=0;i<nodos.length;i++){ var n=nodos[i]; if(!n||!n.style) continue;
+      if(fondos[w.getComputedStyle(n).backgroundColor]) n.style.setProperty('background-color','transparent','important'); }
+    /* la caja que se descarga, sin fondo, sin sombra y sin marco: queda solo su contenido */
+    root.style.setProperty('background','transparent','important');
+    root.style.setProperty('box-shadow','none','important');
+    root.style.setProperty('border-color','transparent','important');
+  }catch(e){ console.warn('png sin fondo',e); }
+};
 
 window.__pngPlotly=function(el,tit,sub,fname){
   var W=1800,H=1020,F=PNG_FONT;
@@ -7920,7 +7954,8 @@ window.__pngPlotly=function(el,tit,sub,fname){
     if(t.type==='pie') t.textfont={size:27,family:F};
   });
   lay.font={family:F,color:ink2,size:28};
-  lay.paper_bgcolor=panel; lay.plot_bgcolor=panel;
+  var _fondo=window.__pngFondo();   /* (v15) transparente en claro */
+  lay.paper_bgcolor=_fondo; lay.plot_bgcolor=_fondo;
   if(lay.xaxis){ lay.xaxis.tickfont={size:26,family:F}; lay.xaxis.automargin=true; }
   if(lay.yaxis){ lay.yaxis.tickfont={size:26,family:F}; lay.yaxis.automargin=true;
     if(lay.yaxis.title) lay.yaxis.title.font={size:26,family:F,color:ink3}; }
@@ -7971,7 +8006,7 @@ window.__pngPlotly=function(el,tit,sub,fname){
   lay.width=W; lay.height=H; lay.autosize=false;
   return Plotly.newPlot(tmp,data,lay,{displayModeBar:false,staticPlot:true})
     .then(function(){ return Plotly.toImage(tmp,{format:'png',width:W,height:H,scale:2}); })
-    .then(function(u){ return window.__pngBandaUrl(u,tit,sb,panel); })
+    .then(function(u){ return window.__pngBandaUrl(u,tit,sb,_fondo); })
     .then(function(u){ window.__deliver(fname,u,true); try{Plotly.purge(tmp);}catch(_){} tmp.remove(); })
     .catch(function(err){ console.warn('png',err); try{Plotly.purge(tmp);}catch(_){} tmp.remove();
       alert('No se pudo generar el PNG: '+(err&&err.message||err)); });
@@ -8112,8 +8147,9 @@ document.addEventListener('click',function(e){
        antes de tocar nada). Si el div no es de Plotly se captura con html2canvas, igual que las
        tablas, con el mismo truco de ignoreElements para que sea rapido. */
     else if(el&&typeof html2canvas!=='undefined'){ const fin=btnBusy(p); if(!fin)return;
-      const bg=cssv('--panel','#fff');
-      html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,logging:false,imageTimeout:0,
+      const bg=window.__pngFondo();   /* (v15) transparente en claro */
+      html2canvas(el,{backgroundColor:window.__pngOscuro()?bg:null,scale:2,useCORS:true,logging:false,imageTimeout:0,
+        onclone:function(d,c){ window.__pngSinFondo(d,c||d.getElementById(id)); },
         ignoreElements:pngIgnore(el)}).then(function(cv){ window.__deliver(fn,window.__pngBanda(cv,tit,sub,bg),true); })
         .catch(function(err){ console.warn('png html',err); alert('No se pudo generar el PNG: '+(err&&err.message||err)); })
         .then(fin,fin); }
@@ -8122,7 +8158,7 @@ document.addEventListener('click',function(e){
   const pt=e.target.closest&&e.target.closest('[data-pngtbl]');
   if(pt){ const el=$(pt.dataset.pngtbl);
     if(typeof html2canvas==='undefined'){alert('No se pudo cargar la librería de captura (sin conexión).');return;}
-    if(el){ const bg=cssv(pt.dataset.pngbg==='bg'?'--bg':'--panel')||'#fff'; const fin=btnBusy(pt); if(!fin)return;
+    if(el){ const bg=window.__pngFondo(pt.dataset.pngbg==='bg'); const fin=btnBusy(pt); if(!fin)return;   /* (v15) transparente en claro */
       const tit=pt.dataset.pngtitle||'', sub=pt.dataset.pngsub||'';
       const fn=pngName(tit,(pt.dataset.pngname||pt.dataset.pngtbl))+'.png';
       /* La tabla se baja ENTERA, no solo el trozo que se ve: html.pngshot le quita el recorte
@@ -8139,7 +8175,8 @@ document.addEventListener('click',function(e){
            la ultima columna, porque el recorte no arranca justo en el borde del elemento. */
         /* +64 de margen y el ancho exacto del elemento: con solo windowWidth, html2canvas media
            la ventana y recortaba la ultima columna del grid de roscos (el cuarto salia partido). */
-        html2canvas(el,{backgroundColor:bg,scale:esc,useCORS:true,logging:false,imageTimeout:0,
+        html2canvas(el,{backgroundColor:window.__pngOscuro()?bg:null,scale:esc,useCORS:true,logging:false,imageTimeout:0,
+          onclone:function(d,c){ window.__pngSinFondo(d,c||d.getElementById(pt.dataset.pngtbl)); },
           x:0,y:0,width:W,height:H,scrollX:0,scrollY:0,
           windowWidth:Math.max(document.documentElement.clientWidth,W+64),
           windowHeight:Math.max(document.documentElement.clientHeight,H+64),
@@ -10768,7 +10805,8 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
       font:{size:26,family:FONT,color:cvar('--ink')},bgcolor:'rgba(0,0,0,0)',borderwidth:0,tracegroupgap:0,itemwidth:46};
     if(src.__jvObj){ lay.legend.entrywidthmode='pixels'; lay.legend.entrywidth=0; }   /* (v4) con el objetivo en la leyenda: una sola fila (cambios/68) */
     lay.font={family:FONT,color:cvar('--ink2'),size:28};
-    lay.paper_bgcolor=cvar('--panel'); lay.plot_bgcolor=cvar('--panel');
+    var _fondo=window.__pngFondo?window.__pngFondo():cvar('--panel');   /* (v15) transparente en claro */
+    lay.paper_bgcolor=_fondo; lay.plot_bgcolor=_fondo;
     if(lay.xaxis){ lay.xaxis.tickfont={size:27,family:FONT}; lay.xaxis.automargin=true;
       /* con muchas etiquetas de texto (12 meses / 2 anios) se pegan: rotarlas */
       var nx=(data[0]&&data[0].x)?data[0].x.length:0;
@@ -10797,7 +10835,7 @@ window.addEventListener('load',function(){ setTimeout(function(){ try{ if(window
     var fname=(b.getAttribute('data-faname')||id)+'.png';
     Plotly.newPlot(tmp,data,lay,{displayModeBar:false,staticPlot:true})
       .then(function(){ return Plotly.toImage(tmp,{format:'png',width:W,height:H,scale:2}); })
-      .then(function(url){ return window.__pngBandaUrl?window.__pngBandaUrl(url,tit,sub,cvar('--panel')):url; })
+      .then(function(url){ return window.__pngBandaUrl?window.__pngBandaUrl(url,tit,sub,_fondo):url; })
       .then(function(url){
         window.__deliver(fname,url,true);
         try{Plotly.purge(tmp);}catch(_){} tmp.remove(); if(fin)fin(); })
@@ -13994,6 +14032,7 @@ document.addEventListener('click',function(e){ try{
     menu.innerHTML='<button type="button" role="menuitem" data-q="png">Imagen (PNG)</button><button type="button" role="menuitem" data-q="csv">Tabla (CSV)</button>';
     document.body.appendChild(menu);
     coloca();
+    if(!menu) return;   /* (v15) coloca() lo cierra si el boton no se ve */
     menu.addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('button[data-q]'); if(!b) return;
       e.stopPropagation(); var q=b.getAttribute('data-q'); cierra();
       if(q==='png'){ p.__jvPasa=1; try{ p.click(); } finally { p.__jvPasa=0; } } else { c.click(); } });
@@ -14142,10 +14181,10 @@ document.addEventListener('click',function(e){
   if(typeof html2canvas==='undefined'){ alert('No se pudo cargar la librería de captura (sin conexión).'); return; }
   var fin=window.btnBusy(b); if(!fin) return;
   var ancho=+b.getAttribute('data-jvancho')||1480;
-  var bg=cssv(b.getAttribute('data-pngbg')==='bg'?'--bg':'--panel')||'#fff';
+  var bg=window.__pngFondo(b.getAttribute('data-pngbg')==='bg');   /* (v15) transparente en claro */
   var tit=b.getAttribute('data-pngtitle')||'', sub=b.getAttribute('data-pngsub')||'';
   var fn=pngName(tit,(b.getAttribute('data-pngname')||'farolas'))+'.png';
-  html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,logging:false,imageTimeout:0,
+  html2canvas(el,{backgroundColor:window.__pngOscuro()?bg:null,scale:2,useCORS:true,logging:false,imageTimeout:0,
       scrollX:0,scrollY:0,windowWidth:ancho,windowHeight:Math.max(1200,el.scrollHeight+300),
       ignoreElements:pngIgnore(el),
       onclone:function(doc,c){ try{
@@ -14167,6 +14206,7 @@ document.addEventListener('click',function(e){
               s.setAttribute('viewBox','0 0 '+w0+' '+h0); s.setAttribute('preserveAspectRatio','xMidYMid meet');
               s.setAttribute('width',W); s.setAttribute('height',H); s.style.width=W+'px'; s.style.height=H+'px'; }); });
         });
+        window.__pngSinFondo(doc,c);   /* (v15) */
       }catch(err){ console.warn('farolas png clon',err); } }
     }).then(function(cv){ window.__deliver(fn,window.__pngBanda(cv,tit,sub,bg),true); })
     .catch(function(err){ console.warn('png farolas',err); alert('No se pudo generar el PNG: '+(err&&err.message||err)); })
